@@ -19,8 +19,8 @@ def test_nb_mean():
     nb_model = NegativeBinomial("~ 1")
     nb_model.fit(Y)
     mu_hat = nb_model.parameters["B"]
-    mu = torch.Tensor(mu[0]).log()
-    assert torch.mean(torch.abs(mu_hat - mu)) < 0.1
+    log_mu = torch.Tensor(mu[0]).log()
+    assert torch.mean(torch.abs(mu_hat - loglog__mu)) < 0.1
 
 
 def test_mu_regression():
@@ -44,7 +44,22 @@ def test_mu_regression():
 
 
 def test_nb_dispersion():
-    pass
+    # define ground truth mean
+    N, G = 1000, 20
+    mu = np.random.uniform(2.5, 5, G)
+    alpha = np.ones((N, 1)) @ np.exp(np.random.normal(size=(1, G)))
+
+    # generate samples
+    Y = np.random.negative_binomial(1 / alpha, 1 / (1 + alpha * mu))
+    Y = torch.from_numpy(Y)
+
+    # estimate means
+    nb_model = NegativeBinomial({"alpha": "~ 1"})
+    nb_model.fit(Y)
+    Ahat = nb_model.parameters["A"]
+    log_alpha = torch.Tensor(alpha[0]).log()
+    assert torch.mean(torch.abs(Ahat - log_alpha)) < 0.1
+
 
 def test_alpha_regression():
     # define ground truth coefficients
