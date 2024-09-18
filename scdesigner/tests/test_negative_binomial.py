@@ -18,12 +18,12 @@ def test_nb_mean():
     # estimate means
     nb_model = NegativeBinomial("~ 1")
     nb_model.fit(Y)
-    mu_hat = nb_model.parameters["beta"]
+    mu_hat = nb_model.parameters["B"]
     mu = torch.Tensor(mu[0]).log()
     assert torch.mean(torch.abs(mu_hat - mu)) < 0.1
 
 
-def test_nb_coefs():
+def test_mu_regression():
     # define ground truth coefficients
     N, G, D = 1000, 20, 4
     alpha = np.random.uniform(2.5, 5, G)
@@ -39,12 +39,28 @@ def test_nb_coefs():
     X = pd.DataFrame(X, columns=[f"dim{j}" for j in range(D)])
     nb_model = NegativeBinomial("~ . - 1")
     nb_model.fit(Y, X, max_iter=50)
-    Bhat = nb_model.parameters["beta"]
+    Bhat = nb_model.parameters["B"]
     assert torch.mean(torch.abs(Bhat - B)) < 0.1
 
 
 def test_nb_dispersion():
     pass
 
-def test_nb_regression():
-    pass
+def test_alpha_regression():
+    # define ground truth coefficients
+    N, G, D = 1000, 20, 4
+    mu = np.random.uniform(2, 5, G)
+    X = np.random.normal(size=(N, D))
+    X = pd.DataFrame(X, columns=[f"dim{j}" for j in range(D)])
+    A = np.random.normal(size=(D, G))
+    alpha = np.exp(X @ A)
+
+    # generate samples
+    Y = np.random.negative_binomial(1 / alpha, 1 / (1 + alpha * mu))
+    Y = torch.from_numpy(Y)
+
+    # estimate means
+    nb_model = NegativeBinomial({"alpha": "~ . - 1"})
+    nb_model.fit(Y, pd.DataFrame(X))
+    Ahat = nb_model.parameters["A"]
+    assert torch.mean(torch.abs(Ahat - A)) < 0.1
