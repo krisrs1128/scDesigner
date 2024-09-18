@@ -1,9 +1,6 @@
 from scdesigner.margins.marginal import Marginal
-from formulaic import Formula
-import numpy as np
-import pandas as pd
+from scdesigner.design import design
 import torch
-
 
 class NegativeBinomial(Marginal):
     def __init__(self, formula, device="cpu"):
@@ -24,23 +21,14 @@ class NegativeBinomial(Marginal):
         return logalpha, beta
 
 
-    def design(self, X):
-        X = Formula(self.formula).get_model_matrix(X, output="numpy")
-        X = np.array(X).astype(np.float32)
-        return torch.from_numpy(X)
-
-
     def fit(self, Y, X=None, max_iter=50, lr=1e-1):
-        if X is None:
-            X = pd.DataFrame({"intercept": np.ones((Y.shape[0]))})
-        X = self.design(X)
-
         def newton_closure():
             optim.zero_grad()
             ll = -self.loglikelihood(logalpha, beta, Y, X)
             ll.backward()
             return ll
 
+        X = design(self.formula, X, Y)
         X = X.to(self.device)
         Y = Y.to(self.device)
     
@@ -49,8 +37,7 @@ class NegativeBinomial(Marginal):
         for _ in range(max_iter):
             optim.step(newton_closure)
 
-        print(beta.shape)
-        self.parameters["beta"] = beta
+        self.parameters["beta"] = beta.detach()
         self.parameters["alpha"] = torch.exp(logalpha)
 
 
