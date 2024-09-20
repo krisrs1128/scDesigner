@@ -1,6 +1,7 @@
-from scdesigner.margins.marginal import Marginal
-from scdesigner.design import design
+from ..margins.marginal import Marginal
+from ..design import design
 import torch
+import pandas as pd
 
 def default_device(device):
     if device is not None:
@@ -12,6 +13,11 @@ def default_device(device):
     else:
         return torch.device("cpu")
 
+def reconcile_formulas(formula):
+    values = formula.values()
+    if len(set(values)) == 1:
+        return formula["mu"]
+    return f"""mu: {formula["mu"]},\nalpha: {formula["alpha"]}"""
 
 def initialize_formula(f):
     parameters = ["alpha", "mu"]
@@ -69,3 +75,16 @@ class NegativeBinomial(Marginal):
             - torch.lgamma(1 + Y)
             - torch.lgamma(1 / alpha)
         ).mean()
+
+    def to_df(self):
+        fmla = reconcile_formulas(self.formula)
+        return pd.DataFrame({
+            "formula": fmla,
+            "distribution": "NegativeBinomial(mu, alpha)"
+        }, index=[0])
+
+    def __repr__(self):
+        return str(self.to_df())
+
+    def __str__(self):
+        return str(self.to_df())

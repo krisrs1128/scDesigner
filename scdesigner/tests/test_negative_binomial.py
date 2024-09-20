@@ -44,7 +44,7 @@ def test_mu_regression():
 
 
 def test_nb_dispersion():
-    # define ground truth mean
+    # define ground truth dispersion
     N, G = 1000, 20
     mu = np.random.uniform(2.5, 5, G)
     alpha = np.ones((N, 1)) @ np.exp(np.random.normal(size=(1, G)))
@@ -53,7 +53,7 @@ def test_nb_dispersion():
     Y = np.random.negative_binomial(1 / alpha, 1 / (1 + alpha * mu))
     Y = torch.from_numpy(Y)
 
-    # estimate means
+    # estimate dispersion parameters
     nb_model = NegativeBinomial({"alpha": "~ 1"})
     nb_model.fit(Y)
     Ahat = nb_model.parameters["A"]
