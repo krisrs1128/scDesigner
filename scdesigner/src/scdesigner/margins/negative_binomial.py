@@ -17,8 +17,8 @@ def default_device(device):
 def reconcile_formulas(formula):
     values = formula.values()
     if len(set(values)) == 1:
-        return formula["mu"]
-    return f"""mu: {formula["mu"]}\nalpha: {formula["alpha"]}"""
+        return f"""all: {formula["mu"]}"""
+    return f"""mu: {formula["mu"]}, alpha: {formula["alpha"]}"""
 
 def initialize_formula(f):
     parameters = ["alpha", "mu"]
@@ -81,7 +81,7 @@ class NegativeBinomial(Marginal):
         fmla = reconcile_formulas(self.formula)
         return pd.DataFrame({
             "formula": fmla,
-            "distribution": "NegativeBinomial(mu, alpha)"
+            "distribution": "NegativeBinomial(\u03BC, \u03B1)"
         }, index=[0])
 
     def to_table(self):
