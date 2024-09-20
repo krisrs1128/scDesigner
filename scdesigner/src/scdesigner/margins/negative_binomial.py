@@ -2,6 +2,7 @@ from ..margins.marginal import Marginal
 from ..design import design
 import torch
 import pandas as pd
+import rich
 
 def default_device(device):
     if device is not None:
@@ -17,7 +18,7 @@ def reconcile_formulas(formula):
     values = formula.values()
     if len(set(values)) == 1:
         return formula["mu"]
-    return f"""mu: {formula["mu"]},\nalpha: {formula["alpha"]}"""
+    return f"""mu: {formula["mu"]}\nalpha: {formula["alpha"]}"""
 
 def initialize_formula(f):
     parameters = ["alpha", "mu"]
@@ -83,8 +84,17 @@ class NegativeBinomial(Marginal):
             "distribution": "NegativeBinomial(mu, alpha)"
         }, index=[0])
 
+    def to_table(self):
+        table = rich.table.Table(title="[bold magenta]Marginal Model[/bold magenta]")
+        table.add_column("formula")
+        table.add_column("distribution")
+        table.add_row(*tuple(self.to_df().iloc[0, :]))
+        return table
+
     def __repr__(self):
-        return str(self.to_df())
+        rich.print(self.to_table())
+        return ""
 
     def __str__(self):
-        return str(self.to_df())
+        rich.print(self.to_table())
+        return ""
