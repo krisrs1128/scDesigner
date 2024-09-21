@@ -1,14 +1,20 @@
 from ..margins.marginal import Marginal
 from ..design import design
-import torch
+import numpy as np
 import pandas as pd
 import rich
+import torch
 
-def process_params(theta, y_names, x_names):
+def parameter_to_df(theta, y_names, x_names):
     theta = pd.DataFrame(theta.detach().cpu())
     theta.columns = y_names
     theta.index = x_names
     return theta
+
+
+def parameter_to_tensor(theta, device):
+    return torch.from_numpy(np.array(theta)).to(device)
+
 
 def default_device(device):
     if device is not None:
@@ -33,7 +39,6 @@ def initialize_formula(f):
             f[k] = "~ 1"
     return f
 
-
 class NegativeBinomial(Marginal):
     def __init__(self, formula, device=None):
         super().__init__(formula)
@@ -51,14 +56,14 @@ class NegativeBinomial(Marginal):
         return A, B
 
 
-    def fit(self, Y, X=None, y_names=None, max_iter=50, lr=1e-1):
+    def fit(self, Y, X=None, y_names=None, max_iter=10, lr=1e-3):
         def newton_closure():
             optim.zero_grad()
             ll = -self.loglikelihood(A, B, Y, Xs)
             ll.backward()
             return ll
 
-        designs = {k: design(f, X, Y) for k, f in self.formula.items()}
+        designs = {k: design(f, X) for k, f in self.formula.items()}
         Xs = {k: v[0].to(self.device) for k, v in designs.items()}
         Y = Y.to(self.device)
     
@@ -67,9 +72,24 @@ class NegativeBinomial(Marginal):
         for _ in range(max_iter):
             optim.step(newton_closure)
 
-        self.parameters["B"] = process_params(B, y_names, designs["mu"][1])
-        self.parameters["A"] = process_params(A, y_names, designs["alpha"][1])
+        self.parameters["B"] = parameter_to_df(B, y_names, designs["mu"][1])
+        self.parameters["A"] = parameter_to_df(A, y_names, designs["alpha"][1])
 
+    def predict(self, X):
+        Xs = {k: design(f, X)[0] for k, f in self.formula.items()}
+        Xs = {k: v.to(self.device) for k, v in Xs.items()}
+
+        A = parameter_to_tensor(self.parameters["A"], self.device)
+        B = parameter_to_tensor(self.parameters["B"], self.device)
+        mu_hat = pd.DataFrame(
+            torch.exp(Xs["mu"] @ B).cpu(),
+            columns=self.parameters["B"].columns
+        )
+        alpha_hat = pd.DataFrame(
+            torch.exp(Xs["alpha"] @ A).cpu(),
+            columns=self.parameters["A"].columns
+        )
+        return {"mu": mu_hat, "alpha": alpha_hat}
 
     def loglikelihood(self, A, B, Y, Xs, eps=1e-6):
         alpha = torch.exp(Xs["alpha"] @ A)
