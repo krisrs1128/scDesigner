@@ -20,7 +20,7 @@ def test_nb_mean():
     nb_model.fit(Y)
     mu_hat = nb_model.parameters["B"]
     log_mu = torch.Tensor(mu[0]).log()
-    assert torch.mean(torch.abs(mu_hat - loglog__mu)) < 0.1
+    assert torch.mean(torch.abs(mu_hat - log_mu)) < 0.1
 
 
 def test_mu_regression():
