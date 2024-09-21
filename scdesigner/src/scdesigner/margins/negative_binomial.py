@@ -63,24 +63,29 @@ class NegativeBinomial(Marginal):
             ll.backward()
             return ll
 
+        # get design matrix from the model formula
         designs = {k: design(f, X) for k, f in self.formula.items()}
         Xs = {k: v[0].to(self.device) for k, v in designs.items()}
         Y = Y.to(self.device)
     
+        # optimize mean and dispersion parameters
         A, B = self.initialize(Xs, Y.shape[1])
         optim = torch.optim.LBFGS([A, B], lr=lr)
         for _ in range(max_iter):
             optim.step(newton_closure)
 
+        # for easier interpretation, process into named data.frames
         self.parameters["B"] = parameter_to_df(B, y_names, designs["mu"][1])
         self.parameters["A"] = parameter_to_df(A, y_names, designs["alpha"][1])
 
     def predict(self, X):
+        # process inputs and parameters into tensors on device
         Xs = {k: design(f, X)[0] for k, f in self.formula.items()}
         Xs = {k: v.to(self.device) for k, v in Xs.items()}
-
         A = parameter_to_tensor(self.parameters["A"], self.device)
         B = parameter_to_tensor(self.parameters["B"], self.device)
+        
+        # generate and give names to predictions
         mu_hat = pd.DataFrame(
             torch.exp(Xs["mu"] @ B).cpu(),
             columns=self.parameters["B"].columns
