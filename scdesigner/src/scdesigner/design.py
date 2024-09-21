@@ -14,6 +14,7 @@ def design(formula, X, Y):
         X = pd.DataFrame({"intercept": np.ones((Y.shape[0]))})
 
     f = parse_formula(formula, X.columns)
-    X = Formula(f).get_model_matrix(X, output="numpy")
+    X = Formula(f).get_model_matrix(X)
+    cnames = X.columns
     X = np.array(X).astype(np.float32)
-    return torch.from_numpy(X)
+    return torch.from_numpy(X), list(cnames)

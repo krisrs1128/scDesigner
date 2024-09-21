@@ -22,7 +22,6 @@ def print_simulator(margins, copula):
         i += 1
 
     rich.print(table)
-
     if copula is None:
         rich.print("Marginal models without copula.")
 
