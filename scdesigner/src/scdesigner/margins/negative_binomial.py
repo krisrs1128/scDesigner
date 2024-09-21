@@ -4,6 +4,12 @@ import torch
 import pandas as pd
 import rich
 
+def process_params(theta, y_names, x_names):
+    theta = pd.DataFrame(theta.detach().cpu())
+    theta.columns = y_names
+    theta.index = x_names
+    return theta
+
 def default_device(device):
     if device is not None:
         return device
@@ -45,14 +51,15 @@ class NegativeBinomial(Marginal):
         return A, B
 
 
-    def fit(self, Y, X=None, max_iter=50, lr=1e-1):
+    def fit(self, Y, X=None, y_names=None, max_iter=50, lr=1e-1):
         def newton_closure():
             optim.zero_grad()
             ll = -self.loglikelihood(A, B, Y, Xs)
             ll.backward()
             return ll
 
-        Xs = {k: design(f, X, Y).to(self.device) for k, f in self.formula.items()}
+        designs = {k: design(f, X, Y) for k, f in self.formula.items()}
+        Xs = {k: v[0].to(self.device) for k, v in designs.items()}
         Y = Y.to(self.device)
     
         A, B = self.initialize(Xs, Y.shape[1])
@@ -60,8 +67,8 @@ class NegativeBinomial(Marginal):
         for _ in range(max_iter):
             optim.step(newton_closure)
 
-        self.parameters["B"] = B.detach().cpu()
-        self.parameters["A"] = A.detach().cpu()
+        self.parameters["B"] = process_params(B, y_names, designs["mu"][1])
+        self.parameters["A"] = process_params(A, y_names, designs["alpha"][1])
 
 
     def loglikelihood(self, A, B, Y, Xs, eps=1e-6):

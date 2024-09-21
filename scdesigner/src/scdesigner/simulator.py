@@ -11,10 +11,11 @@ class Simulator():
         if index is None:
             index = range(len(self.margins))
         for ix in index:
-            genes, submodel = self.margins[ix]
+            y_names, submodel = self.margins[ix]
             submodel.fit(
-                torch.from_numpy(anndata[:, genes].X.toarray()),
+                torch.from_numpy(anndata[:, y_names].X.toarray()),
                 anndata.obs,
+                y_names,
                 **kwargs
             )
 
