@@ -1,5 +1,16 @@
 from scdesigner.print import print_simulator
+from collections import defaultdict
+import pandas as pd
 import torch
+
+def merge_predictions(param_hat):
+    merged = defaultdict(list) 
+    for d in param_hat:
+        for k, v in d.items():
+            merged[k].append(v)
+
+    return {k: pd.concat(v, axis=1) for k, v in merged.items()}
+
 
 class Simulator():
     def __init__(self, margins, copula=None):
@@ -18,6 +29,15 @@ class Simulator():
                 y_names,
                 **kwargs
             )
+
+    def predict(self, X, index=None, **kwargs):
+        if index is None:
+            index = range(len(self.margins))
+        param_hat = []
+        for ix in index:
+            _, submodel = self.margins[ix]
+            param_hat.append(submodel.predict(X))
+        return merge_predictions(param_hat)
 
     def parameters(self, index=None):
         if index is None:
