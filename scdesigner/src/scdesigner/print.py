@@ -1,4 +1,5 @@
 import rich
+import rich.table
 
 def shorten_names(features, max_features=5):
     if len(features) > max_features:
