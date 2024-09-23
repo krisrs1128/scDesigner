@@ -3,6 +3,7 @@ from ..design import design
 import numpy as np
 import pandas as pd
 import rich
+import rich.table
 import torch
 
 def parameter_to_df(theta, y_names, x_names):
@@ -57,6 +58,9 @@ class NegativeBinomial(Marginal):
 
 
     def fit(self, Y, X=None, y_names=None, max_iter=10, lr=1e-3):
+        if y_names is None:
+            y_names = range(Y.shape[1])
+
         def newton_closure():
             optim.zero_grad()
             ll = -self.loglikelihood(A, B, Y, Xs)
@@ -64,7 +68,7 @@ class NegativeBinomial(Marginal):
             return ll
 
         # get design matrix from the model formula
-        designs = {k: design(f, X) for k, f in self.formula.items()}
+        designs = {k: design(f, X, Y.shape[0]) for k, f in self.formula.items()}
         Xs = {k: v[0].to(self.device) for k, v in designs.items()}
         Y = Y.to(self.device)
     

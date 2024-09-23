@@ -9,9 +9,9 @@ def parse_formula(f, x_names):
     return f.replace("~ .", all_names)
 
 
-def design(formula, X):
+def design(formula, X=None, rows=None):
     if X is None:
-        X = pd.DataFrame({"intercept": np.ones((X.shape[0]))})
+        X = pd.DataFrame({"intercept": np.ones((rows))})
 
     f = parse_formula(formula, X.columns)
     X = Formula(f).get_model_matrix(X)
