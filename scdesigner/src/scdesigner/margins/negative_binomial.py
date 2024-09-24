@@ -1,54 +1,21 @@
 from ..margins.marginal import Marginal
-from ..design import design
-import numpy as np
+from .. import design as ds
+from ..margins import parameter as pm
 import pandas as pd
 import rich
 import rich.table
 import torch
 
-def parameter_to_df(theta, y_names, x_names):
-    theta = pd.DataFrame(theta.detach().cpu())
-    theta.columns = y_names
-    theta.index = x_names
-    return theta
-
-
-def parameter_to_tensor(theta, device):
-    return torch.from_numpy(np.array(theta)).to(device)
-
-
-def default_device(device):
-    if device is not None:
-        return device
-    elif torch.backends.mps.is_available():
-        return torch.device("mps")
-    elif torch.cuda.is_available():
-        return torch.device("cuda")
-    else:
-        return torch.device("cpu")
-
-def reconcile_formulas(formula):
-    values = formula.values()
-    if len(set(values)) == 1:
-        return f"""all: {formula["mu"]}"""
-    return f"""mu: {formula["mu"]}, alpha: {formula["alpha"]}"""
-
-def initialize_formula(f):
-    parameters = ["alpha", "mu"]
-    for k in parameters:
-        if k not in f.keys():
-            f[k] = "~ 1"
-    return f
 
 class NegativeBinomial(Marginal):
     def __init__(self, formula, device=None):
         super().__init__(formula)
-        self.device = default_device(device)
+        self.device = pm.default_device(device)
         self.parameters = {"B": None, "A": None}
 
         if isinstance(formula, str):
             formula = {"mu": formula}
-        self.formula = initialize_formula(formula)
+        self.formula = ds.initialize_formula(formula)
 
 
     def initialize(self, Xs, G):
@@ -68,7 +35,7 @@ class NegativeBinomial(Marginal):
             return ll
 
         # get design matrix from the model formula
-        designs = {k: design(f, X, Y.shape[0]) for k, f in self.formula.items()}
+        designs = {k: ds.design(f, X, Y.shape[0]) for k, f in self.formula.items()}
         Xs = {k: v[0].to(self.device) for k, v in designs.items()}
         Y = Y.to(self.device)
     
@@ -79,15 +46,15 @@ class NegativeBinomial(Marginal):
             optim.step(newton_closure)
 
         # for easier interpretation, process into named data.frames
-        self.parameters["B"] = parameter_to_df(B, y_names, designs["mu"][1])
-        self.parameters["A"] = parameter_to_df(A, y_names, designs["alpha"][1])
+        self.parameters["B"] = pm.parameter_to_df(B, y_names, designs["mu"][1])
+        self.parameters["A"] = pm.parameter_to_df(A, y_names, designs["alpha"][1])
 
     def predict(self, X):
         # process inputs and parameters into tensors on device
-        Xs = {k: design(f, X)[0] for k, f in self.formula.items()}
+        Xs = {k: ds.design(f, X)[0] for k, f in self.formula.items()}
         Xs = {k: v.to(self.device) for k, v in Xs.items()}
-        A = parameter_to_tensor(self.parameters["A"], self.device)
-        B = parameter_to_tensor(self.parameters["B"], self.device)
+        A = pm.parameter_to_tensor(self.parameters["A"], self.device)
+        B = pm.parameter_to_tensor(self.parameters["B"], self.device)
         
         # generate and give names to predictions
         mu_hat = pd.DataFrame(
@@ -114,7 +81,7 @@ class NegativeBinomial(Marginal):
         ).mean()
 
     def to_df(self):
-        fmla = reconcile_formulas(self.formula)
+        fmla = ds.reconcile_formulas(self.formula)
         return pd.DataFrame({
             "formula": fmla,
             "distribution": "NegativeBinomial(\u03BC, \u03B1)"
