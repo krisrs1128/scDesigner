@@ -5,9 +5,10 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 
+
 def generate_adata(N=100, G=2000):
     """
-    Helper function used in tests 
+    Helper function used in tests
     """
     counts = csr_matrix(np.random.poisson(1, size=(100, 2000)), dtype=np.float32)
     adata = ad.AnnData(counts)

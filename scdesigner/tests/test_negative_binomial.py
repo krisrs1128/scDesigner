@@ -5,6 +5,7 @@ import torch
 import torch.optim
 import torch.random
 
+
 def test_nb_mean():
     # define ground truth mean
     N, G = 1000, 20

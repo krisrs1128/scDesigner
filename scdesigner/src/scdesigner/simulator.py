@@ -3,8 +3,9 @@ from collections import defaultdict
 import pandas as pd
 import torch
 
+
 def merge_predictions(param_hat):
-    merged = defaultdict(list) 
+    merged = defaultdict(list)
     for d in param_hat:
         for k, v in d.items():
             merged[k].append(v)
@@ -12,7 +13,7 @@ def merge_predictions(param_hat):
     return {k: pd.concat(v, axis=1) for k, v in merged.items()}
 
 
-class Simulator():
+class Simulator:
     def __init__(self, margins, copula=None):
         super().__init__()
         self.margins = margins
