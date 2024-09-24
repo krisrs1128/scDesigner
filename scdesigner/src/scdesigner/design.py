@@ -18,3 +18,17 @@ def design(formula, X=None, rows=None):
     cnames = X.columns
     X = np.array(X).astype(np.float32)
     return torch.from_numpy(X), list(cnames)
+
+
+def reconcile_formulas(formula, terms=["mu", "alpha"]):
+    values = formula.values()
+    if len(set(values)) == 1:
+        return f"""all: {formula[terms[0]]}"""
+    return f"""{terms[0]}: {formula[terms[0]]}, {terms[1]}: {formula[terms[1]]}"""
+
+
+def initialize_formula(f, parameters=["alpha", "mu"]):
+    for k in parameters:
+        if k not in f.keys():
+            f[k] = "~ 1"
+    return f
