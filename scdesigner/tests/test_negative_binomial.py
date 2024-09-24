@@ -18,9 +18,8 @@ def test_nb_mean():
     # estimate means
     nb_model = NegativeBinomial("~ 1")
     nb_model.fit(Y)
-    mu_hat = nb_model.parameters["B"]
-    log_mu = torch.Tensor(mu[0]).log()
-    assert torch.mean(torch.abs(mu_hat - log_mu)) < 0.1
+    mu_hat = nb_model.parameters["B"].values
+    assert np.mean(np.abs(mu_hat - np.log(mu[0]))) < 0.1
 
 
 def test_mu_regression():
@@ -39,8 +38,8 @@ def test_mu_regression():
     X = pd.DataFrame(X, columns=[f"dim{j}" for j in range(D)])
     nb_model = NegativeBinomial("~ . - 1")
     nb_model.fit(Y, X, max_iter=50)
-    Bhat = nb_model.parameters["B"]
-    assert torch.mean(torch.abs(Bhat - B)) < 0.1
+    Bhat = nb_model.parameters["B"].values
+    assert np.mean(np.abs(Bhat - B)) < 0.1
 
 
 def test_nb_dispersion():
@@ -56,9 +55,8 @@ def test_nb_dispersion():
     # estimate dispersion parameters
     nb_model = NegativeBinomial({"alpha": "~ 1"})
     nb_model.fit(Y)
-    Ahat = nb_model.parameters["A"]
-    log_alpha = torch.Tensor(alpha[0]).log()
-    assert torch.mean(torch.abs(Ahat - log_alpha)) < 0.1
+    Ahat = nb_model.parameters["A"].values
+    assert np.mean(np.abs(Ahat - np.log(alpha[0]))) < 0.1
 
 
 def test_alpha_regression():
@@ -77,5 +75,5 @@ def test_alpha_regression():
     # estimate means
     nb_model = NegativeBinomial({"alpha": "~ . - 1"})
     nb_model.fit(Y, pd.DataFrame(X))
-    Ahat = nb_model.parameters["A"]
-    assert torch.mean(torch.abs(Ahat - A)) < 0.1
+    Ahat = nb_model.parameters["A"].values
+    assert np.mean(np.abs(Ahat - A)) < 0.1
