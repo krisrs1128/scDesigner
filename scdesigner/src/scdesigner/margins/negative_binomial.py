@@ -57,7 +57,7 @@ class NegativeBinomial(Marginal):
         return A, B
 
 
-    def fit(self, Y, X=None, y_names=None, max_iter=10, lr=1e-3):
+    def fit(self, Y, X=None, y_names=None, max_iter=10, lr=0.1):
         if y_names is None:
             y_names = range(Y.shape[1])
 
