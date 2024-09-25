@@ -27,7 +27,10 @@ def reconcile_formulas(formula, terms=["mu", "alpha"]):
     return f"""{terms[0]}: {formula[terms[0]]}, {terms[1]}: {formula[terms[1]]}"""
 
 
-def initialize_formula(f, parameters=["alpha", "mu"]):
+def initialize_formula(f, parameters=["alpha", "mu"], priority="mu"):
+    if isinstance(f, str):
+        f = {priority: f}
+
     for k in parameters:
         if k not in f.keys():
             f[k] = "~ 1"
