@@ -27,7 +27,6 @@ class Simulator:
             submodel.fit(
                 torch.from_numpy(anndata[:, y_names].X.toarray()),
                 anndata.obs,
-                y_names,
                 **kwargs
             )
 
