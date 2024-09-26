@@ -1,9 +1,5 @@
-from scdesigner.print import print_simulator
 from collections import defaultdict
 import pandas as pd
-import torch
-
-
 def merge_predictions(param_hat):
     merged = defaultdict(list)
     for d in param_hat:
@@ -19,42 +15,23 @@ class Simulator:
         self.margins = margins
         self.copula = copula
 
-    def fit(self, anndata, index=None, **kwargs):
-        if index is None:
-            index = range(len(self.margins))
-        for ix in index:
-            y_names, submodel = self.margins[ix]
-            submodel.fit(
-                torch.from_numpy(anndata[:, y_names].X.toarray()),
-                anndata.obs,
-                **kwargs
-            )
+    def fit(self, anndata, **kwargs):
+        for margin in self.margins:
+            y_names, submodel = margin
+            submodel.fit(anndata[:, y_names], **kwargs)
 
-    def predict(self, X, index=None, **kwargs):
-        if index is None:
-            index = range(len(self.margins))
+    def predict(self, obs):
         param_hat = []
-        for ix in index:
+        for ix in range(self.margins):
             _, submodel = self.margins[ix]
-            param_hat.append(submodel.predict(X))
+            param_hat.append(submodel.predict(obs))
         return merge_predictions(param_hat)
 
-    def parameters(self, index=None):
-        if index is None:
-            index = range(len(self.margins))
-
+    def parameters(self):
         theta = []
-        for ix in index:
-            genes, submodel = self.margins[ix]
-            theta += (genes, submodel.parameters)
+        for genes, submodel in self.margins:
+            theta += (genes, submodel.parameters())
         return theta
-
-    def __repr__(self):
-        print_simulator(self.margins, self.copula)
-        return ""
-
-    def __str__(self):
-        return ""
 
 
 def simulator(anndata, margins, delay=False, copula=None, **kwargs):
