@@ -2,12 +2,14 @@ import lightning as pl
 import torch
 import itertools
 import torch.optim
+from math import log, pi
+import numpy as np
 import torch.nn as nn
 
 class RegressionModule(pl.LightningModule):
-    def __init__(self, n_input, gene_names=None):
+    def __init__(self, n_input, gene_names):
         super().__init__()
-        self.linear = {"mu": nn.Linear(n_input["mu"], len(gene_names))}
+        self.linear = {k: nn.Linear(n_input[k], len(gene_names)) for k in n_input.keys()}
         self.gene_names = gene_names
         self.automatic_optimization = False
 
@@ -31,10 +33,6 @@ class RegressionModule(pl.LightningModule):
 class NBRegression(RegressionModule):
     def __init__(self, n_input, gene_names):
         super().__init__(n_input, gene_names)
-        self.linear = {
-            "alpha": nn.Linear(n_input["alpha"], len(gene_names)),
-            "mu": nn.Linear(n_input["mu"], len(gene_names))
-        }
 
     def forward(self, X):
         result = {}
@@ -54,3 +52,23 @@ class NBRegression(RegressionModule):
             - torch.lgamma(1 + X)
             - torch.lgamma(1 / alpha)
         ).mean()
+
+class NormalRegression(RegressionModule):
+    def __init__(self, n_input, gene_names):
+        super().__init__(n_input, gene_names)
+
+    def forward(self, X):
+        result = {}
+        for k, v in X.items():
+            f = self.linear[k].to(self.device)
+            result[k] = f(v)
+        result["sigma"] = torch.exp(result["sigma"])
+        return result
+
+    def loglikelihood(self, X, obs):
+        theta = self.forward(obs)
+        mu, sigma = theta["mu"], theta["sigma"]
+        D = X.shape[1]
+
+        return - D / 2  * log(2 * pi) + \
+            D * (- torch.log(sigma) - 1 / 2 * ((X - mu) / sigma) ** 2).mean()
