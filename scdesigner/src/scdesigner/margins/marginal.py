@@ -7,7 +7,7 @@ from formulaic import model_matrix
 from torch.optim import LBFGS
 from torch.utils.data import DataLoader
 from inspect import getmembers
-from .regressors import NBRegression
+from .regressors import NBRegression, NormalRegression
 from ..formula import FormulaDataset
 
 def formula_collate(formula):
@@ -29,6 +29,7 @@ class MarginalModel:
         super().__init__()
         self.formula = formula
         self.module = module
+        self.parameter_names = None
         self.loader_opts = args(DataLoader, **kwargs)
         self.optimizer_opts = args(LBFGS, **kwargs)
 
@@ -36,7 +37,7 @@ class MarginalModel:
         if self.loader_opts.get("batch_size") is None:
             self.loader_opts["batch_size"] = len(anndata)
 
-        dataset = FormulaDataset(self.formula, anndata)
+        dataset = FormulaDataset(self.formula, anndata, parameters=self.parameter_names)
         self.loader_opts["collate_fn"] = formula_collate(dataset.formula)
         return DataLoader(dataset, **self.loader_opts)
 
@@ -71,3 +72,9 @@ def args(m, **kwargs):
 class NB(MarginalModel):
     def __init__(self, formula, **kwargs):
         super().__init__(formula, NBRegression, **kwargs)
+        self.parameter_names = ["mu", "alpha"]
+
+class Normal(MarginalModel):
+    def __init__(self, formula, **kwargs):
+        super().__init__(formula, NormalRegression, **kwargs)
+        self.parameter_names = ["mu", "sigma"]
