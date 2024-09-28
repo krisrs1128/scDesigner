@@ -1,27 +1,29 @@
-from .. import design as ds
-from . import parameter as pm
 import lightning as pl
 import torch
 import itertools
 import torch.optim
 import torch.nn as nn
-import numpy as np
 
 class RegressionModule(pl.LightningModule):
     def __init__(self, n_input, gene_names=None):
         super().__init__()
         self.linear = {"mu": nn.Linear(n_input["mu"], len(gene_names))}
         self.gene_names = gene_names
+        self.automatic_optimization = False
 
-    def configure_optimizers(self, lr=0.01, **kwargs):
+    def configure_optimizers(self, lr=0.05, **kwargs):
         parameters = [p.parameters() for p in self.linear.values()]
         return torch.optim.LBFGS(itertools.chain(*parameters), lr=lr, **kwargs)
 
     def training_step(self, batch):
-        return -self.loglikelihood(*batch)
+        opt = self.optimizers()
+        def closure():
+            loss = -self.loglikelihood(*batch)
+            opt.zero_grad()
+            self.manual_backward(loss)
+            return loss
 
-    def validation_step(self):
-        pass
+        opt.step(closure=closure)
 
     def loglikelihood(self):
         pass
