@@ -49,7 +49,8 @@ class MarginalModel:
         self.module.configure_optimizers(**self.optimizer_opts)
 
     def fit(self, anndata, max_epochs=10):
-        self.configure_module(anndata)
+        if isinstance(self.module, type):
+            self.configure_module(anndata)
         ds = self.configure_loader(anndata)
         pl.Trainer(max_epochs=max_epochs, barebones=True).fit(self.module, train_dataloaders=ds)
 
