@@ -1,6 +1,4 @@
 from torch.utils.data import Dataset
-from formulaic import model_matrix
-import numpy as np
 
 
 def parse_formula(f, x_names):
