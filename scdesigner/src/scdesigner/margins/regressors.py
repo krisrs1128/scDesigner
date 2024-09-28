@@ -3,14 +3,13 @@ import torch
 import itertools
 import torch.optim
 from math import log, pi
-import numpy as np
 import torch.nn as nn
 
 class RegressionModule(pl.LightningModule):
     def __init__(self, n_input, gene_names):
         super().__init__()
         self.linear = {k: nn.Linear(n_input[k], len(gene_names)) for k in n_input.keys()}
-        self.gene_names = gene_names
+        self.gene_names = list(gene_names)
         self.automatic_optimization = False
 
     def configure_optimizers(self, lr=0.05, **kwargs):
