@@ -35,3 +35,12 @@ def reformulate(model, genes, formula, anndata=None):
         new_model.configure_module(anndata[:, genes])
 
     return new_model, submodel
+
+def match_marginal(margins, genes):
+    result = []
+    ix = []
+    for i, (gene_subset, margin) in enumerate(margins):
+        if np.any(np.isin(genes, gene_subset)):
+            result.append((gene_subset, margin))
+            ix.append(i)
+    return ix, result
