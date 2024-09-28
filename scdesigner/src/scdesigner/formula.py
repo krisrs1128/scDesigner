@@ -18,20 +18,19 @@ def initialize_formula(f, parameters=["alpha", "mu"], priority="mu"):
 
 class FormulaDataset(Dataset):
     def __init__(self, formula, adata, **kwargs):
-        self.X = adata.X
-        self.obs = adata.obs
+        self.adata = adata
 
         self.formula = initialize_formula(formula, **kwargs)
         for k, f in self.formula.items():
-            self.formula[k] = parse_formula(f, self.obs.columns)
+            self.formula[k] = parse_formula(f, self.adata.obs.columns)
 
     def __len__(self):
-        return len(self.X)
+        return len(self.adata)
 
     def __getitem__(self, ix):
         obs_ = {}
-        for k, f in self.formula.items():
-            obs_[k] = np.array(model_matrix(f, self.obs.iloc[[ix]])).astype(np.float32)
+        for k, _ in self.formula.items():
+            obs_[k] = self.adata.obs.iloc[[ix]]
 
-        X_ = self.X[ix, :] if self.X is not None else None
+        X_ = self.adata.X[ix, :] if self.adata.X is not None else []
         return X_, obs_
