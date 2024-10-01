@@ -8,6 +8,7 @@ from inspect import getmembers
 from .regressors import NBRegression, NormalRegression
 from ..formula import FormulaDataset
 
+
 def formula_collate(data):
     obs = defaultdict(list)
     X = []
@@ -18,6 +19,7 @@ def formula_collate(data):
             obs[k].append(v)
 
     return torch.stack(X), {k: torch.stack(v) for k, v in obs.items()}
+
 
 class MarginalModel:
     def __init__(self, formula, module, **kwargs):
@@ -47,7 +49,9 @@ class MarginalModel:
         if isinstance(self.module, type):
             self.configure_module(anndata)
         ds = self.configure_loader(anndata)
-        pl.Trainer(max_epochs=max_epochs, barebones=False).fit(self.module, train_dataloaders=ds)
+        pl.Trainer(max_epochs=max_epochs, barebones=False).fit(
+            self.module, train_dataloaders=ds
+        )
 
     def predict(self, obs):
         ds = self.configure_loader(ad.AnnData(obs=obs))
@@ -60,14 +64,17 @@ class MarginalModel:
     def parameters(self):
         pass
 
+
 def args(m, **kwargs):
     members = getmembers(m.__init__)[0][1].keys()
     return {kw: kwargs[kw] for kw in kwargs if kw in members}
+
 
 class NB(MarginalModel):
     def __init__(self, formula, **kwargs):
         super().__init__(formula, NBRegression, **kwargs)
         self.parameter_names = ["mu", "alpha"]
+
 
 class Normal(MarginalModel):
     def __init__(self, formula, **kwargs):

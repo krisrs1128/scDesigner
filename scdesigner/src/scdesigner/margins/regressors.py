@@ -4,11 +4,15 @@ import torch.optim
 from math import log, pi
 import torch.nn as nn
 
+
 class RegressionModule(pl.LightningModule):
     def __init__(self, n_input, gene_names):
         super().__init__()
         self.linear = nn.ModuleDict(
-            {k: nn.Linear(n_input[k], len(gene_names), bias=False) for k in n_input.keys()}
+            {
+                k: nn.Linear(n_input[k], len(gene_names), bias=False)
+                for k in n_input.keys()
+            }
         )
         self.gene_names = list(gene_names)
         self.optimizer_opts = {}
@@ -23,6 +27,7 @@ class RegressionModule(pl.LightningModule):
 
     def loglikelihood(self):
         pass
+
 
 class NBRegression(RegressionModule):
     def __init__(self, n_input, gene_names):
@@ -47,6 +52,7 @@ class NBRegression(RegressionModule):
             - torch.lgamma(1 / alpha)
         ).mean()
 
+
 class NormalRegression(RegressionModule):
     def __init__(self, n_input, gene_names):
         super().__init__(n_input, gene_names)
@@ -68,13 +74,16 @@ class NormalRegression(RegressionModule):
         mu, sigma = theta["mu"], theta["sigma"]
         D = X.shape[1]
 
-        return - D / 2  * log(2 * pi) + \
-            D * (- torch.log(sigma) - 1 / 2 * ((X - mu) / sigma) ** 2).mean()
+        return (
+            -D / 2 * log(2 * pi)
+            + D * (-torch.log(sigma) - 1 / 2 * ((X - mu) / sigma) ** 2).mean()
+        )
 
 
 ###############################################################################
 ## Helpers used by the regression modules
 ###############################################################################
+
 
 def lm_init(dataloader):
     xx, xy = None, None

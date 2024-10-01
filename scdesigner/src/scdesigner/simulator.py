@@ -5,6 +5,7 @@ from torch.optim import LBFGS
 from torch.utils.data import DataLoader
 import pandas as pd
 
+
 def merge_predictions(param_hat):
     merged = defaultdict(list)
     for genes, d in param_hat:
@@ -37,16 +38,17 @@ class Simulator:
             new.fit(anndata[:, g1], max_epochs)
             self.margins += [(g1, new), (g2, unchanged)]
 
-
     def predict(self, obs):
-        param_hat = [] 
+        param_hat = []
         for genes, margin in self.margins:
             param_hat.append([genes, margin.predict(obs)])
         return merge_predictions(param_hat)
 
+
 def safe_update(d1, d2):
     d1.update({k: v for k, v in d2.items() if k not in d1})
     return d1
+
 
 def simulator(anndata, margins, delay=False, copula=None, max_epochs=10, **kwargs):
     if not isinstance(margins, list):
@@ -54,7 +56,9 @@ def simulator(anndata, margins, delay=False, copula=None, max_epochs=10, **kwarg
 
     for _, margin in margins:
         margin.loader_opts = safe_update(margin.loader_opts, args(DataLoader, **kwargs))
-        margin.optimizer_opts = safe_update(margin.optimizer_opts, args(LBFGS, **kwargs))
+        margin.optimizer_opts = safe_update(
+            margin.optimizer_opts, args(LBFGS, **kwargs)
+        )
 
     simulator = Simulator(margins, copula)
     if not delay:

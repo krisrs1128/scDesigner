@@ -3,6 +3,7 @@ import numpy as np
 from copy import deepcopy
 from .marginal import MarginalModel
 
+
 def filter_marginal(model, genes):
     # get indices for the subset
     gene_names = model.module.gene_names
@@ -21,9 +22,10 @@ def filter_marginal(model, genes):
     m.module.gene_names = genes
     return m
 
+
 def reformulate(model, genes, formula, anndata=None):
     """
-    Modify the formula for a subset of genes 
+    Modify the formula for a subset of genes
     """
     # keep the model for unchanged genes
     complement = [g for g in model.module.gene_names if g not in genes]
@@ -36,6 +38,7 @@ def reformulate(model, genes, formula, anndata=None):
         new_model.configure_module(anndata[:, genes])
 
     return new_model, submodel
+
 
 def match_marginal(margins, genes):
     result = []
