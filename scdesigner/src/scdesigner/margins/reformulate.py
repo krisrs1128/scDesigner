@@ -1,7 +1,8 @@
+from .marginal import MarginalModel
+from copy import deepcopy
 from torch import nn
 import numpy as np
-from copy import deepcopy
-from .marginal import MarginalModel
+import re
 
 
 def filter_marginal(model, genes):
@@ -48,3 +49,25 @@ def match_marginal(margins, genes):
             result.append((gene_subset, margin))
             ix.append(i)
     return ix, result
+
+
+def nullify_formula(formula: str, term: str) -> str:
+    """
+    Examples
+    --------
+    nullify_formula("~ bs(pseudotime) + treatment", "pseudotime")
+    nullify_formula("~ bs(pseudotime, df=3) * treatment", "pseudotime")
+    nullify_formula("~ bs(pseudotime, df=3) * treatment", "treatment")
+    nullify_formula("~ pseudotime + treatment", "treatment")
+    """
+    # remove any terms containing "term"
+    pattern = re.compile(rf"(\s?\+\s?)?(\b{re.escape(term)}\b|\b\w+\({re.escape(term)}.*?\))")
+    result = re.sub(pattern, "", formula)
+    
+    # postprocessing
+    result = re.sub(r'\s*\+\s*$', '', result)  # remove trailing '+'
+    result = re.sub(r'\+\s*\+', '+', result)   # replace '++' with '+'
+    result = re.sub(r'\*\s*$', '', result)     # remove trailing '*'
+    result = re.sub(r'~\s*\+', '~', result)    # remove '+' after '~'
+    result = re.sub(r'~\s*\*', '~', result)    # remove '*' after '~'
+    return result.strip()
