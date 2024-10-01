@@ -70,7 +70,7 @@ def margin_apply(margins, genes, f, anndata, **kwargs):
 
 
 
-def simulator(anndata, margins, delay=False, copula=None, max_epochs=10, **kwargs):
+def scdesigner(anndata, margins, delay=False, copula=None, max_epochs=10, **kwargs):
     if not isinstance(margins, list):
         margins = [(list(anndata.var_names), margins)]
 
