@@ -51,7 +51,7 @@ def match_marginal(margins, genes):
     return ix, result
 
 
-def nullify_formula(formula: str, term: str) -> str:
+def nullify_formula_str(formula: str, term: str) -> str:
     """
     Examples
     --------
@@ -71,3 +71,12 @@ def nullify_formula(formula: str, term: str) -> str:
     result = re.sub(r'~\s*\+', '~', result)    # remove '+' after '~'
     result = re.sub(r'~\s*\*', '~', result)    # remove '*' after '~'
     return result.strip()
+
+def nullify_formula(formula, term: str):
+    if isinstance(formula, str):
+        return nullify_formula_str(formula, str)
+
+    result = {}
+    for k, f in formula.items():
+        result[k] = nullify_formula_str(f, term)
+    return result
