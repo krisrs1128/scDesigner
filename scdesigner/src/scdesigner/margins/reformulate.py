@@ -1,5 +1,6 @@
 from torch import nn
 import numpy as np
+from copy import deepcopy
 from .marginal import MarginalModel
 
 def filter_marginal(model, genes):
@@ -11,21 +12,21 @@ def filter_marginal(model, genes):
     linear = model.module.linear
     new_linear = {}
     for k, l in linear.items():
-        new_linear[k] = nn.Linear(l.in_features, len(gene_names))
+        new_linear[k] = nn.Linear(l.in_features, len(genes), bias=False)
         new_linear[k].weight.data = l.weight.data[ix].clone()
-        new_linear[k].bias.data = l.bias.data[ix].clone()
 
     # update module definition
-    model.module.linear = new_linear
-    model.module.gene_names = genes
-    return model
+    m = deepcopy(model)
+    m.module.linear = nn.ModuleDict(new_linear)
+    m.module.gene_names = genes
+    return m
 
 def reformulate(model, genes, formula, anndata=None):
     """
     Modify the formula for a subset of genes 
     """
     # keep the model for unchanged genes
-    complement = list(set(model.module.gene_names) - set(genes))
+    complement = [g for g in model.module.gene_names if g not in genes]
     submodel = filter_marginal(model, complement)
 
     # new marginal for the changed genes
