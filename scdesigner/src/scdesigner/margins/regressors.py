@@ -1,6 +1,5 @@
 import lightning as pl
 import torch
-import itertools
 import torch.optim
 from math import log, pi
 import torch.nn as nn
@@ -8,23 +7,19 @@ import torch.nn as nn
 class RegressionModule(pl.LightningModule):
     def __init__(self, n_input, gene_names):
         super().__init__()
-        self.linear = {k: nn.Linear(n_input[k], len(gene_names)) for k in n_input.keys()}
+        self.linear = nn.ModuleDict(
+            {k: nn.Linear(n_input[k], len(gene_names), bias=False) for k in n_input.keys()}
+        )
         self.gene_names = list(gene_names)
-        self.automatic_optimization = False
+        self.optimizer_opts = {}
 
-    def configure_optimizers(self, lr=0.05, **kwargs):
-        parameters = [p.parameters() for p in self.linear.values()]
-        return torch.optim.LBFGS(itertools.chain(*parameters), lr=lr, **kwargs)
+    def configure_optimizers(self):
+        return torch.optim.LBFGS(self.parameters(), **self.optimizer_opts)
 
     def training_step(self, batch):
-        opt = self.optimizers()
-        def closure():
-            loss = -self.loglikelihood(*batch)
-            opt.zero_grad()
-            self.manual_backward(loss)
-            return loss
-
-        opt.step(closure=closure)
+        loss = -self.loglikelihood(*batch)
+        self.log("NLL", loss.item(), on_epoch=True, on_step=False)
+        return loss
 
     def loglikelihood(self):
         pass
@@ -56,6 +51,10 @@ class NormalRegression(RegressionModule):
     def __init__(self, n_input, gene_names):
         super().__init__(n_input, gene_names)
 
+    def on_train_start(self):
+        w_init = lm_init(self.trainer.train_dataloader)
+        self.linear["mu"].weight.data = w_init.contiguous()
+
     def forward(self, X):
         result = {}
         for k, v in X.items():
@@ -71,3 +70,22 @@ class NormalRegression(RegressionModule):
 
         return - D / 2  * log(2 * pi) + \
             D * (- torch.log(sigma) - 1 / 2 * ((X - mu) / sigma) ** 2).mean()
+
+
+###############################################################################
+## Helpers used by the regression modules
+###############################################################################
+
+def lm_init(dataloader):
+    xx, xy = None, None
+    for y, obs in dataloader:
+        x = obs["mu"]
+
+        if xx is None:
+            xx = x.T @ x
+            xy = x.T @ y
+        else:
+            xx += x.T @ x
+            xy += x.T @ y
+
+    return (torch.inverse(xx) @ xy).T
