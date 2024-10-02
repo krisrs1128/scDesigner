@@ -1,10 +1,21 @@
-from collections import defaultdict
 from .margins.marginal import args
 from .margins.reformulate import reformulate, match_marginal, nullify_formula
+from collections import defaultdict
+import torch
 from torch.optim import LBFGS
 from torch.utils.data import DataLoader
+import anndata as ad
 import pandas as pd
+import numpy as np
 
+def retrieve_obs(N, obs, anndata):
+    if obs is not None:
+        return obs
+    elif N is not None:
+        ix = torch.randint(high=len(anndata), size=(N,))
+        return anndata.obs.iloc[ix.tolist(), :]
+    else:
+        return anndata.obs
 
 def merge_predictions(param_hat):
     merged = defaultdict(list)
@@ -42,6 +53,17 @@ class Simulator:
         for genes, margin in self.margins:
             param_hat.append([genes, margin.predict(obs)])
         return merge_predictions(param_hat)
+
+    def sample(self, N=None, obs=None):
+        new_obs = retrieve_obs(N, obs, self.anndata)
+        var_names, counts = [], []
+        for genes, margin in self.margins:
+            var_names += list(genes)
+            counts.append(margin.sample(new_obs))
+
+        adata = ad.AnnData(np.concatenate(counts, axis=1), new_obs)
+        adata.var_names = var_names
+        return adata
 
     def nullify(self, term, genes, max_epochs=10):
         def f(margin, genes):
