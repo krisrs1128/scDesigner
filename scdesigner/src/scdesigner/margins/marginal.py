@@ -1,12 +1,13 @@
 import anndata as ad
 import lightning as pl
-import numpy as np
 import torch
+import torch.distributions
 from collections import defaultdict
 from torch.optim import LBFGS
 from torch.utils.data import DataLoader
 from inspect import getmembers
 from .regressors import NBRegression, NormalRegression
+from .distributions import NegativeBinomial
 from ..formula import FormulaDataset
 
 
@@ -61,12 +62,17 @@ class MarginalModel:
             with torch.no_grad():
                 preds.append(self.module(obs_))
         return {k: torch.stack([d[k] for d in preds]).squeeze() for k in preds[0]}
-
+    
     def sample(self, obs):
-        pass
+        return self.distn(obs).sample()
 
+    def cdf(self, X, obs):
+        return self.distn(obs).cdf(X)
 
-    def parameters(self):
+    def icdf(self, U, obs):
+        return self.distn(obs).icdf(U)
+
+    def distn(self, obs):
         pass
 
 
@@ -80,17 +86,17 @@ class NB(MarginalModel):
         super().__init__(formula, NBRegression, **kwargs)
         self.parameter_names = ["mu", "alpha"]
     
-    def sample(self, obs):
+    def distn(self, obs):
         params = self.predict(obs)
         total_count = 1 / params["alpha"]
         p = 1 / (1 + params["alpha"] * params["mu"])
-        return np.random.negative_binomial(total_count, p)
+        return NegativeBinomial(total_count, p)
 
 class Normal(MarginalModel):
     def __init__(self, formula, **kwargs):
         super().__init__(formula, NormalRegression, **kwargs)
         self.parameter_names = ["mu", "sigma"]
 
-    def sample(self, obs):
+    def distn(self, obs):
         params = self.predict(obs)
-        return np.random.normal(params["mu"], params["sigma"])
+        return torch.distributions.Normal(params["mu"], params["sigma"])

@@ -59,7 +59,7 @@ class Simulator:
         var_names, counts = [], []
         for genes, margin in self.margins:
             var_names += list(genes)
-            counts.append(margin.sample(new_obs))
+            counts.append(margin.sample(new_obs).numpy())
 
         adata = ad.AnnData(np.concatenate(counts, axis=1), new_obs)
         adata.var_names = var_names
@@ -89,7 +89,6 @@ def margin_apply(margins, genes, f, anndata, **kwargs):
         new.fit(anndata[:, g1], **kwargs)
         margins += [(g1, new), (g2, unchanged)]
     return margins
-
 
 
 def scdesigner(anndata, margins, delay=False, copula=None, max_epochs=10, **kwargs):
