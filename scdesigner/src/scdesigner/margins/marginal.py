@@ -1,5 +1,6 @@
 import anndata as ad
 import lightning as pl
+import numpy as np
 import torch
 from collections import defaultdict
 from torch.optim import LBFGS
@@ -61,6 +62,10 @@ class MarginalModel:
                 preds.append(self.module(obs_))
         return {k: torch.stack([d[k] for d in preds]).squeeze() for k in preds[0]}
 
+    def sample(self, obs):
+        pass
+
+
     def parameters(self):
         pass
 
@@ -74,9 +79,18 @@ class NB(MarginalModel):
     def __init__(self, formula, **kwargs):
         super().__init__(formula, NBRegression, **kwargs)
         self.parameter_names = ["mu", "alpha"]
-
+    
+    def sample(self, obs):
+        params = self.predict(obs)
+        total_count = 1 / params["alpha"]
+        p = 1 / (1 + params["alpha"] * params["mu"])
+        return np.random.negative_binomial(total_count, p)
 
 class Normal(MarginalModel):
     def __init__(self, formula, **kwargs):
         super().__init__(formula, NormalRegression, **kwargs)
         self.parameter_names = ["mu", "sigma"]
+
+    def sample(self, obs):
+        params = self.predict(obs)
+        return np.random.normal(params["mu"], params["sigma"])
