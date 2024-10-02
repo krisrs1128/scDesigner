@@ -1,4 +1,3 @@
-from .marginal import MarginalModel
 from copy import deepcopy
 from torch import nn
 import numpy as np
@@ -33,7 +32,9 @@ def reformulate(model, genes, formula, anndata=None):
     submodel = filter_marginal(model, complement)
 
     # new marginal for the changed genes
-    new_model = MarginalModel(formula, type(submodel.module))
+    new_model = deepcopy(submodel)
+    new_model.formula = formula
+    new_model.module = type(submodel.module)
     new_model.parameter_names = submodel.parameter_names
     if anndata is not None:
         new_model.configure_module(anndata[:, genes])
