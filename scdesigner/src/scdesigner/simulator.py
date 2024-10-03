@@ -1,4 +1,5 @@
 from .margins.marginal import args
+from .copula import ScCopula
 from .margins.reformulate import reformulate, match_marginal, nullify_formula
 from collections import defaultdict
 import torch
@@ -28,16 +29,20 @@ def merge_predictions(param_hat):
 
 
 class Simulator:
-    def __init__(self, margins, copula=None):
+    def __init__(self, margins, multivariate=None):
         super().__init__()
         self.margins = margins
-        self.copula = copula
+        self.multivariate = multivariate
         self.anndata = None
 
     def fit(self, anndata, max_epochs=10):
         for margin in self.margins:
             y_names, submodel = margin
             submodel.fit(anndata[:, y_names], max_epochs)
+
+        if self.multivariate is not None:
+            self.multivariate.fit(self.margins, anndata)
+
         self.anndata = anndata
 
     def reformulate(self, genes, formula, max_epochs=10):
@@ -56,10 +61,10 @@ class Simulator:
 
     def sample(self, N=None, obs=None):
         new_obs = retrieve_obs(N, obs, self.anndata)
-        var_names, counts = [], []
-        for genes, margin in self.margins:
-            var_names += list(genes)
-            counts.append(margin.sample(new_obs).numpy())
+        if self.multivariate is None:
+            var_names, counts = sample_marginals(self.margins, new_obs)
+        else:
+            var_names, counts = self.multivariate.sample(self.margins, new_obs)
 
         adata = ad.AnnData(np.concatenate(counts, axis=1), new_obs)
         adata.var_names = var_names
@@ -89,9 +94,16 @@ def margin_apply(margins, genes, f, anndata, **kwargs):
         new.fit(anndata[:, g1], **kwargs)
         margins += [(g1, new), (g2, unchanged)]
     return margins
+        
+def sample_marginals(margins, obs):
+    var_names, counts = [], []
+    for genes, margin in margins:
+        var_names += list(genes)
+        counts.append(margin.sample(obs).numpy())
+    return var_names, counts
 
 
-def scdesigner(anndata, margins, delay=False, copula=None, max_epochs=10, **kwargs):
+def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=10, **kwargs):
     if not isinstance(margins, list):
         margins = [(list(anndata.var_names), margins)]
 
@@ -101,7 +113,7 @@ def scdesigner(anndata, margins, delay=False, copula=None, max_epochs=10, **kwar
             margin.optimizer_opts, args(LBFGS, **kwargs)
         )
 
-    simulator = Simulator(margins, copula)
+    simulator = Simulator(margins, multivariate)
     if not delay:
         simulator.fit(anndata, max_epochs)
 
