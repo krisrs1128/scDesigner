@@ -89,7 +89,7 @@ class NB(MarginalModel):
     def distn(self, obs):
         params = self.predict(obs)
         total_count = 1 / params["alpha"]
-        p = 1 / (1 + params["alpha"] * params["mu"])
+        p = 1 - 1 / (1 + params["alpha"] * params["mu"])
         return NegativeBinomial(total_count, p)
 
 class Normal(MarginalModel):
