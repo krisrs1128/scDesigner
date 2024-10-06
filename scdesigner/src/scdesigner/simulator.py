@@ -39,7 +39,8 @@ class Simulator:
     def fit(self, anndata, max_epochs=10):
         for margin in self.margins:
             y_names, submodel = margin
-            submodel.fit(anndata[:, y_names], max_epochs)
+            train_ix = np.sum(np.isnan(anndata[:, y_names].X), axis=1) == 0
+            submodel.fit(anndata[train_ix, y_names], max_epochs)
 
         if self.multivariate is not None:
             self.multivariate.fit(self.margins, anndata)
@@ -92,7 +93,7 @@ class Simulator:
         if mode == "copula":
             return scj.join_copula(self, sim2, **kwargs)
         elif mode == "pamona":
-            pass
+            return scj.join_pamona(self, sim2, **kwargs)
         else:
             raise NotImplementedError(f"No join mode {mode}. Did you provide one of the supported modes: 'copula' or 'pamona'?")
 
