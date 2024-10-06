@@ -18,7 +18,7 @@ Homepage = "https://github.com/krisrs1128/scDesigner/"
 Issues = "https://github.com/krisrs1128/scDesigner/Issues/"
 
 [build-system]
-requires = ["formulaic", "torch", "pandas", "numpy", "hatchling"]
+requires = ["formulaic", "torch", "pandas", "numpy", "pamona", "scipy", "hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.metadata]
