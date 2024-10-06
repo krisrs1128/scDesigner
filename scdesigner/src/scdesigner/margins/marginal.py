@@ -61,7 +61,7 @@ class MarginalModel:
         for _, obs_ in ds:
             with torch.no_grad():
                 preds.append(self.module(obs_))
-        return {k: torch.stack([d[k] for d in preds]).squeeze() for k in preds[0]}
+        return {k: torch.concatenate([d[k] for d in preds], axis=0) for k in preds[0]}
     
     def sample(self, obs):
         return self.distn(obs).sample()
