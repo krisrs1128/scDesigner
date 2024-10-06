@@ -1,6 +1,7 @@
 from .margins.marginal import args
 from .copula import ScCopula
 from .margins.reformulate import reformulate, match_marginal, nullify_formula
+from . import join as scj
 from collections import defaultdict
 import torch
 from torch.optim import LBFGS
@@ -59,15 +60,23 @@ class Simulator:
             param_hat.append([genes, margin.predict(obs)])
         return merge_predictions(param_hat)
 
-    def sample(self, N=None, obs=None):
+    def sample(self, N=None, obs=None, split=False):
         new_obs = retrieve_obs(N, obs, self.anndata)
         if self.multivariate is None:
             var_names, counts = sample_marginals(self.margins, new_obs)
         else:
             var_names, counts = self.multivariate.sample(self.margins, new_obs)
 
-        adata = ad.AnnData(np.concatenate(counts, axis=1), new_obs)
+        adata = ad.AnnData(
+            np.concatenate(counts, axis=1), 
+            new_obs, 
+            var=self.anndata.var
+        )
+
         adata.var_names = var_names
+        if split:
+            adata = scj.split_adata(adata)
+
         return adata
 
     def nullify(self, term, genes, max_epochs=10):
@@ -78,6 +87,35 @@ class Simulator:
         self.margins = margin_apply(
             self.margins, genes, f, self.anndata, max_epochs=max_epochs
         )
+
+    def join(self, sim2, mode="copula", **kwargs):
+        if mode == "copula":
+            return scj.join_copula(self, sim2, **kwargs)
+        elif mode == "pamona":
+            pass
+        else:
+            raise NotImplementedError(f"No join mode {mode}. Did you provide one of the supported modes: 'copula' or 'pamona'?")
+
+
+def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=10, **kwargs):
+    if not isinstance(margins, list):
+        margins = [(list(anndata.var_names), margins)]
+
+    for _, margin in margins:
+        margin.loader_opts = safe_update(margin.loader_opts, args(DataLoader, **kwargs))
+        margin.optimizer_opts = safe_update(
+            margin.optimizer_opts, args(LBFGS, **kwargs)
+        )
+
+    simulator = Simulator(margins, multivariate)
+    if not delay:
+        simulator.fit(anndata, max_epochs)
+
+    return simulator
+
+###############################################################################
+## Utilities
+###############################################################################
 
 def safe_update(d1, d2):
     d1.update({k: v for k, v in d2.items() if k not in d1})
@@ -101,20 +139,3 @@ def sample_marginals(margins, obs):
         var_names += list(genes)
         counts.append(margin.sample(obs).numpy())
     return var_names, counts
-
-
-def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=10, **kwargs):
-    if not isinstance(margins, list):
-        margins = [(list(anndata.var_names), margins)]
-
-    for _, margin in margins:
-        margin.loader_opts = safe_update(margin.loader_opts, args(DataLoader, **kwargs))
-        margin.optimizer_opts = safe_update(
-            margin.optimizer_opts, args(LBFGS, **kwargs)
-        )
-
-    simulator = Simulator(margins, multivariate)
-    if not delay:
-        simulator.fit(anndata, max_epochs)
-
-    return simulator
