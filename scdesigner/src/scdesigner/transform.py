@@ -8,9 +8,7 @@ def amplify(simulator, factor, alter_features, alter_genes):
 
 
 def dampen(simulator, factor, alter_features, alter_genes):
-    sim = deepcopy(simulator)
-    transform_parameter(lambda x: x / factor, sim, alter_features, alter_genes)
-    return sim
+    return amplify(simulator, 1 / factor, alter_features, alter_genes)
 
 
 def substring_match(feature, alter_features):
@@ -30,4 +28,4 @@ def transform_parameter(f, simulator, alter_features, alter_genes=None, paramete
             gene_ix = [i for i, v in enumerate(genes) if v in alter_genes]
 
             feature_ix = [i for i, v in enumerate(features) if substring_match(v, alter_features)]
-            theta.data[feature_ix, gene_ix] = f(theta[feature_ix, gene_ix])
+            theta.data[gene_ix, feature_ix] = f(theta[gene_ix, feature_ix])
