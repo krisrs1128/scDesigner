@@ -30,13 +30,13 @@ class FormulaDataset(Dataset):
 
         self.formula = initialize_formula(formula, **kwargs)
         self.obs = dict.fromkeys(self.formula.keys(), [])
+        self.features = dict.fromkeys(self.formula.keys(), [])
+        
         for k, f in self.formula.items():
             self.formula[k] = parse_formula(f, adata.obs.columns)
-            self.obs[k] = torch.from_numpy(
-                np.array(model_matrix(self.formula[k], adata.obs.copy())).astype(
-                    np.float32
-                )
-            )
+            model_df = model_matrix(self.formula[k], adata.obs.copy())
+            self.features[k] = list(model_df.columns)
+            self.obs[k] = torch.from_numpy(np.array(model_df).astype(np.float32))
 
     def __len__(self):
         return self.len
