@@ -2,6 +2,7 @@ from .margins.marginal import args
 from .copula import ScCopula
 from .margins.reformulate import reformulate, match_marginal, nullify_formula
 from . import join as scj
+from .transform import amplify, dampen
 from collections import defaultdict
 import torch
 from torch.optim import LBFGS
@@ -88,6 +89,12 @@ class Simulator:
         self.margins = margin_apply(
             self.margins, genes, f, self.anndata, max_epochs=max_epochs
         )
+
+    def amplify(self, factor, alter_features, alter_genes=None):
+        self.margins = amplify(self, factor, alter_features, alter_genes).margins
+
+    def dampen(self, factor, alter_features, alter_genes=None):
+        self.margins = dampen(self, factor, alter_features, alter_genes).margins
 
     def join(self, sim2, mode="copula", **kwargs):
         if mode == "copula":

@@ -1,15 +1,15 @@
 from copy import deepcopy
 
 
-def amplify(simulator, factor, parameter, genes):
+def amplify(simulator, factor, alter_features, alter_genes):
     sim = deepcopy(simulator)
-    transform_parameter(lambda x: factor * x, sim, parameter, genes)
+    transform_parameter(lambda x: factor * x, sim, alter_features, alter_genes)
     return sim
 
 
-def dampen(simulator, factor, parameter, genes):
+def dampen(simulator, factor, alter_features, alter_genes):
     sim = deepcopy(simulator)
-    transform_parameter(lambda x: x / factor, sim, parameter, genes)
+    transform_parameter(lambda x: x / factor, sim, alter_features, alter_genes)
     return sim
 
 
