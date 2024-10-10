@@ -63,3 +63,35 @@ def ecdf(adata, sim, var_names=None, max_plot=10, n_cols=5, **kwargs):
     ).properties(**kwargs)
     plot.show()
     return plot, combined
+
+def boxplot(adata, sim, var_names=None, max_plot=20, **kwargs):
+    if var_names is None:
+        var_names = adata.var_names[:max_plot]
+
+    combined = merge_samples(adata[:, var_names], sim.sample()[:, var_names])
+    alt.data_transformers.enable("vegafusion")
+
+    plot = alt.Chart(combined).mark_boxplot(extent="min-max").encode(
+        x=alt.X("value:Q").scale(zero=False),
+        y=alt.Y("variable:N", sort=alt.EncodingSortField("mid_box_value", order="descending")),
+        facet="source:N"
+    ).properties(**kwargs)
+    plot.show()
+    return plot, combined
+
+def histogram(adata, sim, var_names=None, max_plot=20, n_cols=5, **kwargs):
+    if var_names is None:
+        var_names = adata.var_names[:max_plot]
+
+    combined = merge_samples(adata[:, var_names], sim.sample()[:, var_names])
+    alt.data_transformers.enable("vegafusion")
+
+
+    plot = alt.Chart(combined).mark_bar(opacity=0.7).encode(
+        x=alt.X("value:Q").bin(maxbins=20),
+        y=alt.Y("count()").stack(None),
+        color="source:N",
+        facet=alt.Facet("variable", sort=alt.EncodingSortField("bin_maxbins_20_value"))
+    ).properties(**kwargs)
+    plot.show()
+    return plot, combined
