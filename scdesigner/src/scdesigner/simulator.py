@@ -29,7 +29,6 @@ def merge_predictions(param_hat):
 
     return {k: pd.concat(v, axis=1) for k, v in merged.items()}
 
-
 class Simulator:
     def __init__(self, margins, multivariate=None):
         super().__init__()
@@ -40,8 +39,12 @@ class Simulator:
     def fit(self, anndata, max_epochs=10):
         for margin in self.margins:
             y_names, submodel = margin
-            train_ix = np.sum(np.isnan(anndata[:, y_names].X), axis=1) == 0
-            submodel.fit(anndata[train_ix, y_names], max_epochs)
+            if anndata.isbacked:
+                train_subset = anndata[:, y_names]
+            else:
+                ix = np.sum(np.isnan(anndata[:, y_names].X), axis=1) == 0
+                train_subset = anndata[ix, y_names]
+            submodel.fit(train_subset, max_epochs)
 
         if self.multivariate is not None:
             self.multivariate.fit(self.margins, anndata)
