@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
 import torch
 import numpy as np
+import anndata
 from formulaic import model_matrix
 
 
@@ -67,12 +68,13 @@ class FormulaDatasetOnDisk(_FormulaDataset):
         super().__init__(formula, adata, **kwargs)
         self.is_sparse = "csc" in str(type(adata.X[0, 0]))
 
-
     def __getitem__(self, ix):
         if self.is_sparse:
             X = self.adata.X[ix].toarray()
         else:
-            X = self.adata.X[ix]
+            vnames = list(self.adata.var_names)
+            view = anndata.read_h5ad(self.adata.filename, backed=True)
+            X = view[:, vnames].X[ix]
 
         X = (
             torch.from_numpy(X.astype(np.float32))

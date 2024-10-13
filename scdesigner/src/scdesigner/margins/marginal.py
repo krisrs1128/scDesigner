@@ -42,7 +42,7 @@ class MarginalModel:
 
     def configure_module(self, anndata):
         ds = self.configure_loader(anndata)
-        _, obs = next(iter(ds))
+        _, obs = ds.dataset[0]
         n_input = {k: v.shape[-1] for k, v in obs.items()}
         self.module = self.module(n_input, anndata.var_names)
         self.module.optimizer_opts = self.optimizer_opts
