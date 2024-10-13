@@ -108,9 +108,11 @@ class Simulator:
             raise NotImplementedError(f"No join mode {mode}. Did you provide one of the supported modes: 'copula' or 'pamona'?")
 
 
-def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=10, **kwargs):
+def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=10, 
+               chunk_size=1e4, **kwargs):
     if not isinstance(margins, list):
         margins = [(list(anndata.var_names), margins)]
+    margins = fragment_margins(margins, chunk_size)
 
     for _, margin in margins:
         margin.loader_opts = safe_update(margin.loader_opts, args(DataLoader, **kwargs))
@@ -127,6 +129,22 @@ def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epoch
 ###############################################################################
 ## Utilities
 ###############################################################################
+
+def fragment_margins(margins, chunk_size=None):
+    """
+    Divide a margin with > chunk_size genes into many margins with only chunk_size genes.
+    """
+    if chunk_size is None:
+        return margins
+
+    new_margins = []
+    for genes, margin in margins:
+        new_margins += [
+            (genes[i:(i + chunk_size)], margin)
+            for i in range(0, len(genes), chunk_size)
+        ]
+    return new_margins
+
 
 def safe_update(d1, d2):
     d1.update({k: v for k, v in d2.items() if k not in d1})
