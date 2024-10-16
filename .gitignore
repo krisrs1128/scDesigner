@@ -1,3 +1,4 @@
 build*
 *egg*
 *cache*
+examples/data/*.h5ad
