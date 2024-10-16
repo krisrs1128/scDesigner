@@ -1,15 +1,16 @@
-from .margins.marginal import args
-from .copula import ScCopula
-from .margins.reformulate import reformulate, match_marginal, nullify_formula
 from . import join as scj
+from .copula import ScCopula
+from .margins.marginal import args
+from .margins.reformulate import reformulate, match_marginal, nullify_formula
 from .transform import amplify, dampen
 from collections import defaultdict
-import torch
+from copy import deepcopy
 from torch.optim import LBFGS
 from torch.utils.data import DataLoader
 import anndata as ad
-import pandas as pd
 import numpy as np
+import pandas as pd
+import torch
 
 def retrieve_obs(N, obs, anndata):
     if obs is not None:
@@ -108,8 +109,8 @@ class Simulator:
             raise NotImplementedError(f"No join mode {mode}. Did you provide one of the supported modes: 'copula' or 'pamona'?")
 
 
-def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=10, 
-               chunk_size=1e4, **kwargs):
+def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=10,
+               chunk_size=int(5e3), **kwargs):
     if not isinstance(margins, list):
         margins = [(list(anndata.var_names), margins)]
     margins = fragment_margins(margins, chunk_size)
@@ -140,7 +141,7 @@ def fragment_margins(margins, chunk_size=None):
     new_margins = []
     for genes, margin in margins:
         new_margins += [
-            (genes[i:(i + chunk_size)], margin)
+            (genes[i:(i + chunk_size)], deepcopy(margin))
             for i in range(0, len(genes), chunk_size)
         ]
     return new_margins
