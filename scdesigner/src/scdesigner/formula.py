@@ -64,22 +64,34 @@ class FormulaDatasetInMemory(_FormulaDataset):
         return self.X[ix], {k: self.obs[k][ix] for k in self.obs.keys()}
 
 class FormulaDatasetOnDisk(_FormulaDataset):
-    def __init__(self, formula, adata, **kwargs):
+    def __init__(self, formula, adata, chunk_size=int(1000), **kwargs):
         super().__init__(formula, adata, **kwargs)
-        self.is_sparse = "csc" in str(type(adata.X[0, 0]))
+        self.cur_range = range(0, min(len(adata), chunk_size))
+        self.vnames = list(self.adata.var_names)
+        self.adata_inmem = read_range(self.adata.filename, self.cur_range, self.vnames)
+        self.is_sparse = "csc" in str(type(self.adata_inmem.X[0, 0]))
+        if self.is_sparse:
+            self.adata_inmem.X = self.adata_inmem.X.toarray()
 
     def __getitem__(self, ix):
-        if self.is_sparse:
-            X = self.adata.X[ix].toarray()
-        else:
-            vnames = list(self.adata.var_names)
-            view = anndata.read_h5ad(self.adata.filename, backed=True)
-            X = view[:, vnames].X[ix]
+        if ix not in self.cur_range:
+            self.cur_range = range(ix, min(ix + len(self.cur_range), self.len))
+            self.adata_inmem = read_range(self.adata.filename, self.cur_range, self.vnames)
+            if self.is_sparse:
+                self.adata_inmem.X = self.adata_inmem.X.toarray()
 
-        X = (
-            torch.from_numpy(X.astype(np.float32))
-            if self.adata.X is not None
-            else torch.tensor([[float("nan")]]).reshape(1, -1)
-        )
+        if hasattr(self.adata_inmem, "X"):
+            X = torch.from_numpy(
+                self.adata_inmem.X[
+                    ix - self.cur_range[0]
+                ].astype(np.float32)
+            )
+        else:
+            X = torch.tensor([[float("nan")]]).reshape(1, -1)
 
         return X, {k: self.obs[k][ix] for k in self.obs.keys()}
+
+def read_range(filename, row_ix, var_names):
+    view = anndata.read_h5ad(filename, backed=True)
+    result = view[row_ix].to_memory()
+    return result[:, var_names].to_memory()
