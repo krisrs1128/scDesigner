@@ -19,6 +19,13 @@ def initialize_formula(f, parameters=["alpha", "mu"], priority="mu"):
             f[k] = "~ 1"
     return f
 
+
+def formula_to_groups(formula, obs):
+    patterns = model_matrix(formula, obs)
+    _, ix = np.unique(patterns, axis=0, return_inverse=True)
+    return ix, int(ix.max())
+
+
 class FormulaDataset(Dataset):
     def __init__(self, formula, adata, **kwargs):
         if adata.isbacked:
