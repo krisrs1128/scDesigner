@@ -9,9 +9,11 @@ from scipy.stats import norm
 from copulas.multivariate import GaussianMultivariate
 from copulas.univariate import UniformUnivariate
 
+
 def cov2cor(c):
     D = 1 / np.sqrt(np.diag(c))
     return D * c * D
+
 
 def margins_invert(margins, u, obs):
     var_names, counts = [], []
@@ -28,12 +30,14 @@ def margins_uniformize(margins, anndata):
         var_names += list(genes)
         X = torch.from_numpy(anndata[:, genes].X)
         u_ = margin.cdf(X, anndata.obs).numpy()
-        u.append(np.clip(u_, 0.0001, 0.9999)) # avoid nan in inverse quantiles
+        u.append(np.clip(u_, 0.0001, 0.9999))  # avoid nan in inverse quantiles
     return pd.DataFrame(np.concatenate(u, axis=1), columns=var_names)
 
 
 class ScCopula:
-    def __init__(self, formula=None, copula_type=GaussianMultivariate, cov_fun=np.cov, **kwargs):
+    def __init__(
+        self, formula=None, copula_type=GaussianMultivariate, cov_fun=np.cov, **kwargs
+    ):
         if formula is None:
             copula = CopulaFixed(copula_type, cov_fun, **kwargs)
         else:
@@ -63,6 +67,7 @@ class CopulaFixed:
             self.copula.covariance = self.cov_fun(z.T)
             self.copula.correlation = cov2cor(self.copula.covariance)
 
+
 class CopulaFormula:
     def __init__(self, formula, copula_type=GaussianMultivariate, cov_fun=np.cov):
         self.copulas = copula_type(distribution=UniformUnivariate)
@@ -85,7 +90,7 @@ class CopulaFormula:
         return margins_invert(margins, u, obs)
 
     def fit(self, margins, anndata):
-        # initialize the data structures 
+        # initialize the data structures
         u = margins_uniformize(margins, anndata)
         ix, K = formula_to_groups(self.formula, anndata.obs)
         self.copulas = [deepcopy(self.copulas) for _ in range(K)]
