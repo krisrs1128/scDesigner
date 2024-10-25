@@ -4,7 +4,7 @@ import torch
 import torch.distributions
 from copy import deepcopy
 from itertools import chain
-from formulaic import model_matrix
+from scdesigner.formula import formula_to_groups
 from scipy.stats import norm
 from copulas.multivariate import GaussianMultivariate
 from copulas.univariate import UniformUnivariate
@@ -19,8 +19,8 @@ def margins_invert(margins, u, obs):
         var_names += list(genes)
         u_ = torch.from_numpy(np.array(u[genes]))
         counts.append(margin.icdf(u_, obs).numpy())
-
     return var_names, counts
+
 
 def margins_uniformize(margins, anndata):
     u, var_names = [], []
@@ -29,10 +29,21 @@ def margins_uniformize(margins, anndata):
         X = torch.from_numpy(anndata[:, genes].X)
         u_ = margin.cdf(X, anndata.obs).numpy()
         u.append(np.clip(u_, 0.0001, 0.9999)) # avoid nan in inverse quantiles
-    u = pd.DataFrame(np.concatenate(u, axis=1), columns=var_names)
-    return u
+    return pd.DataFrame(np.concatenate(u, axis=1), columns=var_names)
+
 
 class ScCopula:
+    def __init__(self, formula=None, copula_type=GaussianMultivariate, cov_fun=np.cov, **kwargs):
+        if formula is None:
+            copula = CopulaFixed(copula_type, cov_fun, **kwargs)
+        else:
+            copula = CopulaFormula(formula, copula_type, cov_fun, **kwargs)
+
+        self.__class__ = copula.__class__
+        self.__dict__ = copula.__dict__
+
+
+class CopulaFixed:
     def __init__(self, copula_type=GaussianMultivariate, cov_fun=np.cov):
         self.copula = copula_type(distribution=UniformUnivariate)
         self.cov_fun = cov_fun
@@ -51,12 +62,6 @@ class ScCopula:
             z = norm.ppf(u)
             self.copula.covariance = self.cov_fun(z.T)
             self.copula.correlation = cov2cor(self.copula.covariance)
-
-def formula_to_groups(formula, obs):
-    patterns = model_matrix(formula, obs)
-    _, ix = np.unique(patterns, axis=0, return_inverse=True)
-    return ix, int(ix.max())
-
 
 class CopulaFormula:
     def __init__(self, formula, copula_type=GaussianMultivariate, cov_fun=np.cov):
