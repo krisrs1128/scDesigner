@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.distributions
+from copy import deepcopy
+from itertools import chain
+from formulaic import model_matrix
 from scipy.stats import norm
 from copulas.multivariate import GaussianMultivariate
 from copulas.univariate import UniformUnivariate
@@ -48,3 +51,44 @@ class ScCopula:
             z = norm.ppf(u)
             self.copula.covariance = self.cov_fun(z.T)
             self.copula.correlation = cov2cor(self.copula.covariance)
+
+def formula_to_groups(formula, obs):
+    patterns = model_matrix(formula, obs)
+    _, ix = np.unique(patterns, axis=0, return_inverse=True)
+    return ix, int(ix.max())
+
+
+class CopulaFormula:
+    def __init__(self, formula, copula_type=GaussianMultivariate, cov_fun=np.cov):
+        self.copulas = copula_type(distribution=UniformUnivariate)
+        self.cov_fun = cov_fun
+
+        # extract formula for group labels
+        if isinstance(formula, dict):
+            formula = formula["copula"]
+        self.formula = formula
+
+    def sample(self, margins, obs):
+        ix, K = formula_to_groups(self.formula, obs)
+        gene_names = list(chain(*[g for g, _ in margins]))
+
+        # sample copulas one group at a time
+        u = np.zeros((len(obs), len(gene_names)))
+        for k in range(K):
+            u[ix == k, :] = self.copulas[k].sample(sum(ix == k))
+        u = pd.DataFrame(u, columns=gene_names)
+        return margins_invert(margins, u, obs)
+
+    def fit(self, margins, anndata):
+        # initialize the data structures 
+        u = margins_uniformize(margins, anndata)
+        ix, K = formula_to_groups(self.formula, anndata.obs)
+        self.copulas = [deepcopy(self.copulas) for _ in range(K)]
+
+        # fit one copula per group
+        for k in range(K):
+            self.copulas[k].fit(u.iloc[ix == k, :])
+            if self.cov_fun is not np.cov:
+                z = norm.ppf(u.iloc[ix == k, :])
+                self.copulas[k].covariance = self.cov_fun(z.T)
+                self.copulas[k].correlation = cov2cor(self.copula.covariance)
