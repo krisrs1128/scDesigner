@@ -56,7 +56,7 @@ class _FormulaDataset(Dataset):
 class FormulaDatasetInMemory(_FormulaDataset):
     def __init__(self, formula, adata, **kwargs):
         super().__init__(formula, adata, **kwargs)
-        if "csc" in str(type(adata.X)):
+        if "cs" in str(type(adata.X)):
             X = self.adata.X.toarray()
         else:
             X = self.adata.X
@@ -76,7 +76,7 @@ class FormulaDatasetOnDisk(_FormulaDataset):
         self.cur_range = range(0, min(len(adata), chunk_size))
         self.vnames = list(self.adata.var_names)
         self.adata_inmem = read_range(self.adata.filename, self.cur_range, self.vnames)
-        self.is_sparse = "csc" in str(type(self.adata_inmem.X[0, 0]))
+        self.is_sparse = "CS" in str(type(self.adata_inmem.X))
         if self.is_sparse:
             self.adata_inmem.X = self.adata_inmem.X.toarray()
 
