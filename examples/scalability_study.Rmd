@@ -51,7 +51,7 @@ data.frame(
     replicate = replicate,
     seconds = as.numeric(timing)
 ) |>
-    write_csv(paste0("scdesign3_timing_", config, ".csv"))
+    write.csv(paste0("scdesign3_timing_", config, ".csv"))
 ```
 
 The block below shows how the configurations were defined.
@@ -64,5 +64,5 @@ configurations <- expand.grid(
 ) |>
     data.frame()
 
-write.csv(configurations, "scalability_configurations.csv")
+write.csv(configurations, "scalability_configurations.csv", row.names = FALSE)
 ```
