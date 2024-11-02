@@ -6,8 +6,9 @@ params:
 
 ```{r}
 library(scDesign3)
+library(SingleCellExperiment)
 configurations <- read.csv("scalability_configurations.csv")
-params <- list(config = 1)
+params <- list(config = 3)
 attach(params)
 configurations[config, ] |>
     as.list() |>
@@ -16,21 +17,37 @@ set.seed(config)
 ```
 
 ```{r}
-dataset <- readRDS("example_sce.rds")
-dataset <- dataset[seq_len(n_gene), seq_len(n_cell)]
+X <- read.csv("million_cells/X.csv", header = FALSE)
+cell_names <- paste0("cell_", seq_len(n_cell))
+gene_names <- paste0("gene_", seq_len(n_gene))
+cell_ix <- sample(seq_len(nrow(X)), n_cell)
+gene_ix <- sample(seq_len(ncol(X)), n_gene)
+
+obs <- read.csv("million_cells/obs.csv")[cell_ix, ]
+var_ <- read.csv("million_cells/var.csv")[gene_ix, ]
+X <- X[cell_ix, gene_ix]
+rownames(obs) <- cell_names
+rownames(var_) <- gene_names
+dimnames(X) <- list(cell_names, gene_names)
+
+dataset <- SingleCellExperiment(
+    assays = list(X = t(X)),
+    rowData = var_,
+    colData = obs
+)
 ```
 
 ```{r}
 start <- Sys.time()
 example_simu <- scdesign3(
     sce = dataset,
-    assay_use = "counts",
+    assay_use = "X",
     celltype = "cell_type",
-    pseudotime = "pseudotime",
+    pseudotime = NULL,
     spatial = NULL,
-    other_covariates = NULL,
-    mu_formula = "s(pseudotime, k = 10, bs = 'cr')",
-    sigma_formula = "s(pseudotime, k = 5, bs = 'cr')",
+    other_covariates = "CoVID.19.severity",
+    mu_formula = "cell_type + CoVID.19.severity",
+    sigma_formula = "cell_type",
     family_use = "nb",
     n_cores = 2,
     usebam = FALSE,
@@ -40,7 +57,7 @@ example_simu <- scdesign3(
     pseudo_obs = FALSE,
     return_model = FALSE,
     nonzerovar = FALSE
-  )
+)
 timing <- Sys.time() - start
 ```
 
@@ -58,8 +75,8 @@ The block below shows how the configurations were defined.
 
 ```{r, eval = FALSE}
 configurations <- expand.grid(
-    n_cell = c(500, 1000, 10000),
-    n_gene = c(500, 1000),
+    n_cell = seq(500, 5e6, length.out = 5),
+    n_gene = c(500, 2e4, length.out = 5),
     replicate = seq_len(5)
 ) |>
     data.frame()
