@@ -1,0 +1,12 @@
+# HTCondor submit file
+universe = docker
+docker_image = "krisrs1128/scpython"
+executable = set2.sh
+request_memory = 16GB
+request_disk = 8GB
+request_gpus = 1
+log = set2-${process}.log
+error = set2-${process}.err
+output = set2-${process}.out
+requirements = (TARGET.GPUs >= 1)
+queue
