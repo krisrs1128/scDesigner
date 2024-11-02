@@ -1,0 +1,68 @@
+---
+title: scDesign Scalability Study
+params:
+    config: 1
+---
+
+```{r}
+library(scDesign3)
+configurations <- read.csv("scalability_configurations.csv")
+params <- list(config = 1)
+attach(params)
+configurations[config, ] |>
+    as.list() |>
+    attach()
+set.seed(config)
+```
+
+```{r}
+dataset <- readRDS("example_sce.rds")
+dataset <- dataset[seq_len(n_gene), seq_len(n_cell)]
+```
+
+```{r}
+start <- Sys.time()
+example_simu <- scdesign3(
+    sce = dataset,
+    assay_use = "counts",
+    celltype = "cell_type",
+    pseudotime = "pseudotime",
+    spatial = NULL,
+    other_covariates = NULL,
+    mu_formula = "s(pseudotime, k = 10, bs = 'cr')",
+    sigma_formula = "s(pseudotime, k = 5, bs = 'cr')",
+    family_use = "nb",
+    n_cores = 2,
+    usebam = FALSE,
+    corr_formula = "1",
+    copula = "gaussian",
+    DT = TRUE,
+    pseudo_obs = FALSE,
+    return_model = FALSE,
+    nonzerovar = FALSE
+  )
+timing <- Sys.time() - start
+```
+
+```{r}
+data.frame(
+    n_gene = n_gene,
+    n_cell = n_cell,
+    replicate = replicate,
+    seconds = as.numeric(timing)
+) |>
+    write_csv(paste0("scdesign3_timing_", config, ".csv"))
+```
+
+The block below shows how the configurations were defined.
+
+```{r, eval = FALSE}
+configurations <- expand.grid(
+    n_cell = c(500, 1000, 10000),
+    n_gene = c(500, 1000),
+    replicate = seq_len(5)
+) |>
+    data.frame()
+
+write.csv(configurations, "scalability_configurations.csv")
+```
