@@ -5,10 +5,12 @@ params:
 ---
 
 ```{r}
-library(scDesign3)
+library(reticulate)
 library(SingleCellExperiment)
+library(scDesign3)
+scipy_sparse <- import("scipy.sparse")
 configurations <- read.csv("scalability_configurations.csv")
-params <- list(config = 3)
+params <- list(config = 11)
 attach(params)
 configurations[config, ] |>
     as.list() |>
@@ -17,7 +19,7 @@ set.seed(config)
 ```
 
 ```{r}
-X <- read.csv("million_cells/X.csv", header = FALSE)
+X <- scipy_sparse$load_npz("million_cells/X.npz")
 cell_names <- paste0("cell_", seq_len(n_cell))
 gene_names <- paste0("gene_", seq_len(n_gene))
 cell_ix <- sample(seq_len(nrow(X)), n_cell)
