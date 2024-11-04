@@ -1,11 +1,12 @@
 # HTCondor submit file
 universe = docker
-docker_image = "krisrs1128/scpy:2024110407"
+docker_image = "krisrs1128/scpy:2024110408"
 executable = run.sh
 request_memory = 16GB
 request_disk = 36GB
 #request_gpus = 1
 log = run-$(Process).log
+arguments = $(Process)
 error = run-$(Process).err
 output = run-$(Process).out
 #requirements = (TARGET.GPUs >= 1)
