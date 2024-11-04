@@ -1,6 +1,6 @@
 # HTCondor submit file
 universe = docker
-docker_image = "krisrs1128/scr"
+docker_image = "krisrs1128/scr:20241101"
 executable = run.sh
 request_memory = 16GB
 request_disk = 8GB
