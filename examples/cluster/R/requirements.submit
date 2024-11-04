@@ -7,4 +7,4 @@ request_disk = 8GB
 log = run-$(Process).log
 error = run-$(Process).err
 output = run-$(Process).out
-queue 5
+queue 2
