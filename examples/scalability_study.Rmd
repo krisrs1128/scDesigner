@@ -9,7 +9,7 @@ library(reticulate)
 library(SingleCellExperiment)
 library(scDesign3)
 scipy_sparse <- import("scipy.sparse")
-configurations <- read.csv("scalability_configurations.csv")
+configurations <- read.csv("data/scalability_configurations.csv")
 params <- list(config = 11)
 attach(params)
 configurations[config, ] |>
@@ -19,14 +19,14 @@ set.seed(config)
 ```
 
 ```{r}
-X <- scipy_sparse$load_npz("million_cells/X.npz")
+X <- scipy_sparse$load_npz("data/million_cells/X.npz")
 cell_names <- paste0("cell_", seq_len(n_cell))
 gene_names <- paste0("gene_", seq_len(n_gene))
 cell_ix <- sample(seq_len(nrow(X)), n_cell)
 gene_ix <- sample(seq_len(ncol(X)), n_gene)
 
-obs <- read.csv("million_cells/obs.csv")[cell_ix, ]
-var_ <- read.csv("million_cells/var.csv")[gene_ix, ]
+obs <- read.csv("data/million_cells/obs.csv")[cell_ix, ]
+var_ <- read.csv("data/million_cells/var.csv")[gene_ix, ]
 X <- X[cell_ix, gene_ix]
 rownames(obs) <- cell_names
 rownames(var_) <- gene_names
