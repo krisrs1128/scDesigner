@@ -5,8 +5,8 @@ executable = run.sh
 request_memory = 16GB
 request_disk = 8GB
 #request_gpus = 1
-log = run-${process}.log
-error = run-${process}.err
-output = run-${process}.out
+log = run-${Process}.log
+error = run-${Process}.err
+output = run-${Process}.out
 #requirements = (TARGET.GPUs >= 1)
 queue
