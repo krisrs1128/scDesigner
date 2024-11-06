@@ -62,7 +62,7 @@ class MarginalModel:
             with torch.no_grad():
                 preds.append(self.module(obs_))
         return {k: torch.concatenate([d[k] for d in preds], axis=0) for k in preds[0]}
-    
+
     def sample(self, obs):
         return self.distn(obs).sample()
 
@@ -85,12 +85,13 @@ class NB(MarginalModel):
     def __init__(self, formula, **kwargs):
         super().__init__(formula, reg.NBRegression, **kwargs)
         self.parameter_names = ["mu", "alpha"]
-    
+
     def distn(self, obs):
         params = self.predict(obs)
         total_count = 1 / params["alpha"]
         p = 1 - 1 / (1 + params["alpha"] * params["mu"])
         return NegativeBinomial(total_count, p)
+
 
 class Normal(MarginalModel):
     def __init__(self, formula, **kwargs):
@@ -100,7 +101,8 @@ class Normal(MarginalModel):
     def distn(self, obs):
         params = self.predict(obs)
         return torch.distributions.Normal(params["mu"], params["sigma"])
-    
+
+
 class Poisson(MarginalModel):
     def __init__(self, formula, **kwargs):
         super().__init__(formula, reg.PoissonRegression, **kwargs)
@@ -108,15 +110,17 @@ class Poisson(MarginalModel):
 
     def distn(self, obs):
         params = self.predict(obs)
-        return torch.distributions.Poisson(params["mu"]) 
-    
+        return torch.distributions.Poisson(params["mu"])
+
     def cdf(self, X, obs):
         mu = self.predict(obs)["mu"]
-        return torch.special.gammaincc(torch.floor(X+1), mu) # https://github.com/pytorch/pytorch/issues/97156
-    
+        # https://github.com/pytorch/pytorch/issues/97156
+        return torch.special.gammaincc(torch.floor(X + 1), mu)
+
     def icdf(self, U, obs):
         pass
-    
+
+
 class Bernoulli(MarginalModel):
     def __init__(self, formula, **kwargs):
         super().__init__(formula, reg.BernoulliRegression, **kwargs)
@@ -124,16 +128,15 @@ class Bernoulli(MarginalModel):
 
     def distn(self, obs):
         params = self.predict(obs)
-        return torch.distributions.Bernoulli(logits=params["mu"]) 
-    
+        return torch.distributions.Bernoulli(logits=params["mu"])
+
     def cdf(self, X, obs):
         mu = self.predict(obs)["mu"]
-        p_0 = 1 / (1+torch.exp(mu))
-        
+        p_0 = 1 / (1 + torch.exp(mu))
+
         cdf = torch.zeros_like(X, dtype=torch.float32)
         cdf = torch.where((X >= 0) & (X < 1), p_0, cdf)
         return torch.where(X >= 1, torch.tensor(1.0), cdf)
-    
+
     def icdf(self, U, obs):
         pass
-    
