@@ -13,8 +13,8 @@ scipy_sparse <- import("scipy.sparse")
 configurations <- read.csv("data/scalability_configurations.csv")
 attach(params)
 n_cell <- configurations$n_cell[config]
-n_gene <- configurations$n_gene[config, ]
-replicate <- configurations$replicate[config, ]
+n_gene <- configurations$n_gene[config]
+replicate <- configurations$replicate[config]
 set.seed(config)
 ```
 
