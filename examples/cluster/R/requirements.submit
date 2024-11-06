@@ -8,4 +8,4 @@ arguments = $(Process)
 log = run-$(Process).log
 error = run-$(Process).err
 output = run-$(Process).out
-queue 2
+queue

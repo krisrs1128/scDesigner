@@ -5,6 +5,7 @@ params:
 ---
 
 ```{r}
+print(ls())
 library(reticulate)
 library(SingleCellExperiment)
 library(scDesign3)
@@ -16,6 +17,7 @@ configurations[config, ] |>
     as.list() |>
     attach()
 set.seed(config)
+print(ls())
 ```
 
 ```{r}
