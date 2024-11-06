@@ -1,0 +1,203 @@
+---
+title: "Example DE Analysis"
+---
+
+This is from https://github.com/SONGDONGYUAN1994/scDesign3Workflow/blob/master/vignettes/scDesign3-DEanalysis-vignette.Rmd
+
+We use this as a point of comparison for our alteration functions.
+
+```{r}
+library(scDesign3)
+library(SingleCellExperiment)
+library(ggplot2)
+library(DuoClustering2018)
+library(Seurat)
+library(SeuratObject)
+library(scran)
+library(parallel)
+library(DESeq2)
+library(BiocParallel)
+library(NBAMSeq)
+library(dplyr)
+library(tradeSeq)
+library(reshape2)
+library(spatialDE)
+library(scales)
+library(tidyr)
+theme_set(theme_bw())
+```
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+Zhengmix4eq_sce <- get("sce_filteredExpr10_Zhengmix4eq")(metadata = FALSE)
+```
+
+The top 200 highly variable genes are kept for generating synthetic data.
+```{r, message=FALSE, warning=FALSE, results='hide'}
+ngene <- 200
+logcounts(Zhengmix4eq_sce) <- log1p(counts(Zhengmix4eq_sce))
+zheng_sce <- modelGeneVar(Zhengmix4eq_sce)
+chosen <- getTopHVGs(zheng_sce, n = ngene)
+example_sce <- Zhengmix4eq_sce[chosen,]
+```
+
+We extract out B cells and regulatory T cells only and use all cells from these two cell types to simulate synthetic data.
+```{r, message=FALSE, warning=FALSE, results='hide'}
+selected_cells <- which(colData(example_sce)$phenoid %in% c("b.cells","regulatory.t"))
+example_sce <- example_sce[,selected_cells]
+colData(example_sce)$cell_type <- as.factor(colData(example_sce)$phenoid)
+example_sce
+head(colData(example_sce))
+```
+
+### Simulation
+We use the step-by-step functions instead of the one-shot function to generate synthetic data since these step-by-step functions allow us to alter estimated parameters and generate new data based on our desired parameters.
+```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
+set.seed(123)
+example_data <- construct_data(
+    sce = example_sce,
+    assay_use = "counts",
+    celltype = "cell_type",
+    pseudotime = NULL,
+    spatial = NULL,
+    other_covariates = NULL,
+    corr_by = "1"
+  )
+```
+
+```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
+example_marginal <- fit_marginal(
+    data = example_data,
+    predictor = "gene",
+    mu_formula = "cell_type",
+    sigma_formula = "1",
+    family_use = "nb",
+    n_cores = 2,
+    usebam = FALSE
+  )
+```
+```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
+set.seed(123)
+example_copula <- fit_copula(
+    sce = example_sce,
+    assay_use = "counts",
+    marginal_list = example_marginal,
+    family_use = "nb",
+    copula = "gaussian",
+    n_cores = 2,
+    input_data = example_data$dat
+  )
+```
+```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
+example_para <- extract_para(
+    sce = example_sce,
+    marginal_list = example_marginal,
+    n_cores = 2,
+    family_use = "nb",
+    new_covariate = example_data$newCovariate,
+    data = example_data$dat
+  )
+```
+
+Here, we examine the `mean_mat`, which is one of the outputs from the previous function `extract_para()`. For each gene, we calculate the difference in the between the maximum mean parameter and minimum mean parameter across all cells. We select genes which the gene's mean difference across cells are in the top 50 largest differences. We regard these genes as DE genes. Then, we manually set the mean parameters of the rest genes to be the same across all cells. We regard all genes with the same mean parameter across cells as non-DE genes. Of course, this is a very flexible step and users may choose other ideas to modify the mean matrix.
+
+```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
+diff <- apply(example_para$mean_mat, 2, function(x){max(x,na.rm = TRUE)-min(x,na.rm = TRUE)})
+diff_ordered <- order(diff, decreasing = TRUE)
+diff <- diff[diff_ordered]
+num_de <- 50
+de_idx <- names(diff[1:num_de])
+non_de_idx <- names(diff[-(1:num_de)])
+non_de_mat <- apply(example_para$mean_mat[,non_de_idx], 2, function(x){
+  avg <- (max(x,na.rm = TRUE)+min(x,na.rm = TRUE))/2
+  new_mean <- rep(avg, length(x))
+  return(new_mean)
+})
+example_para$mean_mat[,non_de_idx] <- non_de_mat
+```
+
+```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
+set.seed(123)
+ example_newcount <- simu_new(
+    sce = example_sce,
+    mean_mat = example_para$mean_mat,
+    sigma_mat = example_para$sigma_mat,
+    zero_mat = example_para$zero_mat,
+    quantile_mat = NULL,
+    copula_list = example_copula$copula_list,
+    n_cores = 1,
+    family_use = "nb",
+    input_data = example_data$dat,
+    new_covariate = example_data$newCovariate,
+    important_feature = example_copula$important_feature,
+    filtered_gene = example_data$filtered_gene
+  )
+```
+
+### DE genes identification
+Then, we follow [Seurat's pipeline](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html) to preprocess the simulated data.
+```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
+seurat_obj <- CreateSeuratObject(counts = example_newcount, project = "seurat_obj", min.cells = 0, min.features = 0)
+seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = 10000)
+seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst",nfeatures = 200)
+all.genes <- rownames(seurat_obj)
+seurat_obj <- ScaleData(seurat_obj, features = all.genes)
+seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(object = seurat_obj))
+seurat_obj <- JackStraw(seurat_obj, num.replicate = 100)
+seurat_obj <- ScoreJackStraw(seurat_obj, dims = 1:20)
+```
+Since we already have the ground truth cell type annotations for our simulated dataset, we can directly use the cell type annotations we have instead of running `FindClusters` from `Seurat` to avoid the double-dipping issue.
+```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
+seurat_obj <- FindNeighbors(seurat_obj, dims = 1:10)
+ct <- colData(example_sce)$cell_type
+names(ct) <- colnames(example_sce)
+seurat_obj[["cell_type"]] <- ct
+Idents(seurat_obj) <- "cell_type"
+seurat_obj <- RunUMAP(seurat_obj, dims = 1:10)
+```
+
+Then, we follow [Seurat's tutorial](https://satijalab.org/seurat/articles/de_vignette.html) to conduct DE test.
+```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
+test <- c("wilcox", "bimod", "t", "poisson", "negbinom", "LR", "MAST", "DESeq2")
+qvals <- matrix(0, nrow = dim(seurat_obj)[1], ncol = length(test))
+for (x in 1:length(test)) {
+  markers <- FindMarkers(seurat_obj, ident.1 = "b.cells", ident.2 = "regulatory.t", test.use = test[x],
+                         logfc.threshold = 0, min.pct = 0, min.cells.feature = 1, min.cells.group = 1)
+  qvals[,x] <- p.adjust(markers[rownames(seurat_obj),"p_val"], method = "BH", length(rownames(seurat_obj)))
+}
+colnames(qvals) <- test
+rownames(qvals) <- rownames(seurat_obj)
+```
+
+Since we manually created non-DE genes in the `extra_para()` step, now we can calculate the actual false discovery proportion(FDP) and power of the DE tests we conducted above with various target FDR threshold.
+
+```{r, message=FALSE, warning=FALSE, results='hide',eval=TRUE}
+targetFDR <- c(seq(0.01,0.1,by=0.01),seq(0.2,0.5,by=0.1))
+de <-de_idx
+fdp_mat <- matrix(0, nrow = length(targetFDR), ncol = length(test))
+colnames(fdp_mat) <- test
+rownames(fdp_mat) <- targetFDR
+power_mat <- matrix(0, nrow = length(targetFDR), ncol = length(test))
+colnames(power_mat) <- test
+rownames(power_mat) <- targetFDR
+
+for (t in 1:length(test)) {
+  curr_p = qvals[,t]
+  for (i in 1:length(targetFDR)) {
+    thre <- targetFDR[i]
+    discovery <- which(curr_p <= thre)
+    tp <- length(intersect(names(discovery),de))
+    if(length(discovery) == 0){
+      fdp <- 0
+    }else{
+      fdp <- (length(discovery) - tp)/length(discovery)
+    }
+    power <- tp/length(de)
+    fdp_mat[i, t] <- fdp
+    power_mat[i,t] <- power
+  }
+}
+
+
+```
+
