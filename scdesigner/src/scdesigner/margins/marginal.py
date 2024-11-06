@@ -6,7 +6,7 @@ from collections import defaultdict
 from torch.optim import LBFGS
 from torch.utils.data import DataLoader
 from inspect import getmembers
-from .regressors import NBRegression, NormalRegression
+from . import regressors as reg
 from .distributions import NegativeBinomial
 from ..formula import FormulaDataset
 
@@ -83,7 +83,7 @@ def args(m, **kwargs):
 
 class NB(MarginalModel):
     def __init__(self, formula, **kwargs):
-        super().__init__(formula, NBRegression, **kwargs)
+        super().__init__(formula, reg.NBRegression, **kwargs)
         self.parameter_names = ["mu", "alpha"]
     
     def distn(self, obs):
@@ -94,7 +94,7 @@ class NB(MarginalModel):
 
 class Normal(MarginalModel):
     def __init__(self, formula, **kwargs):
-        super().__init__(formula, NormalRegression, **kwargs)
+        super().__init__(formula, reg.NormalRegression, **kwargs)
         self.parameter_names = ["mu", "sigma"]
 
     def distn(self, obs):
@@ -103,7 +103,7 @@ class Normal(MarginalModel):
     
 class Poisson(MarginalModel):
     def __init__(self, formula, **kwargs):
-        super().__init__(formula, PoissonRegression, **kwargs)
+        super().__init__(formula, reg.PoissonRegression, **kwargs)
         self.parameter_names = ["mu"]
 
     def distn(self, obs):
@@ -119,7 +119,7 @@ class Poisson(MarginalModel):
     
 class Bernoulli(MarginalModel):
     def __init__(self, formula, **kwargs):
-        super().__init__(formula, BernoulliRegression, **kwargs)
+        super().__init__(formula, reg.BernoulliRegression, **kwargs)
         self.parameter_names = ["mu"]
 
     def distn(self, obs):
@@ -132,9 +132,7 @@ class Bernoulli(MarginalModel):
         
         cdf = torch.zeros_like(X, dtype=torch.float32)
         cdf = torch.where((X >= 0) & (X < 1), p_0, cdf)
-        cdf = torch.where(X >= 1, torch.tensor(1.0), cdf)
-        
-        return cdf
+        return torch.where(X >= 1, torch.tensor(1.0), cdf)
     
     def icdf(self, U, obs):
         pass
