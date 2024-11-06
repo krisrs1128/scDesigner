@@ -2,8 +2,8 @@
 universe = docker
 docker_image = "krisrs1128/scpy:2024110412"
 executable = run.sh
-request_memory = 24GB
-request_disk = 36GB
+request_memory = 12GB
+request_disk = 24GB
 request_gpus = 1
 +WantGPULab = true
 +GPUJobLength = "short" 
