@@ -1,5 +1,4 @@
 Bootstrap: docker
-#From: pytorch/pytorch:2.5.1-cuda11.7-cudnn8-runtime
 From: pytorch/pytorch:2.5.1-cuda11.8-cudnn9-devel
 
 %post
@@ -26,3 +25,11 @@ From: pytorch/pytorch:2.5.1-cuda11.8-cudnn9-devel
         pamona \
         ipython \
         ipykernel
+
+# from installation instructions
+# https://apptainer.org/docs/admin/main/installation.html#installation-on-windows-or-mac1
+# limactl start template://apptainer
+# limactl shell apptainer
+
+# if running from mac, helps to follow this
+# https://medium.com/@soerendip/building-x86-64-apptainer-images-on-arm-based-macbooks-a-step-by-step-guide-07bbf626b7b3
