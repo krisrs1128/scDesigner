@@ -10,7 +10,6 @@ library(SingleCellExperiment)
 library(scDesign3)
 scipy_sparse <- import("scipy.sparse")
 configurations <- read.csv("data/scalability_configurations.csv")
-params <- list(config = 11)
 attach(params)
 configurations[config, ] |>
     as.list() |>
