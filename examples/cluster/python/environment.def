@@ -28,8 +28,10 @@ From: pytorch/pytorch:2.5.1-cuda11.8-cudnn9-devel
 
 # from installation instructions
 # https://apptainer.org/docs/admin/main/installation.html#installation-on-windows-or-mac1
-# limactl start template://apptainer
-# limactl shell apptainer
+# limactl start --name=apptainer-builder apptainer.yaml
+# limactl shell apptainer-builder
 
 # if running from mac, helps to follow this
+# https://lima-vm.io/docs/config/multi-arch/
 # https://medium.com/@soerendip/building-x86-64-apptainer-images-on-arm-based-macbooks-a-step-by-step-guide-07bbf626b7b3
+
