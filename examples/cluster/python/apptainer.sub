@@ -1,0 +1,12 @@
+# build.sub
+# For building an Apptainer container
+universe = vanilla
+log = build.log
+executable = /usr/bin/hostname
+transfer_input_files = environment.def
+requirements = (HasCHTCStaging == true)
++IsBuildJob = true
+request_cpus = 4
+request_memory = 8GB
+request_disk = 24GB
+queue
