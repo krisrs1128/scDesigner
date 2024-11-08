@@ -11,7 +11,10 @@ From: pytorch/pytorch:2.5.1-cuda11.8-cudnn9-devel
         libpango1.0-dev \
         libsm-dev \
         libxext-dev \
-        libxrender-dev
+        libxrender-dev \
+        git \
+        vim \
+        curl
 
     pip install --no-cache-dir \
         anndata \
@@ -25,3 +28,5 @@ From: pytorch/pytorch:2.5.1-cuda11.8-cudnn9-devel
         pamona \
         ipython \
         ipykernel
+
+# apptainer build environment.sif environment.def
