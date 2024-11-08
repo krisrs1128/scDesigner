@@ -60,7 +60,6 @@ example_simu <- scdesign3(
     return_model = FALSE,
     nonzerovar = FALSE
 )
-timing <- Sys.time() - start
 ```
 
 ```{r}
@@ -68,7 +67,7 @@ data.frame(
     n_gene = n_gene,
     n_cell = n_cell,
     replicate = replicate,
-    seconds = as.numeric(timing)
+    seconds = as.numeric(difftime(Sys.time(), start, units="secs"))
 ) |>
     write.csv(paste0("scdesign3_timing_", config, ".csv"))
 ```
