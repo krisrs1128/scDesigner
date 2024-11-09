@@ -3,7 +3,7 @@ import lightning as pl
 import torch
 import torch.distributions
 from collections import defaultdict
-from torch.optim import LBFGS, Adam
+from torch.optim import Adam
 from torch.utils.data import DataLoader
 from inspect import getmembers
 from .regressors import NBRegression, NormalRegression
@@ -41,13 +41,16 @@ class MarginalModel:
         return DataLoader(dataset, **self.loader_opts)
 
     def configure_module(self, anndata):
+        if self.optimizer_opts.get("lr") is None:
+            self.optimizer_opts["lr"] = 0.1
+
         ds = self.configure_loader(anndata)
         _, obs = ds.dataset[0]
         n_input = {k: v.shape[-1] for k, v in obs.items()}
         self.module = self.module(n_input, anndata.var_names)
         self.module.optimizer_opts = self.optimizer_opts
 
-    def fit(self, anndata, max_epochs=10):
+    def fit(self, anndata, max_epochs=250):
         if isinstance(self.module, type):
             self.configure_module(anndata)
         ds = self.configure_loader(anndata)

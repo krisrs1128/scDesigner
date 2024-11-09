@@ -5,7 +5,7 @@ from .margins.reformulate import reformulate, match_marginal, nullify_formula
 from .transform import amplify, dampen
 from collections import defaultdict
 from copy import deepcopy
-from torch.optim import LBFGS, Adam
+from torch.optim import Adam
 from torch.utils.data import DataLoader
 import anndata as ad
 import numpy as np
@@ -37,7 +37,7 @@ class Simulator:
         self.multivariate = multivariate
         self.anndata = None
 
-    def fit(self, anndata, max_epochs=10):
+    def fit(self, anndata, max_epochs=500):
         for margin in self.margins:
             y_names, submodel = margin
             if anndata.isbacked:
@@ -52,7 +52,7 @@ class Simulator:
 
         self.anndata = anndata
 
-    def reformulate(self, genes, formula, max_epochs=10):
+    def reformulate(self, genes, formula, max_epochs=500):
         def f(margin, genes):
             return reformulate(margin, genes, formula, self.anndata)
 
@@ -85,7 +85,7 @@ class Simulator:
 
         return adata
 
-    def nullify(self, term, genes, max_epochs=10):
+    def nullify(self, term, genes, max_epochs=500):
         def f(margin, genes):
             null_formula = nullify_formula(margin.formula, term)
             return reformulate(margin, genes, null_formula, self.anndata)
@@ -109,7 +109,7 @@ class Simulator:
             raise NotImplementedError(f"No join mode {mode}. Did you provide one of the supported modes: 'copula' or 'pamona'?")
 
 
-def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=10,
+def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=500,
                chunk_size=int(5e3), **kwargs):
     if not isinstance(margins, list):
         margins = [(list(anndata.var_names), margins)]
