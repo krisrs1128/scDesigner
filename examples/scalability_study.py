@@ -16,7 +16,7 @@ def main(config):
     
     # run the simulation
     np.random.seed(config)
-    torch.set_float32_matmul_precision('medium' | 'high')
+    torch.set_float32_matmul_precision('medium')
     sce = anndata.read_h5ad("data/million_cells.h5ad", backed=True)
     
     # time the simulation
