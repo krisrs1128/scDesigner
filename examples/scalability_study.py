@@ -21,7 +21,7 @@ def main(config):
     
     # time the simulation
     start = time.time()
-    sim = scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, max_epochs=5, lr=1e-2, batch_size=int(1e3), num_workers=4)
+    sim = scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, max_epochs=5, lr=1e-2, batch_size=int(1e3))
     delta = time.time() - start
     
     # save the timing results
