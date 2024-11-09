@@ -13,10 +13,6 @@ def main(config):
     n_cell = int(n_cell)
     n_gene = int(n_gene)
     
-    n_gene = config['n_gene']
-    n_cell = config['n_cell']
-    replicate = config['replicate']
-    
     # run the simulation
     np.random.seed(config)
     sce = anndata.read_h5ad("data/million_cells.h5ad", backed=True)
@@ -36,6 +32,6 @@ def main(config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('config', type=int, help='Which row of scalability_configurations.csv to run?')
+    parser.add_argument("--config", dest='config', type=int, help='Which row of scalability_configurations.csv to run?')
     args = parser.parse_args()
     main(args.config)

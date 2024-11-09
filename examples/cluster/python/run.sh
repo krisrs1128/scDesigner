@@ -13,5 +13,5 @@ mv million_cells.h5ad scDesigner/examples/data/
 
 # run the script
 cd scDesigner/examples
-python -m scalability_study --config $1
+python3 -m scalability_study --config $1
 cp *.csv $_CONDOR_SCRATCH_DIR
