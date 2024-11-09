@@ -19,4 +19,4 @@ tar -zxvf million_cells.tar.gz
 cd ../
 config=$(($1 + 1))
 Rscript -e "rmarkdown::render('scalability_study.Rmd', params = list(config=$config))"
-cp *.csv ../../
+cp *.csv $_CONDOR_SCRATCH_DIR
