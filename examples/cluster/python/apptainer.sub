@@ -7,6 +7,6 @@ transfer_input_files = environment.def
 requirements = (HasCHTCStaging == true)
 +IsBuildJob = true
 request_cpus = 4
-request_memory = 8GB
-request_disk = 24GB
+request_memory = 32GB
+request_disk = 32GB
 queue

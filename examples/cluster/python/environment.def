@@ -2,6 +2,10 @@ Bootstrap: docker
 From: pytorch/pytorch:2.5.1-cuda11.8-cudnn9-devel
 
 %post
+    chmod 777 /tmp
+    mkdir -p /home/user
+    chmod 777 /home/user
+
     apt-get update && apt-get install -y \
         build-essential \
         libgl1-mesa-glx \
