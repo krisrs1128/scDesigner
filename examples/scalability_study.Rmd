@@ -76,11 +76,10 @@ The block below shows how the configurations were defined.
 
 ```{r, eval = FALSE}
 configurations <- expand.grid(
-    n_cell = seq(500, 5e5, length.out = 5),
-    n_gene = c(500, 2e4, length.out = 5),
-    replicate = seq_len(5)
+    n_cell = round(exp(seq(log(1000), log(2.5e5), length.out = 5))),
+    n_gene = round(exp(seq(log(250), log(2e4), length.out = 5))),
+    replicate = seq_len(2)
 ) |>
     data.frame()
-
 write.csv(configurations, "scalability_configurations.csv", row.names = FALSE)
 ```

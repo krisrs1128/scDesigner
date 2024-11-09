@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import anndata
 import time
+import torch
 from scdesigner.margins.marginal import NB
 from scdesigner.simulator import scdesigner
 
@@ -15,11 +16,12 @@ def main(config):
     
     # run the simulation
     np.random.seed(config)
+    torch.set_float32_matmul_precision('medium' | 'high')
     sce = anndata.read_h5ad("data/million_cells.h5ad", backed=True)
     
     # time the simulation
     start = time.time()
-    sim = scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, max_epochs=5, lr=1e-2)
+    sim = scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, max_epochs=5, lr=1e-2, batch_size=int(1e3), num_workers=30)
     delta = time.time() - start
     
     # save the timing results
