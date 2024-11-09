@@ -44,7 +44,7 @@ class _FormulaDataset(Dataset):
         self.formula = initialize_formula(formula, **kwargs)
         self.obs = dict.fromkeys(self.formula.keys(), [])
         self.features = dict.fromkeys(self.formula.keys(), [])
-        self.categories = column_levels(self.adata.obs)
+        self.categories = column_levels(adata.obs)
         self.adata = adata
 
         for k, f in self.formula.items():
@@ -57,7 +57,8 @@ def read_obs(formula, obs, categories):
     features = {}
     model_df = {}
     for k in obs.columns:
-        obs[k] = obs[k].astype(pd.CategoricalDtype(categories[k]))
+        if str(obs[k].dtype) == "category":
+            obs[k] = obs[k].astype(pd.CategoricalDtype(categories[k]))
 
     for k, f in formula.items():
         model_df_ = model_matrix(f, obs)
@@ -69,7 +70,7 @@ def read_obs(formula, obs, categories):
 class FormulaDatasetInMemory(_FormulaDataset):
     def __init__(self, formula, adata, **kwargs):
         super().__init__(formula, adata, **kwargs)
-        self.features, self.obs = read_obs(self.formula, self.adata.obs, self.categories)
+        self.features, self.obs = read_obs(self.formula, self.adata.obs.copy(), self.categories)
 
         # setup the expression data tensor
         if "cs" in str(type(adata.X)):
@@ -89,7 +90,9 @@ class FormulaDatasetInMemory(_FormulaDataset):
 def column_levels(obs):
     categories = {}
     for k in obs.columns:
-        categories[k] = obs[k].unique()
+        obs_type = str(obs[k].dtype)
+        if obs_type in ["category", "object"]:
+            categories[k] = obs[k].unique()
     return categories
 
 class FormulaDatasetOnDisk(_FormulaDataset):
@@ -98,7 +101,7 @@ class FormulaDatasetOnDisk(_FormulaDataset):
         self.cur_range = range(0, min(len(adata), chunk_size))
         self.vnames = list(self.adata.var_names)
         self.adata_inmem = read_range(self.adata.filename, self.cur_range, self.vnames)
-        self.features, self.obs = read_obs(self.formula, self.adata_inmem.obs, self.categories)
+        self.features, self.obs = read_obs(self.formula, self.adata_inmem.obs.copy(), self.categories)
 
     def __getitem__(self, ix):
         if ix not in self.cur_range:
@@ -106,7 +109,7 @@ class FormulaDatasetOnDisk(_FormulaDataset):
             gc.collect()
             self.cur_range = range(ix, min(ix + len(self.cur_range), self.len))
             self.adata_inmem = read_range(self.adata.filename, self.cur_range, self.vnames)
-            self.features, self.obs = read_obs(self.formula, self.adata_inmem.obs, self.categories)
+            self.features, self.obs = read_obs(self.formula, self.adata_inmem.obs.copy(), self.categories)
 
         if hasattr(self.adata_inmem, "X"):
             X = torch.from_numpy(
