@@ -1,14 +1,15 @@
+from ..formula import FormulaDataset
+from .distributions import NegativeBinomial
+from .regressors import NBRegression, NormalRegression
+from collections import defaultdict
+from inspect import getmembers
+from lightning.pytorch.callbacks import EarlyStopping
+from torch.optim import Adam
+from torch.utils.data import DataLoader
 import anndata as ad
 import lightning as pl
 import torch
 import torch.distributions
-from collections import defaultdict
-from torch.optim import Adam
-from torch.utils.data import DataLoader
-from inspect import getmembers
-from .regressors import NBRegression, NormalRegression
-from .distributions import NegativeBinomial
-from ..formula import FormulaDataset
 
 
 def formula_collate(data):
@@ -50,11 +51,13 @@ class MarginalModel:
         self.module = self.module(n_input, anndata.var_names)
         self.module.optimizer_opts = self.optimizer_opts
 
-    def fit(self, anndata, max_epochs=250):
+    def fit(self, anndata, max_epochs=500):
         if isinstance(self.module, type):
             self.configure_module(anndata)
         ds = self.configure_loader(anndata)
-        pl.Trainer(max_epochs=max_epochs, barebones=False).fit(
+        early_stopping = EarlyStopping(monitor="NLL", min_delta=5e-4, patience=20)
+
+        pl.Trainer(max_epochs=max_epochs, callbacks=[early_stopping]).fit(
             self.module, train_dataloaders=ds
         )
 
