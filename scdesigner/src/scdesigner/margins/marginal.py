@@ -3,7 +3,7 @@ import lightning as pl
 import torch
 import torch.distributions
 from collections import defaultdict
-from torch.optim import LBFGS
+from torch.optim import LBFGS, Adam
 from torch.utils.data import DataLoader
 from inspect import getmembers
 from .regressors import NBRegression, NormalRegression
@@ -30,7 +30,7 @@ class MarginalModel:
         self.module = module
         self.parameter_names = None
         self.loader_opts = args(DataLoader, **kwargs)
-        self.optimizer_opts = args(LBFGS, **kwargs)
+        self.optimizer_opts = args(Adam, **kwargs)
 
     def configure_loader(self, anndata):
         if self.loader_opts.get("batch_size") is None:

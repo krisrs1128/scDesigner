@@ -5,7 +5,7 @@ from .margins.reformulate import reformulate, match_marginal, nullify_formula
 from .transform import amplify, dampen
 from collections import defaultdict
 from copy import deepcopy
-from torch.optim import LBFGS
+from torch.optim import LBFGS, Adam
 from torch.utils.data import DataLoader
 import anndata as ad
 import numpy as np
@@ -118,7 +118,7 @@ def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epoch
     for _, margin in margins:
         margin.loader_opts = safe_update(margin.loader_opts, args(DataLoader, **kwargs))
         margin.optimizer_opts = safe_update(
-            margin.optimizer_opts, args(LBFGS, **kwargs)
+            margin.optimizer_opts, args(Adam, **kwargs)
         )
 
     simulator = Simulator(margins, multivariate)
