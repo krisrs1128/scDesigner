@@ -13,6 +13,5 @@ mv million_cells.h5ad scDesigner/examples/data/
 
 # run the script
 cd scDesigner/examples
-config=$(($1 + 1))
-papermill scalability_study.ipynb output.ipynb -p config ${config}
+papermill scalability_study.ipynb output.ipynb -p config $1
 cp *.csv $_CONDOR_SCRATCH_DIR
