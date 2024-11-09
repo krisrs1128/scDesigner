@@ -14,14 +14,14 @@ def main(config):
     n_cell = int(n_cell)
     n_gene = int(n_gene)
     
-    # run the simulation
+    # load the data
     np.random.seed(config)
     torch.set_float32_matmul_precision("medium")
     sce = anndata.read_h5ad("data/million_cells.h5ad", backed=True)
     
-    # time the simulation
+    # time the estimation step
     start = time.time()
-    scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, batch_size=int(1e3))
+    scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, batch_size=int(1e3), max_epochs=10)
     delta = time.time() - start
     
     # save the timing results

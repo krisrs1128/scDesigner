@@ -121,7 +121,6 @@ class FormulaDatasetOnDisk(_FormulaDataset):
         return X, {k: self.obs[k][ix - self.cur_range[0]] for k in self.obs.keys()}
 
 def read_range(filename, row_ix, var_names):
-    print("reading...", row_ix)
     view = anndata.read_h5ad(filename, backed=True)
     result = view[row_ix].to_memory()
     result = result[:, var_names].to_memory()
