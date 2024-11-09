@@ -16,12 +16,12 @@ def main(config):
     
     # run the simulation
     np.random.seed(config)
-    torch.set_float32_matmul_precision('medium')
+    torch.set_float32_matmul_precision("medium")
     sce = anndata.read_h5ad("data/million_cells.h5ad", backed=True)
     
     # time the simulation
     start = time.time()
-    sim = scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, max_epochs=5, lr=1e-2, batch_size=int(1e3))
+    scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, max_epochs=5, lr=1e-2, batch_size=int(1e3))
     delta = time.time() - start
     
     # save the timing results
@@ -34,6 +34,6 @@ def main(config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", dest='config', type=int, help='Which row of scalability_configurations.csv to run?')
+    parser.add_argument("--config", dest="config", type=int, help="Which row of scalability_configurations.csv to run?")
     args = parser.parse_args()
     main(args.config)
