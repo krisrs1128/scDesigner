@@ -36,6 +36,8 @@ class MarginalModel:
     def configure_loader(self, anndata):
         if self.loader_opts.get("batch_size") is None:
             self.loader_opts["batch_size"] = len(anndata)
+        if self.loader_opts.get("pin_memory") is None:
+            self.loader_opts["pin_memory"] = False
 
         dataset = FormulaDataset(self.formula, anndata, parameters=self.parameter_names)
         self.loader_opts["collate_fn"] = formula_collate
