@@ -15,19 +15,23 @@ def main(config):
     n_gene = int(n_gene)
     
     # load and subsample the data
+    print("reading the backed anndata...")
     np.random.seed(config)
     torch.set_float32_matmul_precision("medium")
     sce = anndata.read_h5ad("data/million_cells.h5ad", backed=True)
 
+    print("copying into a subset...")
     cell_ix = np.random.choice(n_cell, n_cell, replace=False)
     gene_ix = np.random.choice(n_gene, n_gene, replace=False)
     sce[cell_ix, gene_ix].copy(filename="subset_tmp.h5ad")
-    if n_cell > 1e4 | n_gene > 1e4:
+    print("reading the subset...")
+    if n_cell > 1e4 or n_gene > 1e4:
         sce = anndata.read_h5ad("subset_tmp.h5ad", backed=True)
     else:
         sce = anndata.read_h5ad("subset_tmp.h5ad")
     
     # time the estimation step
+    print("estimation start...")
     start = time.time()
     scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, batch_size=int(1e3), lr=0.01, max_epochs=100)
     delta = time.time() - start
