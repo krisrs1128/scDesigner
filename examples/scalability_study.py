@@ -14,14 +14,18 @@ def main(config):
     n_cell = int(n_cell)
     n_gene = int(n_gene)
     
-    # load the data
+    # load and subsample the data
     np.random.seed(config)
     torch.set_float32_matmul_precision("medium")
     sce = anndata.read_h5ad("data/million_cells.h5ad", backed=True)
+    cell_ix = np.random.choice(n_cell, n_cell, replace=False)
+    gene_ix = np.random.choice(n_gene, n_gene, replace=False)
+    sce[cell_ix, gene_ix].copy(filename="subset_tmp.h5ad")
+    sce = anndata.read_h5ad("subset_tmp.h5ad", backed=True)
     
     # time the estimation step
     start = time.time()
-    scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, batch_size=int(1e3), max_epochs=10)
+    scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, batch_size=int(1e3), lr=0.01)
     delta = time.time() - start
     
     # save the timing results
