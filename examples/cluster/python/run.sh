@@ -16,3 +16,5 @@ mv million_cells.h5ad scDesigner/examples/data/
 cd scDesigner/examples
 python3 -m scalability_study --config $1
 cp *.csv $_CONDOR_SCRATCH_DIR
+tar -zcvf lightning_logs_$1.tar.gz lightning_logs
+mv lightning_logs_$1.tar.gz $_CONDOR_SCRATCH_DIR

@@ -18,10 +18,14 @@ def main(config):
     np.random.seed(config)
     torch.set_float32_matmul_precision("medium")
     sce = anndata.read_h5ad("data/million_cells.h5ad", backed=True)
+
     cell_ix = np.random.choice(n_cell, n_cell, replace=False)
     gene_ix = np.random.choice(n_gene, n_gene, replace=False)
     sce[cell_ix, gene_ix].copy(filename="subset_tmp.h5ad")
-    sce = anndata.read_h5ad("subset_tmp.h5ad", backed=True)
+    if n_cell > 1e4 | n_gene > 1e4:
+        sce = anndata.read_h5ad("subset_tmp.h5ad", backed=True)
+    else:
+        sce = anndata.read_h5ad("subset_tmp.h5ad")
     
     # time the estimation step
     start = time.time()
@@ -34,7 +38,7 @@ def main(config):
         "n_cell": n_cell,
         "replicate": replicate,
         "seconds": delta
-    }, index=[0]).to_csv(f"scdesigner_timing_{replicate}.csv")
+    }, index=[0]).to_csv(f"scdesigner_timing_{int(config)}.csv")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
