@@ -1,6 +1,6 @@
 # HTCondor submit file
 executable = run.sh
-request_memory = 32GB
+request_memory = 48GB
 request_disk = 48GB
 request_gpus = 1
 container_image = file:///staging/ksankaran/environment.sif
