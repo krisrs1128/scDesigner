@@ -36,4 +36,5 @@ From: pytorch/pytorch:2.5.1-cuda11.8-cudnn9-devel
     cd scDesigner/scdesigner
     python -m pip install -v -e .
 
-# apptainer build environment.sif environment.def
+apptainer build environment.sif environment.def
+mv environment.sif /staging/ksankaran

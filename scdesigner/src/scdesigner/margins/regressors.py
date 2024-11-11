@@ -18,11 +18,11 @@ class RegressionModule(pl.LightningModule):
         self.optimizer_opts = {}
 
     def configure_optimizers(self):
-        return torch.optim.LBFGS(self.parameters(), **self.optimizer_opts)
+        return torch.optim.Adam(self.parameters(), **self.optimizer_opts)
 
     def training_step(self, batch):
         loss = -self.loglikelihood(*batch)
-        self.log("NLL", loss.item(), on_epoch=True, on_step=False)
+        self.log("NLL", loss.item())
         return loss
 
     def loglikelihood(self):

@@ -29,7 +29,10 @@ class NegativeBinomial(torch.distributions.NegativeBinomial):
 
     def cdf(self, value: torch.Tensor) -> torch.Tensor:
         if self._validate_args:
+            if not torch.all(value == value.floor()):
+                raise ValueError("Cannot use an NB model if entries are not all integers. Did you accidentally log transform the data?")
             self._validate_sample(value)
+
         result = self.scipy_nbinom.cdf(value.numpy())
         return torch.tensor(result, device=value.device, dtype=value.dtype)
 

@@ -1,16 +1,16 @@
 # HTCondor submit file
 executable = run.sh
 request_memory = 48GB
-request_disk = 32GB
+request_disk = 48GB
 request_gpus = 1
 container_image = file:///staging/ksankaran/environment.sif
 +WantGPULab = true
 +WantFlocking = true
 +WantGliding = true
-+GPUJobLength = "short" 
-+is_resumable = true
++GPUJobLength = "medium" 
++is_resumable = false
 log = run-$(Process).log
 arguments = $(Process)
 error = run-$(Process).err
 output = run-$(Process).out
-queue
+queue 3
