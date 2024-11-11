@@ -18,7 +18,7 @@ def main(config):
     print("reading the backed anndata...")
     np.random.seed(config)
     torch.set_float32_matmul_precision("medium")
-    sce = anndata.read_h5ad("data/million_cells.h5ad", backed=True)
+    sce = anndata.read_h5ad("data/million_cells.h5ad", backed="r")
 
     print("copying into a subset...")
     cell_ix = np.random.choice(n_cell, n_cell, replace=False)
@@ -26,7 +26,7 @@ def main(config):
     sce[cell_ix, gene_ix].copy(filename="subset_tmp.h5ad")
     print("reading the subset...")
     if n_cell > 1e4 or n_gene > 1e4:
-        sce = anndata.read_h5ad("subset_tmp.h5ad", backed=True)
+        sce = anndata.read_h5ad("subset_tmp.h5ad", backed="r")
     else:
         sce = anndata.read_h5ad("subset_tmp.h5ad")
     

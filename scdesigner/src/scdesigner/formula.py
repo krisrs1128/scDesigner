@@ -73,7 +73,7 @@ class FormulaDatasetInMemory(_FormulaDataset):
         self.features, self.obs = read_obs(self.formula, self.adata.obs.copy(), self.categories)
 
         # setup the expression data tensor
-        if "cs" in str(type(adata.X)):
+        if "Sparse" in str(type(adata.X)):
             X = self.adata.X.toarray()
         else:
             X = self.adata.X
@@ -121,10 +121,10 @@ class FormulaDatasetOnDisk(_FormulaDataset):
         return X, {k: self.obs[k][ix - self.cur_range[0]] for k in self.obs.keys()}
 
 def read_range(filename, row_ix, var_names):
-    view = anndata.read_h5ad(filename, backed=True)
+    view = anndata.read_h5ad(filename, backed="r")
     result = view[row_ix].to_memory()
     result = result[:, var_names].to_memory()
     if hasattr(result, "X"):
-        if "CS" in str(type(result.X)):
+        if "Sparse" in str(type(result.X)):
             result.X = result.X.toarray().astype(np.float32)
     return result
