@@ -32,9 +32,9 @@ From: pytorch/pytorch:2.5.1-cuda11.8-cudnn9-devel
         ipython \
         ipykernel
 
-    git clone -b gpu-scaling https://krisrs1128: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@github.com/krisrs1128/scDesigner.git
+    git clone https://krisrs1128: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@github.com/krisrs1128/scDesigner.git
     cd scDesigner/scdesigner
     python -m pip install -v -e .
 
-# apptainer build environment.sif environment.def
-# mv environment.sif /staging/ksankaran
+apptainer build environment.sif environment.def
+mv environment.sif /staging/ksankaran
