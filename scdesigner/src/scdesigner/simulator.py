@@ -12,29 +12,6 @@ import numpy as np
 import pandas as pd
 import torch
 
-def retrieve_obs(N, obs, anndata):
-    if obs is not None:
-        return obs
-    elif N is not None:
-        ix = torch.randint(high=len(anndata), size=(N,))
-        return anndata.obs.iloc[ix.tolist(), :]
-    else:
-        return anndata.obs
-
-def present_indices(X):
-    if "Sparse" in str(type(X)):
-        X = X.toarray()
-    return np.sum(np.isnan(X), axis=1) == 0
-
-def merge_predictions(param_hat):
-    merged = defaultdict(list)
-    for genes, d in param_hat:
-        for k, v in d.items():
-            df = pd.DataFrame(v.numpy(), columns=genes)
-            merged[k].append(df)
-
-    return {k: pd.concat(v, axis=1) for k, v in merged.items()}
-
 class Simulator:
     def __init__(self, margins, multivariate=None):
         super().__init__()
@@ -174,3 +151,26 @@ def sample_marginals(margins, obs):
         var_names += list(genes)
         counts.append(margin.sample(obs).numpy())
     return var_names, counts
+
+def retrieve_obs(N, obs, anndata):
+    if obs is not None:
+        return obs
+    elif N is not None:
+        ix = torch.randint(high=len(anndata), size=(N,))
+        return anndata.obs.iloc[ix.tolist(), :]
+    else:
+        return anndata.obs
+
+def present_indices(X):
+    if "Sparse" in str(type(X)):
+        X = X.toarray()
+    return np.sum(np.isnan(X), axis=1) == 0
+
+def merge_predictions(param_hat):
+    merged = defaultdict(list)
+    for genes, d in param_hat:
+        for k, v in d.items():
+            df = pd.DataFrame(v.numpy(), columns=genes)
+            merged[k].append(df)
+
+    return {k: pd.concat(v, axis=1) for k, v in merged.items()}
