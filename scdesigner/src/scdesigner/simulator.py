@@ -21,6 +21,11 @@ def retrieve_obs(N, obs, anndata):
     else:
         return anndata.obs
 
+def present_indices(X):
+    if "Sparse" in str(type(X)):
+        X = X.toarray()
+    return np.sum(np.isnan(X), axis=1) == 0
+
 def merge_predictions(param_hat):
     merged = defaultdict(list)
     for genes, d in param_hat:
@@ -43,7 +48,7 @@ class Simulator:
             if anndata.isbacked:
                 train_subset = anndata[:, y_names]
             else:
-                ix = np.sum(np.isnan(anndata[:, y_names].X), axis=1) == 0
+                ix = present_indices(anndata[:, y_names].X)
                 train_subset = anndata[ix, y_names]
             submodel.fit(train_subset, max_epochs)
 
