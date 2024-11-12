@@ -23,7 +23,6 @@ def formula_collate(data):
 
     return torch.stack(X), {k: torch.stack(v) for k, v in obs.items()}
 
-
 class MarginalModel:
     def __init__(self, formula, module, **kwargs):
         super().__init__()
@@ -71,6 +70,17 @@ class MarginalModel:
                 preds.append(self.module(obs_))
         return {k: torch.concatenate([d[k] for d in preds], axis=0) for k in preds[0]}
     
+    def parameters(self, parameters=None):
+        if parameters is None:
+            parameters = self.parameter_names
+        if type(parameters) is str:
+            parameters = [parameters] 
+
+        result = {}
+        for p in parameters:
+            result[p] = [theta.detach() for theta in self.module.linear[p].parameters()][0]
+        return result
+
     def sample(self, obs):
         return self.distn(obs).sample()
 
