@@ -17,6 +17,8 @@ tar -zxvf million_cells.tar.gz
 
 # run the script and collect data
 cd ../
-config=$(($1 + 1))
+#config=$(($1 + 1))
+configs=(3 7 11)
+config=${configs[$1]}
 Rscript -e "rmarkdown::render('scalability_study.Rmd', params = list(config=$config))"
 cp *.csv $_CONDOR_SCRATCH_DIR
