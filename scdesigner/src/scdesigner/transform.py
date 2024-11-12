@@ -10,6 +10,10 @@ def amplify(simulator, factor, alter_features, alter_genes):
 def dampen(simulator, factor, alter_features, alter_genes):
     return amplify(simulator, 1 / factor, alter_features, alter_genes)
 
+def nullify(simulator, term, alter_genes):
+    sim = deepcopy(simulator)
+    sim.nullify(term, alter_genes)
+    return sim
 
 def substring_match(feature, alter_features):
     for f in alter_features:
