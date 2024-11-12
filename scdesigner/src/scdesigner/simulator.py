@@ -1,12 +1,14 @@
 from . import join as scj
 from .copula import ScCopula
 from .margins.marginal import args
+from .formula import FormulaDataset
 from .margins.reformulate import reformulate, match_marginal, nullify_formula
 from .transform import amplify, dampen
 from collections import defaultdict
 from copy import deepcopy
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from formulaic import model_matrix
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -66,6 +68,25 @@ class Simulator:
             adata = scj.split_adata(adata)
 
         return adata
+
+    def parameters(self, parameters=None):
+        result = []
+
+        # loop over distribution types
+        for v, margin in self.margins:
+            theta = margin.parameters(parameters)
+
+            # gene and predictor names for current parameters
+            result_ = {}
+            features = FormulaDataset(margin.formula, self.anndata).features
+            for name, value in theta.items():
+                result_[name] = pd.DataFrame(value, index=v, columns=features[name])
+            result.append(result_)
+
+        if len(result) == 1:
+            result = result[0]
+        return result
+
 
     def nullify(self, term, genes, max_epochs=500):
         def f(margin, genes):
