@@ -81,6 +81,10 @@ class Simulator:
             features = FormulaDataset(margin.formula, self.anndata).features
             for name, value in theta.items():
                 result_[name] = pd.DataFrame(value, index=v, columns=features[name])
+
+            # simplify if possible
+            if len(result_) == 1:
+                result_ = next(iter(result_.values()))
             result.append(result_)
 
         if len(result) == 1:
