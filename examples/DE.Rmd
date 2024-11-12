@@ -98,7 +98,15 @@ example_para <- extract_para(
   )
 ```
 
-Here, we examine the `mean_mat`, which is one of the outputs from the previous function `extract_para()`. For each gene, we calculate the difference in the between the maximum mean parameter and minimum mean parameter across all cells. We select genes which the gene's mean difference across cells are in the top 50 largest differences. We regard these genes as DE genes. Then, we manually set the mean parameters of the rest genes to be the same across all cells. We regard all genes with the same mean parameter across cells as non-DE genes. Of course, this is a very flexible step and users may choose other ideas to modify the mean matrix.
+Here, we examine the `mean_mat`, which is one of the outputs from the previous
+function `extract_para()`. For each gene, we calculate the difference in the
+between the maximum mean parameter and minimum mean parameter across all cells.
+We select genes which the gene's mean difference across cells are in the top 50
+largest differences. We regard these genes as DE genes. Then, we manually set
+the mean parameters of the rest genes to be the same across all cells. We regard
+all genes with the same mean parameter across cells as non-DE genes. Of course,
+this is a very flexible step and users may choose other ideas to modify the mean
+matrix.
 
 ```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
 diff <- apply(example_para$mean_mat, 2, function(x){max(x,na.rm = TRUE)-min(x,na.rm = TRUE)})
