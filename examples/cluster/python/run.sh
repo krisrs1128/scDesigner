@@ -14,7 +14,9 @@ mv million_cells.h5ad scDesigner/examples/data/
 
 # run the script
 cd scDesigner/examples
-python3 -m scalability_study --config $1
+configs=(3 7 11)
+config=${configs[$1]}
+python3 -m scalability_study --config $config
 cp *.csv $_CONDOR_SCRATCH_DIR
-tar -zcvf lightning_logs_$1.tar.gz lightning_logs
-mv lightning_logs_$1.tar.gz $_CONDOR_SCRATCH_DIR
+tar -zcvf lightning_logs_$config.tar.gz lightning_logs
+mv lightning_logs_$config.tar.gz $_CONDOR_SCRATCH_DIR
