@@ -34,7 +34,7 @@ def main(config):
     
     # time the estimation step
     start = time.time()
-    scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, batch_size=int(1e3), lr=0.01, max_epochs=100)
+    scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, batch_size=int(1e3), lr=0.01, max_epochs=int(5e6 / n_cell))
     delta = time.time() - start
     
     # save the timing results
