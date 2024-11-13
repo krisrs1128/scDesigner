@@ -6,7 +6,7 @@ from collections import defaultdict
 from torch.optim import LBFGS
 from torch.utils.data import DataLoader
 from inspect import getmembers
-from .regressors import NBRegression, NormalRegression
+from .regressors import NBRegression, NormalRegression, PoissonRegression, BernoulliRegression
 from .distributions import NegativeBinomial
 from ..formula import FormulaDataset
 
@@ -100,3 +100,47 @@ class Normal(MarginalModel):
     def distn(self, obs):
         params = self.predict(obs)
         return torch.distributions.Normal(params["mu"], params["sigma"])
+    
+class Poisson(MarginalModel):
+    def __init__(self, formula, **kwargs):
+        super().__init__(formula, PoissonRegression, **kwargs)
+        self.parameter_names = ["mu"]
+
+    def distn(self, obs):
+        params = self.predict(obs)
+        return torch.distributions.Poisson(params["mu"]) 
+    
+    def cdf(self, X, obs):
+        mu = self.predict(obs)["mu"]
+        return torch.special.gammaincc(torch.floor(X+1), mu) # https://github.com/pytorch/pytorch/issues/97156
+    
+    def icdf(self, U, obs):
+        mu = self.predict(obs)["mu"]
+        result = scipy.stats.poisson.ppf(U.numpy(), mu.numpy())
+        return torch.tensor(result)
+    
+class Bernoulli(MarginalModel):
+    def __init__(self, formula, **kwargs):
+        super().__init__(formula, BernoulliRegression, **kwargs)
+        self.parameter_names = ["mu"]
+
+    def distn(self, obs):
+        params = self.predict(obs)
+        return torch.distributions.Bernoulli(logits=params["mu"]) 
+    
+    def cdf(self, X, obs):
+        mu = self.predict(obs)["mu"]
+        p_0 = 1 / (1+torch.exp(mu))
+        
+        cdf = torch.zeros_like(X, dtype=torch.float32)
+        cdf = torch.where((X >= 0) & (X < 1), p_0, cdf)
+        cdf = torch.where(X >= 1, torch.tensor(1.0), cdf)
+        
+        return cdf
+    
+    def icdf(self, U, obs):
+        mu = self.predict(obs)["mu"]
+        mu = 1-1 / (1+torch.exp(mu))
+        result = scipy.stats.bernoulli.ppf(U.numpy(), mu.numpy())
+        return torch.tensor(result)
+    
