@@ -1,7 +1,8 @@
 # HTCondor submit file
 container_image = file:///staging/ksankaran/environmentR.sif
 executable = run.sh
-request_memory = 48GB
+request_memory = 64GB
+requirements = (HasCHTCStaging == true)
 request_disk = 48GB
 arguments = $(Process)
 log = run-$(Process).log
