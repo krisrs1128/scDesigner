@@ -22,5 +22,5 @@ From: bioconductor/tidyverse
         R -e "reticulate::py_install('scipy')"
         R -e "BiocManager::install(c('scDesign3', 'SingleCellExperiment'))"
 
-#apptainer build environment.sif environment.def
-#mv environment.sif /staging/ksankaran
+#apptainer build environmentR.sif environment.def
+#mv environmentR.sif /staging/ksankaran
