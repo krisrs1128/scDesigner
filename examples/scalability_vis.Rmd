@@ -1,0 +1,45 @@
+---
+title: Visualize Cluster Results
+---
+
+```{r}
+library(fs)
+library(glue)
+library(scales)
+library(tidyverse)
+data_dir <- path("examples/data")
+theme_set(theme_classic())
+```
+
+```{r}
+timings <- dir_ls(data_dir / "timing", glob = "*.csv", recurse = TRUE) |>
+  map_dfr(~ read_csv(.x), .id = "file") |>
+  select(-`...1`)
+
+configs <- read_csv(data_dir / "scalability_configurations.csv") |>
+    mutate(id = as.character(row_number()))
+```
+
+```{r}
+timings <- timings |>
+    mutate(
+        id = str_extract(file, "\\d+(?=\\.csv)"),
+        method = ifelse(str_detect(file, "scdesign3"), "scDesign3", "scDesigner")
+    ) |>
+    left_join(configs) |>
+    mutate(n_gene_str = glue("{n_gene} Genes"))
+
+ggplot(timings2) +
+    geom_point(
+        aes(n_cell, seconds, col = method),
+        size = 1.5, shape = 3
+    ) +
+    geom_vline(xintercept = 5e4, linetype = 2, linewidth = .4) +
+    scale_x_log10(labels = label_number(scale_cut = cut_long_scale())) +
+    scale_y_log10() +
+    scale_color_manual(values = c("#010440", "#D94D1A")) +
+    labs(x = "Number of Cells", y = "Time (seconds)", col = "Method") +
+    facet_wrap(~ n_gene_str) +
+    theme(panel.border = element_rect(size = .5, fill = NA))
+ggsave("~/Downloads/scalability_comparison.png", dpi = 400, height = 3, width = 6.5)
+```
