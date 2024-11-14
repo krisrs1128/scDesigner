@@ -127,20 +127,25 @@ class Bernoulli(MarginalModel):
         super().__init__(formula, reg.BernoulliRegression, **kwargs)
         self.parameter_names = ["mu"]
 
+    def predict(self, obs):
+        mu = super().predict(obs)["mu"]
+        mu = 1-1 / (1+torch.exp(mu))
+        return {"mu": mu}
+
     def distn(self, obs):
-        params = self.predict(obs)
-        return torch.distributions.Bernoulli(logits=params["mu"])
-
+        params = super().predict(obs)
+        return torch.distributions.Bernoulli(logits=params["mu"]) 
+    
     def cdf(self, X, obs):
-        mu = self.predict(obs)["mu"]
-        p_0 = 1 / (1 + torch.exp(mu))
-
+        mu = super().predict(obs)["mu"]
+        p_0 = 1 / (1+torch.exp(mu))
+        
         cdf = torch.zeros_like(X, dtype=torch.float32)
         cdf = torch.where((X >= 0) & (X < 1), p_0, cdf)
-        return torch.where(X >= 1, torch.tensor(1.0), cdf)
-
+        cdf = torch.where(X >= 1, torch.tensor(1.0), cdf)
+        return cdf
+    
     def icdf(self, U, obs):
         mu = self.predict(obs)["mu"]
-        mu = 1-1 / (1+torch.exp(mu))
         result = scipy.stats.bernoulli.ppf(U.numpy(), mu.numpy())
         return torch.tensor(result)
