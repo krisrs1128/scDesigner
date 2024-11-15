@@ -1,13 +1,16 @@
 # HTCondor submit file
-universe = docker
-docker_image = "krisrs1128/scpy:2024110412"
 executable = run.sh
-request_memory = 16GB
-request_disk = 36GB
-#request_gpus = 1
+request_memory = 48GB
+request_disk = 48GB
+request_gpus = 1
+container_image = file:///staging/ksankaran/environment.sif
++WantGPULab = true
++WantFlocking = true
++WantGliding = true
++GPUJobLength = "medium" 
++is_resumable = false
 log = run-$(Process).log
 arguments = $(Process)
 error = run-$(Process).err
 output = run-$(Process).out
-#requirements = (TARGET.GPUs >= 1)
-queue
+queue 3

@@ -5,30 +5,12 @@ from .margins.reformulate import reformulate, match_marginal, nullify_formula
 from .transform import amplify, dampen
 from collections import defaultdict
 from copy import deepcopy
-from torch.optim import LBFGS
+from torch.optim import Adam
 from torch.utils.data import DataLoader
 import anndata as ad
 import numpy as np
 import pandas as pd
 import torch
-
-def retrieve_obs(N, obs, anndata):
-    if obs is not None:
-        return obs
-    elif N is not None:
-        ix = torch.randint(high=len(anndata), size=(N,))
-        return anndata.obs.iloc[ix.tolist(), :]
-    else:
-        return anndata.obs
-
-def merge_predictions(param_hat):
-    merged = defaultdict(list)
-    for genes, d in param_hat:
-        for k, v in d.items():
-            df = pd.DataFrame(v.numpy(), columns=genes)
-            merged[k].append(df)
-
-    return {k: pd.concat(v, axis=1) for k, v in merged.items()}
 
 class Simulator:
     def __init__(self, margins, multivariate=None):
@@ -37,13 +19,13 @@ class Simulator:
         self.multivariate = multivariate
         self.anndata = None
 
-    def fit(self, anndata, max_epochs=10):
+    def fit(self, anndata, max_epochs=500):
         for margin in self.margins:
             y_names, submodel = margin
             if anndata.isbacked:
                 train_subset = anndata[:, y_names]
             else:
-                ix = np.sum(np.isnan(anndata[:, y_names].X), axis=1) == 0
+                ix = present_indices(anndata[:, y_names].X)
                 train_subset = anndata[ix, y_names]
             submodel.fit(train_subset, max_epochs)
 
@@ -52,7 +34,7 @@ class Simulator:
 
         self.anndata = anndata
 
-    def reformulate(self, genes, formula, max_epochs=10):
+    def reformulate(self, genes, formula, max_epochs=500):
         def f(margin, genes):
             return reformulate(margin, genes, formula, self.anndata)
 
@@ -85,7 +67,7 @@ class Simulator:
 
         return adata
 
-    def nullify(self, term, genes, max_epochs=10):
+    def nullify(self, term, genes, max_epochs=500):
         def f(margin, genes):
             null_formula = nullify_formula(margin.formula, term)
             return reformulate(margin, genes, null_formula, self.anndata)
@@ -109,7 +91,7 @@ class Simulator:
             raise NotImplementedError(f"No join mode {mode}. Did you provide one of the supported modes: 'copula' or 'pamona'?")
 
 
-def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=10,
+def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epochs=500,
                chunk_size=int(5e3), **kwargs):
     if not isinstance(margins, list):
         margins = [(list(anndata.var_names), margins)]
@@ -118,7 +100,7 @@ def scdesigner(anndata, margins, delay=False, multivariate=ScCopula(), max_epoch
     for _, margin in margins:
         margin.loader_opts = safe_update(margin.loader_opts, args(DataLoader, **kwargs))
         margin.optimizer_opts = safe_update(
-            margin.optimizer_opts, args(LBFGS, **kwargs)
+            margin.optimizer_opts, args(Adam, **kwargs)
         )
 
     simulator = Simulator(margins, multivariate)
@@ -169,3 +151,26 @@ def sample_marginals(margins, obs):
         var_names += list(genes)
         counts.append(margin.sample(obs).numpy())
     return var_names, counts
+
+def retrieve_obs(N, obs, anndata):
+    if obs is not None:
+        return obs
+    elif N is not None:
+        ix = torch.randint(high=len(anndata), size=(N,))
+        return anndata.obs.iloc[ix.tolist(), :]
+    else:
+        return anndata.obs
+
+def present_indices(X):
+    if "Sparse" in str(type(X)):
+        X = X.toarray()
+    return np.sum(np.isnan(X), axis=1) == 0
+
+def merge_predictions(param_hat):
+    merged = defaultdict(list)
+    for genes, d in param_hat:
+        for k, v in d.items():
+            df = pd.DataFrame(v.numpy(), columns=genes)
+            merged[k].append(df)
+
+    return {k: pd.concat(v, axis=1) for k, v in merged.items()}

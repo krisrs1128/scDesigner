@@ -1,0 +1,26 @@
+Bootstrap: docker
+From: bioconductor/tidyverse
+
+%post
+    chmod 777 /tmp
+
+    apt-get update && apt-get install -y \
+        build-essential \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        libgtk2.0-dev \
+        libnotify-dev \
+        libpango1.0-dev \
+        libsm-dev \
+        libxext-dev \
+        libxrender-dev \
+        git \
+        vim \
+        curl
+
+        R -e "install.packages(c('glue', 'reticulate'), repos='https://cloud.r-project.org/')"
+        R -e "reticulate::py_install('scipy')"
+        R -e "BiocManager::install(c('scDesign3', 'SingleCellExperiment'))"
+
+#apptainer build environmentR.sif environment.def
+#mv environmentR.sif /staging/ksankaran
