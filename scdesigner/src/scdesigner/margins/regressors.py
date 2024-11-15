@@ -78,6 +78,43 @@ class NormalRegression(RegressionModule):
             -D / 2 * log(2 * pi)
             + D * (-torch.log(sigma) - 1 / 2 * ((X - mu) / sigma) ** 2).mean()
         )
+    
+class PoissonRegression(RegressionModule):
+    def __init__(self, n_input, gene_names):
+        super().__init__(n_input, gene_names)
+
+    def forward(self, X):
+        result = {}
+        for k, v in X.items():
+            f = self.linear[k].to(self.device)
+            result[k] = torch.exp(f(v))
+        return result
+
+    def loglikelihood(self, X, obs):
+        theta = self.forward(obs)
+        mu = theta["mu"]
+        return (
+            (X * torch.log(mu) - mu - torch.lgamma(X+1)).mean()
+        )
+    
+class BernoulliRegression(RegressionModule):
+    def __init__(self, n_input, gene_names):
+        super().__init__(n_input, gene_names)
+
+    def forward(self, X):
+        result = {}
+        for k, v in X.items():
+            f = self.linear[k].to(self.device)
+            result[k] = f(v) # logit of mu
+        return result
+    
+    def loglikelihood(self, X, obs):
+        theta = self.forward(obs)
+        mu = theta["mu"]
+
+        return (
+            (X * mu - torch.log(1 + torch.exp(mu))).mean()
+        )
 
 
 ###############################################################################
