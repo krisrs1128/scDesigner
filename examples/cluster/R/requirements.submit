@@ -1,11 +1,11 @@
 # HTCondor submit file
-universe = docker
-docker_image = "krisrs1128/scr:2024110403"
+container_image = file:///staging/ksankaran/environmentR.sif
 executable = run.sh
-request_memory = 48GB
+request_memory = 64GB
+requirements = (HasCHTCStaging == true)
 request_disk = 48GB
 arguments = $(Process)
 log = run-$(Process).log
 error = run-$(Process).err
 output = run-$(Process).out
-queue 75
+queue 60

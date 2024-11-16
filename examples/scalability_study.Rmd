@@ -69,7 +69,7 @@ data.frame(
     replicate = replicate,
     seconds = as.numeric(difftime(Sys.time(), start, units="secs"))
 ) |>
-    write.csv(paste0("scdesign3_timing_", config, ".csv"))
+    write.csv(paste0("scdesign3_timing_", as.integer(config) - 1, ".csv"))
 ```
 
 The block below shows how the configurations were defined.

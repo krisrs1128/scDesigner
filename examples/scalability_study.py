@@ -3,9 +3,11 @@ import numpy as np
 import pandas as pd
 import anndata
 import time
+import gc
 import torch
 from scdesigner.margins.marginal import NB
 from scdesigner.simulator import scdesigner
+import os
 
 def main(config):
     # setup the configuration
@@ -22,6 +24,9 @@ def main(config):
     cell_ix = np.random.choice(n_cell, n_cell, replace=False)
     gene_ix = np.random.choice(n_gene, n_gene, replace=False)
     sce[cell_ix, gene_ix].copy(filename="subset_tmp.h5ad")
+    os.remove("data/million_cells.h5ad")
+    del sce; gc.collect()
+
     if n_cell > 1e4 or n_gene > 1e4:
         sce = anndata.read_h5ad("subset_tmp.h5ad", backed="r")
     else:
@@ -29,7 +34,7 @@ def main(config):
     
     # time the estimation step
     start = time.time()
-    scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, batch_size=int(1e3), lr=0.01, max_epochs=100)
+    scdesigner(sce, NB("~ cell_type + `CoVID-19 severity`"), multivariate=None, batch_size=int(1e3), lr=0.01, max_epochs=int(5e6 / n_cell))
     delta = time.time() - start
     
     # save the timing results
