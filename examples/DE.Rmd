@@ -1,29 +1,32 @@
 ---
 title: "Example DE Analysis"
+output:
+  rmdformats::html_clean:
+    highlight: kate
+    toc: true
+    use_bookdown: true
 ---
 
-This is from https://github.com/SONGDONGYUAN1994/scDesign3Workflow/blob/master/vignettes/scDesign3-DEanalysis-vignette.Rmd
+<style>
+body
+  { counter-reset: source-line 0; }
+pre.numberSource code
+  { counter-reset: none; }
+</style>
 
-We use this as a point of comparison for our alteration functions.
+```{r, echo = FALSE}
+knitr::opts_chunk$set(class.source = "numberLines lineAnchors")
+```
+
+This notebook is a version of the current [DE vignette](https://github.com/SONGDONGYUAN1994/scDesign3Workflow/blob/master/vignettes/scDesign3-DEanalysis-vignette.Rmd)
+that includes only the steps necessary for power analysis.
 
 ```{r}
 library(scDesign3)
-library(SingleCellExperiment)
-library(ggplot2)
 library(DuoClustering2018)
 library(Seurat)
-library(SeuratObject)
 library(scran)
-library(parallel)
-library(DESeq2)
-library(BiocParallel)
-library(NBAMSeq)
-library(dplyr)
-library(tradeSeq)
-library(reshape2)
-library(spatialDE)
-library(scales)
-library(tidyr)
+library(tidyverse)
 theme_set(theme_bw())
 ```
 
@@ -52,7 +55,6 @@ head(colData(example_sce))
 ### Simulation
 We use the step-by-step functions instead of the one-shot function to generate synthetic data since these step-by-step functions allow us to alter estimated parameters and generate new data based on our desired parameters.
 ```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
-set.seed(123)
 example_data <- construct_data(
     sce = example_sce,
     assay_use = "counts",
@@ -76,7 +78,6 @@ example_marginal <- fit_marginal(
   )
 ```
 ```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
-set.seed(123)
 example_copula <- fit_copula(
     sce = example_sce,
     assay_use = "counts",
@@ -98,7 +99,15 @@ example_para <- extract_para(
   )
 ```
 
-Here, we examine the `mean_mat`, which is one of the outputs from the previous function `extract_para()`. For each gene, we calculate the difference in the between the maximum mean parameter and minimum mean parameter across all cells. We select genes which the gene's mean difference across cells are in the top 50 largest differences. We regard these genes as DE genes. Then, we manually set the mean parameters of the rest genes to be the same across all cells. We regard all genes with the same mean parameter across cells as non-DE genes. Of course, this is a very flexible step and users may choose other ideas to modify the mean matrix.
+Here, we examine the `mean_mat`, which is one of the outputs from the previous
+function `extract_para()`. For each gene, we calculate the difference in the
+between the maximum mean parameter and minimum mean parameter across all cells.
+We select genes which the gene's mean difference across cells are in the top 50
+largest differences. We regard these genes as DE genes. Then, we manually set
+the mean parameters of the rest genes to be the same across all cells. We regard
+all genes with the same mean parameter across cells as non-DE genes. Of course,
+this is a very flexible step and users may choose other ideas to modify the mean
+matrix.
 
 ```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
 diff <- apply(example_para$mean_mat, 2, function(x){max(x,na.rm = TRUE)-min(x,na.rm = TRUE)})
@@ -116,7 +125,6 @@ example_para$mean_mat[,non_de_idx] <- non_de_mat
 ```
 
 ```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
-set.seed(123)
  example_newcount <- simu_new(
     sce = example_sce,
     mean_mat = example_para$mean_mat,
@@ -137,25 +145,10 @@ set.seed(123)
 Then, we follow [Seurat's pipeline](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html) to preprocess the simulated data.
 ```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
 seurat_obj <- CreateSeuratObject(counts = example_newcount, project = "seurat_obj", min.cells = 0, min.features = 0)
-seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
-seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = 10000)
-seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst",nfeatures = 200)
-all.genes <- rownames(seurat_obj)
-seurat_obj <- ScaleData(seurat_obj, features = all.genes)
-seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(object = seurat_obj))
-seurat_obj <- JackStraw(seurat_obj, num.replicate = 100)
-seurat_obj <- ScoreJackStraw(seurat_obj, dims = 1:20)
-```
-Since we already have the ground truth cell type annotations for our simulated dataset, we can directly use the cell type annotations we have instead of running `FindClusters` from `Seurat` to avoid the double-dipping issue.
-```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
-seurat_obj <- FindNeighbors(seurat_obj, dims = 1:10)
-ct <- colData(example_sce)$cell_type
-names(ct) <- colnames(example_sce)
-seurat_obj[["cell_type"]] <- ct
+seurat_obj[["cell_type"]] <- colData(example_sce)$cell_type
 Idents(seurat_obj) <- "cell_type"
-seurat_obj <- RunUMAP(seurat_obj, dims = 1:10)
+seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = 10000)
 ```
-
 Then, we follow [Seurat's tutorial](https://satijalab.org/seurat/articles/de_vignette.html) to conduct DE test.
 ```{r, message=FALSE, warning=FALSE, results='hide', eval=TRUE}
 test <- c("wilcox", "bimod", "t", "poisson", "negbinom", "LR", "MAST", "DESeq2")
@@ -197,7 +190,13 @@ for (t in 1:length(test)) {
     power_mat[i,t] <- power
   }
 }
-
-
 ```
 
+```{r}
+power_mat
+fdp_mat
+```
+
+```{r}
+sim_data <- data.frame(gene1 = example_newcount[1,], cell_type = colData(example_sce)$cell_type)
+```

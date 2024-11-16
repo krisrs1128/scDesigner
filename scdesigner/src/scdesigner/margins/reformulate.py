@@ -75,7 +75,7 @@ def nullify_formula_str(formula: str, term: str) -> str:
 
 def nullify_formula(formula, term: str):
     if isinstance(formula, str):
-        return nullify_formula_str(formula, str)
+        return nullify_formula_str(formula, term)
 
     result = {}
     for k, f in formula.items():
