@@ -1,6 +1,6 @@
 from formulaic import model_matrix
+from typing import Union
 import anndata
-import gc
 import numpy as np
 import pandas as pd
 import torch.utils.data as td
@@ -18,21 +18,11 @@ class BasicDataset(td.Dataset):
         self.obs = obs
 
     def __len__(self):
-        return self.X.shape[0]
+        v = list(self.obs.values())[0]
+        return v.shape[0]
 
     def __getitem__(self, i):
         return self.X[i, :], self.obs.values[i, :].astype(np.float32)
-
-
-class FormulaLoader(Loader):
-    def __init__(self, data: anndata.AnnData, formula: str, **kwargs):
-        if "sparse" in str(type(data.X)):
-            data.X = data.X.toarray().astype(np.float32)
-        obs_ = model_matrix(formula, data.obs)
-        ds = BasicDataset(data.X, obs_)
-
-        self.loader = td.DataLoader(ds, **kwargs)
-        self.names = list(data.var_names), list(obs_.columns)
 
 
 ################################################################################
@@ -40,60 +30,29 @@ class FormulaLoader(Loader):
 ################################################################################
 
 
-class MultiformulaLoader(Loader):
-    def __init__(self, data: anndata.AnnData, formula: dict, **kwargs):
+class FormulaLoader(Loader):
+    def __init__(self, data: Union[anndata.AnnData, pd.DataFrame], formula: dict, **kwargs):
+        if type(data) is pd.DataFrame:
+            data = anndata.AnnData(obs=data)
+
         if "sparse" in str(type(data.X)):
             data.X = data.X.toarray().astype(np.float32)
 
         obs = model_matrix_dict(formula, data.obs)
-        ds = MultiformulaDataset(data.X, obs)
+        ds = FormulaDataset(data.X, obs)
         self.loader = td.DataLoader(ds, **kwargs)
         self.names = list(data.var_names), {k: list(v.columns) for k, v in obs.items()}
 
 
-class MultiformulaDataset(BasicDataset):
+class FormulaDataset(BasicDataset):
     def __init__(self, X, obs):
         super().__init__(X, obs)
 
     def __getitem__(self, i):
-        return self.X[i, :], {k: v.values[i, :].astype(np.float32) for k, v in self.obs.items()}
-
-
-################################################################################
-# Read chunks in memory when there are multiple `obs` for simple string formulas
-################################################################################
-
-
-class BackedFormulaLoader(Loader):
-    def __init__(
-        self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs
-    ):
-        data.obs = strings_as_categories(data.obs)
-        ds = BackedFormulaDataset(data, formula, chunk_size)
-        self.loader = td.DataLoader(ds, **kwargs)
-        self.names = list(data.var_names), list(ds.obs_inmem.columns)
-
-
-class BackedFormulaDataset(BasicDataset):
-    def __init__(self, data: anndata.AnnData, formula: str, chunk_size: int):
-        super().__init__(data.X, data.obs)
-        self.cur_range = range(0, min(len(data), chunk_size))
-        self.formula = formula
-        self.filename = data.filename
-        self.data_inmem = read_range(self.filename, self.cur_range)
-        self.obs_inmem = model_matrix(self.formula, self.data_inmem.obs)
-
-    def update_range(self, ix):
-        self.cur_range = range(ix, min(ix + len(self.cur_range), self.__len__()))
-        self.data_inmem = read_range(self.filename, self.cur_range)
-        self.obs_inmem = model_matrix(self.formula, self.data_inmem.obs)
-
-    def __getitem__(self, ix):
-        if ix not in self.cur_range:
-            self.update_range(ix)
-
-        X = self.data_inmem.X[ix - self.cur_range[0]]
-        return X, self.obs_inmem.values[ix - self.cur_range[0]].astype(np.float32)
+        obs_i = {k: v.values[i, :].astype(np.float32) for k, v in self.obs.items()}
+        if self.X is not None:
+            return self.X[i, :], obs_i
+        return obs_i
 
 
 ################################################################################
@@ -102,19 +61,22 @@ class BackedFormulaDataset(BasicDataset):
 ################################################################################
 
 
-class BackedMultiformulaLoader(Loader):
+class BackedFormulaLoader(Loader):
     def __init__(
-        self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs
+        self, data: Union[anndata.AnnData, pd.DataFrame], formula: dict, chunk_size=int(2e4), **kwargs
     ):
+        if type(data) is pd.DataFrame:
+            data = anndata.AnnData(obs=data)
+
         data.obs = strings_as_categories(data.obs)
-        ds = BackedMultiformulaDataset(data, formula, chunk_size)
+        ds = BackedFormulaDataset(data, formula, chunk_size)
         self.loader = td.DataLoader(ds, **kwargs)
         self.names = list(data.var_names), {
             k: list(v.columns) for k, v in ds.obs_inmem.items()
         }
 
 
-class BackedMultiformulaDataset(BasicDataset):
+class BackedFormulaDataset(BasicDataset):
     def __init__(self, data: anndata.AnnData, formula: dict, chunk_size: int):
         super().__init__(data.X, data.obs)
         self.cur_range = range(0, min(len(data), chunk_size))
@@ -132,9 +94,10 @@ class BackedMultiformulaDataset(BasicDataset):
         if ix not in self.cur_range:
             self.update_range(ix)
 
-        X = self.data_inmem.X[ix - self.cur_range[0]]
-        return X, \
-            {k: v.values[ix - self.cur_range[0], :].astype(np.float32) for k, v in self.obs_inmem.items()}
+        obs_i = {k: v.values[ix - self.cur_range[0], :].astype(np.float32) for k, v in self.obs_inmem.items()}
+        if self.X is not None:
+            return self.data_inmem.X[ix - self.cur_range[0]], obs_i
+        return obs_i
 
 
 ################################################################################
