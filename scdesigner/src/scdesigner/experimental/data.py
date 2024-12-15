@@ -16,7 +16,7 @@ class BasicDataset(td.Dataset):
         self.obs = obs
 
     def __len__(self):
-        return len(self.X)
+        return self.X.shape[0]
 
     def __getitem__(self, i):
         return self.X[i, :], self.obs.values[i, :]
@@ -32,15 +32,16 @@ class FormulaDataParser(DataParser):
         self.loader = td.DataLoader(ds, **kwargs)
         self.names = list(data.var_names), list(obs_.columns)
 
+################################################################################
+# Dataloader when there are different predictors across formula terms
+################################################################################
+
 class MultiformulaDataParser(DataParser):
     def __init__(self, data: anndata.AnnData, formula: dict, **kwargs):
         if "sparse" in str(type(data.X)):
             data.X = data.X.toarray()
         
-        obs = {}
-        for k, f in formula.items():
-            obs[k] = model_matrix(f, data.obs)
-
+        obs = model_matrix_dict(formula, data.obs)
         ds = MultiformulaDataset(data.X, obs)
         self.loader = td.DataLoader(ds, **kwargs)
         self.names = list(data.var_names), {k: list(v.columns) for k, v in obs.items()}
@@ -52,35 +53,82 @@ class MultiformulaDataset(BasicDataset):
     def __getitem__(self, i):
         return self.X[i, :], {k: v.values[i, :] for k, v in self.obs.items()}
 
+################################################################################
+# Read chunks in memory when there are multiple `obs` for simple string formulas
+################################################################################
+
 class BackedFormulaDataParser(DataParser):
     def __init__(self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs):
         data.obs = strings_as_categories(data.obs)
         ds = BackedFormulaDataset(data, formula, chunk_size)
         self.loader = td.DataLoader(ds, **kwargs)
-        obs_names = model_matrix(formula, ds.data_inmem.obs).columns
-        self.names = list(data.var_names), list(obs_names)
+        self.names = list(data.var_names), list(ds.obs_inmem.columns)
 
 class BackedFormulaDataset(BasicDataset):
     def __init__(self, data: anndata.AnnData, formula: str, chunk_size: int):
         super().__init__(data.X, data.obs)
         self.cur_range = range(0, min(len(data), chunk_size))
         self.formula = formula
-        self.filename = data.filename
-        self.data_inmem = read_range(self.filename, self.cur_range)
+        self.data_inmem = read_range(data.filename, self.cur_range)
+        self.obs_inmem = model_matrix(self.formula, self.data_inmem.obs)
 
-    def __len__(self):
-        return len(self.obs)
+    def update_range(self, ix):
+        del self.data_inmem
+        gc.collect()
+        self.cur_range = range(ix, min(ix + len(self.cur_range), self.len))
+        self.data_inmem = read_range(self.data_inmem.filename, self.cur_range)
+        self.obs_inmem = model_matrix(self.formula, self.data_inmem.obs)
 
     def __getitem__(self, ix):
         if ix not in self.cur_range:
-            del self.data_inmem
-            gc.collect()
-            self.cur_range = range(ix, min(ix + len(self.cur_range), self.len))
-            self.data_inmem = read_range(self.filename, self.cur_range)
+            self.update_range(ix)
 
         X = self.data_inmem.X[ix - self.cur_range[0]]
-        obs = model_matrix(self.formula, self.data_inmem.obs).values
-        return X, obs[ix - self.cur_range[0]]
+        return X, self.obs_inmem.values[ix - self.cur_range[0]]
+
+################################################################################
+# Read chunks in memory when there are multiple `obs` needed for different
+# formula elements
+################################################################################
+
+class BackedMultiformulaDataParser(DataParser):
+    def __init__(self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs):
+        data.obs = strings_as_categories(data.obs)
+        ds = BackedMultiformulaDataset(data, formula, chunk_size)
+        self.loader = td.DataLoader(ds, **kwargs)
+        self.names = list(data.var_names), {k: list(v.columns) for k, v in ds.obs_inmem.items()}
+
+class BackedMultiformulaDataset(BasicDataset):
+    def __init__(self, data: anndata.AnnData, formula: dict, chunk_size: int):
+        super().__init__(data.X, data.obs)
+        self.cur_range = range(0, min(len(data), chunk_size))
+        self.formula = formula
+        self.data_inmem = read_range(data.filename, self.cur_range)
+        self.obs_inmem = model_matrix_dict(self.formula, self.data_inmem.obs)
+
+    def update_range(self, ix):
+        del self.data_inmem
+        gc.collect()
+        self.cur_range = range(ix, min(ix + len(self.cur_range), self.len))
+        self.data_inmem = read_range(self.data_inmem.filename, self.cur_range)
+        self.obs_inmem = model_matrix_dict(self.formula, self.data_inmem.obs)
+
+    def __getitem__(self, ix):
+        if ix not in self.cur_range:
+            self.update_range(ix)
+
+        X = self.data_inmem.X[ix - self.cur_range[0]]
+        return X, {k: v.values[ix - self.cur_range[0], :] for k, v in self.obs_inmem.items()}
+
+################################################################################
+# Helper functions
+################################################################################
+
+def model_matrix_dict(formula, obs_df):
+    obs = {}
+    for k, f in formula.items():
+        obs[k] = model_matrix(f, obs_df)
+    return obs
 
 def strings_as_categories(df):
     for k in df.columns:
