@@ -6,7 +6,7 @@ import pandas as pd
 import torch.utils.data as td
 
 
-class DataParser:
+class Loader:
     def __init__(self, data):
         self.loader = None
         self.names = None
@@ -24,7 +24,7 @@ class BasicDataset(td.Dataset):
         return self.X[i, :], self.obs.values[i, :]
 
 
-class FormulaDataParser(DataParser):
+class FormulaLoader(Loader):
     def __init__(self, data: anndata.AnnData, formula: str, **kwargs):
         if "sparse" in str(type(data.X)):
             data.X = data.X.toarray()
@@ -40,7 +40,7 @@ class FormulaDataParser(DataParser):
 ################################################################################
 
 
-class MultiformulaDataParser(DataParser):
+class MultiformulaLoader(Loader):
     def __init__(self, data: anndata.AnnData, formula: dict, **kwargs):
         if "sparse" in str(type(data.X)):
             data.X = data.X.toarray()
@@ -64,7 +64,7 @@ class MultiformulaDataset(BasicDataset):
 ################################################################################
 
 
-class BackedFormulaDataParser(DataParser):
+class BackedFormulaLoader(Loader):
     def __init__(
         self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs
     ):
@@ -103,7 +103,7 @@ class BackedFormulaDataset(BasicDataset):
 ################################################################################
 
 
-class BackedMultiformulaDataParser(DataParser):
+class BackedMultiformulaLoader(Loader):
     def __init__(
         self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs
     ):
@@ -135,9 +135,8 @@ class BackedMultiformulaDataset(BasicDataset):
             self.update_range(ix)
 
         X = self.data_inmem.X[ix - self.cur_range[0]]
-        return X, {
-            k: v.values[ix - self.cur_range[0], :] for k, v in self.obs_inmem.items()
-        }
+        return X, \
+            {k: v.values[ix - self.cur_range[0], :] for k, v in self.obs_inmem.items()}
 
 
 ################################################################################
