@@ -19,14 +19,18 @@ class NegativeBinomialSampler(Sampler):
         n_output, n_input = parameter_dims(self.parameters)
         f = nn.ModuleDict({k: nn.Linear(n_input[k], n_output, bias=False) for k in n_input.keys()})
 
-        with torch.no_grad():
-            samples = [
-                nbinom(
-                    n=(1 / torch.exp(f["alpha"](X["alpha"]))).numpy(),
-                    p=(1 - 1 / (1 + torch.exp(f["alpha"](X["alpha"])) * torch.exp(f["mu"](X["mu"])))).numpy()
-                ).rvs()
-                for _, X in loader
-            ]
+        samples = []
+        for X in loader:
+            # ignore Y if provided
+            if type(X) is list:
+                _, X = X
+
+            with torch.no_grad():
+                alpha = torch.exp(f["alpha"](X["alpha"]))
+                mu = torch.exp(f["mu"](X["mu"]))
+            total_count = 1 / alpha
+            p = 1 - 1 / (1 + alpha * mu)
+            samples.append(nbinom(n=total_count.numpy(), p=p.numpy()).rvs())
 
         return np.concatenate(samples, axis=0)
 
@@ -34,3 +38,4 @@ def parameter_dims(parameters):
     n_output = parameters["mu"].shape[0]
     n_input = {k: v.shape[1] for k, v in parameters.items()}
     return n_output, n_input
+    
