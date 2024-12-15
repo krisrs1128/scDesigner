@@ -5,10 +5,12 @@ import numpy as np
 import pandas as pd
 import torch.utils.data as td
 
+
 class DataParser:
     def __init__(self, data):
         self.loader = None
         self.names = None
+
 
 class BasicDataset(td.Dataset):
     def __init__(self, X, obs):
@@ -32,19 +34,22 @@ class FormulaDataParser(DataParser):
         self.loader = td.DataLoader(ds, **kwargs)
         self.names = list(data.var_names), list(obs_.columns)
 
+
 ################################################################################
 # Dataloader when there are different predictors across formula terms
 ################################################################################
+
 
 class MultiformulaDataParser(DataParser):
     def __init__(self, data: anndata.AnnData, formula: dict, **kwargs):
         if "sparse" in str(type(data.X)):
             data.X = data.X.toarray()
-        
+
         obs = model_matrix_dict(formula, data.obs)
         ds = MultiformulaDataset(data.X, obs)
         self.loader = td.DataLoader(ds, **kwargs)
         self.names = list(data.var_names), {k: list(v.columns) for k, v in obs.items()}
+
 
 class MultiformulaDataset(BasicDataset):
     def __init__(self, X, obs):
@@ -53,16 +58,21 @@ class MultiformulaDataset(BasicDataset):
     def __getitem__(self, i):
         return self.X[i, :], {k: v.values[i, :] for k, v in self.obs.items()}
 
+
 ################################################################################
 # Read chunks in memory when there are multiple `obs` for simple string formulas
 ################################################################################
 
+
 class BackedFormulaDataParser(DataParser):
-    def __init__(self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs):
+    def __init__(
+        self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs
+    ):
         data.obs = strings_as_categories(data.obs)
         ds = BackedFormulaDataset(data, formula, chunk_size)
         self.loader = td.DataLoader(ds, **kwargs)
         self.names = list(data.var_names), list(ds.obs_inmem.columns)
+
 
 class BackedFormulaDataset(BasicDataset):
     def __init__(self, data: anndata.AnnData, formula: str, chunk_size: int):
@@ -86,17 +96,24 @@ class BackedFormulaDataset(BasicDataset):
         X = self.data_inmem.X[ix - self.cur_range[0]]
         return X, self.obs_inmem.values[ix - self.cur_range[0]]
 
+
 ################################################################################
 # Read chunks in memory when there are multiple `obs` needed for different
 # formula elements
 ################################################################################
 
+
 class BackedMultiformulaDataParser(DataParser):
-    def __init__(self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs):
+    def __init__(
+        self, data: anndata.AnnData, formula: str, chunk_size=int(2e4), **kwargs
+    ):
         data.obs = strings_as_categories(data.obs)
         ds = BackedMultiformulaDataset(data, formula, chunk_size)
         self.loader = td.DataLoader(ds, **kwargs)
-        self.names = list(data.var_names), {k: list(v.columns) for k, v in ds.obs_inmem.items()}
+        self.names = list(data.var_names), {
+            k: list(v.columns) for k, v in ds.obs_inmem.items()
+        }
+
 
 class BackedMultiformulaDataset(BasicDataset):
     def __init__(self, data: anndata.AnnData, formula: dict, chunk_size: int):
@@ -118,11 +135,15 @@ class BackedMultiformulaDataset(BasicDataset):
             self.update_range(ix)
 
         X = self.data_inmem.X[ix - self.cur_range[0]]
-        return X, {k: v.values[ix - self.cur_range[0], :] for k, v in self.obs_inmem.items()}
+        return X, {
+            k: v.values[ix - self.cur_range[0], :] for k, v in self.obs_inmem.items()
+        }
+
 
 ################################################################################
 # Helper functions
 ################################################################################
+
 
 def model_matrix_dict(formula, obs_df):
     obs = {}
@@ -130,11 +151,13 @@ def model_matrix_dict(formula, obs_df):
         obs[k] = model_matrix(f, obs_df)
     return obs
 
+
 def strings_as_categories(df):
     for k in df.columns:
         if str(df[k].dtype) == "object":
             df[k] = pd.Categorical(df[k])
     return df
+
 
 def read_range(filename, row_ix):
     view = anndata.read_h5ad(filename, backed="r")
