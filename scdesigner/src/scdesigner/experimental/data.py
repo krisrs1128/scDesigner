@@ -21,13 +21,13 @@ class BasicDataset(td.Dataset):
         return self.X.shape[0]
 
     def __getitem__(self, i):
-        return self.X[i, :], self.obs.values[i, :]
+        return self.X[i, :], self.obs.values[i, :].astype(np.float32)
 
 
 class FormulaLoader(Loader):
     def __init__(self, data: anndata.AnnData, formula: str, **kwargs):
         if "sparse" in str(type(data.X)):
-            data.X = data.X.toarray()
+            data.X = data.X.toarray().astype(np.float32)
         obs_ = model_matrix(formula, data.obs)
         ds = BasicDataset(data.X, obs_)
 
@@ -43,7 +43,7 @@ class FormulaLoader(Loader):
 class MultiformulaLoader(Loader):
     def __init__(self, data: anndata.AnnData, formula: dict, **kwargs):
         if "sparse" in str(type(data.X)):
-            data.X = data.X.toarray()
+            data.X = data.X.toarray().astype(np.float32)
 
         obs = model_matrix_dict(formula, data.obs)
         ds = MultiformulaDataset(data.X, obs)
@@ -56,7 +56,7 @@ class MultiformulaDataset(BasicDataset):
         super().__init__(X, obs)
 
     def __getitem__(self, i):
-        return self.X[i, :], {k: v.values[i, :] for k, v in self.obs.items()}
+        return self.X[i, :], {k: v.values[i, :].astype(np.float32) for k, v in self.obs.items()}
 
 
 ################################################################################
@@ -79,14 +79,13 @@ class BackedFormulaDataset(BasicDataset):
         super().__init__(data.X, data.obs)
         self.cur_range = range(0, min(len(data), chunk_size))
         self.formula = formula
-        self.data_inmem = read_range(data.filename, self.cur_range)
+        self.filename = data.filename
+        self.data_inmem = read_range(self.filename, self.cur_range)
         self.obs_inmem = model_matrix(self.formula, self.data_inmem.obs)
 
     def update_range(self, ix):
-        del self.data_inmem
-        gc.collect()
-        self.cur_range = range(ix, min(ix + len(self.cur_range), self.len))
-        self.data_inmem = read_range(self.data_inmem.filename, self.cur_range)
+        self.cur_range = range(ix, min(ix + len(self.cur_range), self.__len__()))
+        self.data_inmem = read_range(self.filename, self.cur_range)
         self.obs_inmem = model_matrix(self.formula, self.data_inmem.obs)
 
     def __getitem__(self, ix):
@@ -94,7 +93,7 @@ class BackedFormulaDataset(BasicDataset):
             self.update_range(ix)
 
         X = self.data_inmem.X[ix - self.cur_range[0]]
-        return X, self.obs_inmem.values[ix - self.cur_range[0]]
+        return X, self.obs_inmem.values[ix - self.cur_range[0]].astype(np.float32)
 
 
 ################################################################################
@@ -120,14 +119,13 @@ class BackedMultiformulaDataset(BasicDataset):
         super().__init__(data.X, data.obs)
         self.cur_range = range(0, min(len(data), chunk_size))
         self.formula = formula
-        self.data_inmem = read_range(data.filename, self.cur_range)
+        self.filename = data.filename
+        self.data_inmem = read_range(self.filename, self.cur_range)
         self.obs_inmem = model_matrix_dict(self.formula, self.data_inmem.obs)
 
     def update_range(self, ix):
-        del self.data_inmem
-        gc.collect()
-        self.cur_range = range(ix, min(ix + len(self.cur_range), self.len))
-        self.data_inmem = read_range(self.data_inmem.filename, self.cur_range)
+        self.cur_range = range(ix, min(ix + len(self.cur_range), self.__len__()))
+        self.data_inmem = read_range(self.filename, self.cur_range)
         self.obs_inmem = model_matrix_dict(self.formula, self.data_inmem.obs)
 
     def __getitem__(self, ix):
@@ -136,7 +134,7 @@ class BackedMultiformulaDataset(BasicDataset):
 
         X = self.data_inmem.X[ix - self.cur_range[0]]
         return X, \
-            {k: v.values[ix - self.cur_range[0], :] for k, v in self.obs_inmem.items()}
+            {k: v.values[ix - self.cur_range[0], :].astype(np.float32) for k, v in self.obs_inmem.items()}
 
 
 ################################################################################
