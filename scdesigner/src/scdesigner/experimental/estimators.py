@@ -7,10 +7,17 @@ import torch
 import torch.optim
 import torch.utils.data as td
 
-
-class GeneralizedLinearModelML:
+class Estimator:
     def __init__(self, hyper: dict):
         self.hyper = hyper
+
+    def estimate(self, loader: td.DataLoader):
+        pass
+
+
+class GeneralizedLinearModelML(Estimator):
+    def __init__(self, hyper: dict):
+        super().__init__(hyper)
         self.module = None
 
     def link(self, x, parameter):
