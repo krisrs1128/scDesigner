@@ -111,6 +111,7 @@ class CompositeEstimator(Estimator):
             parameters.append(estimator(self.hyper).estimate(loader[i]))
         return parameters
 
+
 class GCopulaEstimator:
     def __init__(self, hyper: dict):
         self.hyper = hyper
@@ -122,7 +123,11 @@ class GCopulaEstimator:
         return {"covariance": torch.from_numpy(covariance), "margins": margins}
 
 
-def gcopula_estimator_factory(marginal_estimator: Estimator, gaussianizer: Callable, covariance_fun: Callable=None) -> GCopulaEstimator:
+def gcopula_estimator_factory(
+    marginal_estimator: Estimator,
+    gaussianizer: Callable,
+    covariance_fun: Callable = None,
+) -> GCopulaEstimator:
     if covariance_fun is None:
         covariance_fun = np.cov
 
@@ -136,7 +141,7 @@ def gcopula_estimator_factory(marginal_estimator: Estimator, gaussianizer: Calla
 def negbin_gaussianizer(margins: dict, loader: td.DataLoader) -> np.array:
     z = []
     f = linear_module(margins)
-    for y, x in  loader:
+    for y, x in loader:
         distribution = nb_distn(margins, x)
         alpha = np.random.uniform(size=y.shape)
         u = clip(alpha * distribution.cdf(y) + (1 - alpha) * distribution.cdf(1 + y))
@@ -144,7 +149,8 @@ def negbin_gaussianizer(margins: dict, loader: td.DataLoader) -> np.array:
 
     return np.concatenate(z)
 
-def clip(u: np.array, min: float=1e-5, max: float=1 - 1e-5) -> np.array:
+
+def clip(u: np.array, min: float = 1e-5, max: float = 1 - 1e-5) -> np.array:
     u[u < min] = min
     u[u > max] = max
     return u
@@ -159,4 +165,7 @@ def args(m: Callable, **kwargs) -> dict:
     members = getmembers(m.__init__)[0][1].keys()
     return {kw: kwargs[kw] for kw in kwargs if kw in members}
 
-NegativeBinomialCopulaEstimator = gcopula_estimator_factory(NegativeBinomialML, negbin_gaussianizer)
+
+NegativeBinomialCopulaEstimator = gcopula_estimator_factory(
+    NegativeBinomialML, negbin_gaussianizer
+)

@@ -5,6 +5,7 @@ import torch.utils.data as td
 from torch import nn
 import torch
 
+
 class Sampler:
     def __init__(self, parameters):
         self.parameters = parameters
@@ -39,6 +40,7 @@ class CompositeSampler(Sampler):
             samples.append(sampler(self.parameters[i]).sample(loader[i]))
         return samples
 
+
 class GCopulaSampler:
     def __init__(self, parameters: dict):
         self.parameters = parameters
@@ -50,7 +52,9 @@ class GCopulaSampler:
             N = len(list(x.values())[0])
             G = self.parameters["covariance"].shape[0]
 
-            z = np.random.multivariate_normal(np.zeros(G), self.parameters["covariance"], N)
+            z = np.random.multivariate_normal(
+                np.zeros(G), self.parameters["covariance"], N
+            )
             normal_distn = norm(0, np.diag(self.parameters["covariance"] ** 0.5))
             u = normal_distn.cdf(z)
 
@@ -64,15 +68,18 @@ def gcopula_sampler_factory(inverter: Callable):
     sampler.inverter = inverter
     return sampler
 
+
 def parameter_dims(parameters: dict):
     n_output = parameters["mu"].shape[0]
     n_input = {k: v.shape[1] for k, v in parameters.items()}
     return n_output, n_input
 
+
 def nb_distn(parameters: dict, X: dict):
     f = linear_module(parameters)
     total_count, p = nb_parameters(f, X)
     return nbinom(n=total_count, p=p)
+
 
 def nb_parameters(f: nn.ModuleDict, X: dict):
     with torch.no_grad():
@@ -80,9 +87,11 @@ def nb_parameters(f: nn.ModuleDict, X: dict):
         mu = torch.exp(f["mu"](X["mu"])).numpy()
     return 1 / alpha, 1 - 1 / (1 + alpha * mu)
 
+
 def nb_inverter(parameters: dict, X: dict):
     distn = nb_distn(parameters, X)
     return lambda u: distn.ppf(u)
+
 
 def process_batch(l: Union[list, dict]):
     # ignore training response Y if provided
