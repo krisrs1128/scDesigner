@@ -31,7 +31,9 @@ class BasicDataset(td.Dataset):
 
 
 class FormulaLoader(Loader):
-    def __init__(self, data: Union[anndata.AnnData, pd.DataFrame], formula: dict, **kwargs):
+    def __init__(
+        self, data: Union[anndata.AnnData, pd.DataFrame], formula: dict, **kwargs
+    ):
         if type(data) is pd.DataFrame:
             data = anndata.AnnData(obs=data)
 
@@ -63,7 +65,11 @@ class FormulaDataset(BasicDataset):
 
 class BackedFormulaLoader(Loader):
     def __init__(
-        self, data: Union[anndata.AnnData, pd.DataFrame], formula: dict, chunk_size=int(2e4), **kwargs
+        self,
+        data: Union[anndata.AnnData, pd.DataFrame],
+        formula: dict,
+        chunk_size=int(2e4),
+        **kwargs
     ):
         if type(data) is pd.DataFrame:
             data = anndata.AnnData(obs=data)
@@ -94,17 +100,27 @@ class BackedFormulaDataset(BasicDataset):
         if ix not in self.cur_range:
             self.update_range(ix)
 
-        obs_i = {k: v.values[ix - self.cur_range[0], :].astype(np.float32) for k, v in self.obs_inmem.items()}
+        obs_i = {
+            k: v.values[ix - self.cur_range[0], :].astype(np.float32)
+            for k, v in self.obs_inmem.items()
+        }
         if self.X is not None:
             return self.data_inmem.X[ix - self.cur_range[0]], obs_i
         return obs_i
+
 
 ################################################################################
 # Dataloader when different sets of features need different formulas
 ################################################################################
 
+
 class CompositeFormulaLoader(Loader):
-    def __init__(self, data: Union[list[anndata.AnnData], pd.DataFrame], formula: list[dict], **kwargs):
+    def __init__(
+        self,
+        data: Union[list[anndata.AnnData], pd.DataFrame],
+        formula: list[dict],
+        **kwargs
+    ):
         if type(data) is pd.DataFrame:
             data = [anndata.AnnData(obs=data)] * len(formula)
 
@@ -114,13 +130,18 @@ class CompositeFormulaLoader(Loader):
             fl = FormulaLoader(data[i], f, **kwargs)
             loader.append(fl.loader)
             names.append(fl.names)
-            
+
         self.loader = loader
         self.names = names
 
 
 class BackedCompositeFormulaLoader(Loader):
-    def __init__(self, data: Union[list[anndata.AnnData], pd.DataFrame], formula: list[dict], **kwargs):
+    def __init__(
+        self,
+        data: Union[list[anndata.AnnData], pd.DataFrame],
+        formula: list[dict],
+        **kwargs
+    ):
         if type(data) is pd.DataFrame:
             data = [anndata.AnnData(obs=data)] * len(formula)
 
@@ -130,9 +151,10 @@ class BackedCompositeFormulaLoader(Loader):
             fl = BackedFormulaLoader(data[i], f, **kwargs)
             loader.append(fl.loader)
             names.append(fl.names)
-            
+
         self.loader = loader
         self.names = names
+
 
 ################################################################################
 # Helper functions

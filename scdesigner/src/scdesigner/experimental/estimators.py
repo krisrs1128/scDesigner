@@ -7,6 +7,7 @@ import torch
 import torch.optim
 import torch.utils.data as td
 
+
 class Estimator:
     def __init__(self, hyper: dict):
         self.hyper = hyper
