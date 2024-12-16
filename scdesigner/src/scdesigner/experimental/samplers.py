@@ -5,16 +5,9 @@ import torch.utils.data as td
 from torch import nn
 import torch
 
-
 class Sampler:
     def __init__(self, parameters):
         self.parameters = parameters
-
-    def process_batch(self, l: Union[list, dict]):
-        # ignore training response Y if provided
-        if type(l) is list:
-            _, l = l
-        return l
 
     def sample(loader: td.DataLoader):
         pass
@@ -23,16 +16,12 @@ class Sampler:
 class NegativeBinomialSampler(Sampler):
     def __init__(self, parameters: dict):
         super().__init__(parameters)
+        self.linear = linear_module(parameters)
 
     def sample(self, loader: td.DataLoader):
-        n_output, n_input = parameter_dims(self.parameters)
-        f = nn.ModuleDict(
-            {k: nn.Linear(n_input[k], n_output, bias=False) for k in n_input.keys()}
-        )
-
         samples = []
         for l in loader:
-            total_count, p = nb_parameters(f, self.process_batch(l))
+            total_count, p = nb_parameters(self.linear, process_batch(l))
             samples.append(nbinom(n=total_count, p=p).rvs())
         return np.concatenate(samples, axis=0)
 
@@ -63,3 +52,17 @@ def nb_parameters(f: nn.ModuleDict, X: dict):
         alpha = torch.exp(f["alpha"](X["alpha"])).numpy()
         mu = torch.exp(f["mu"](X["mu"])).numpy()
     return 1 / alpha, 1 - 1 / (1 + alpha * mu)
+
+
+def process_batch(l: Union[list, dict]):
+    # ignore training response Y if provided
+    if type(l) is list:
+        _, l = l
+    return l
+
+
+def linear_module(parameters):
+    n_output, n_input = parameter_dims(parameters)
+    return nn.ModuleDict(
+        {k: nn.Linear(n_input[k], n_output, bias=False) for k in n_input.keys()}
+    )
