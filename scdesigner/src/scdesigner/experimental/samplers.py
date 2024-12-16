@@ -1,3 +1,4 @@
+from .data import Loader, FormulaLoader
 from anndata import AnnData
 from copy import deepcopy
 from scipy.stats import nbinom, norm
@@ -66,7 +67,7 @@ class GCopulaSampler:
         return np.concatenate(samples)
 
 
-def anndata_decorator(sampler: Sampler, var_names: list, obs_names: dict):
+def anndata_sample_n(sampler: Sampler, var_names: list, obs_names: dict):
     result = deepcopy(sampler)
 
     def new_sample(loader: td.DataLoader):
@@ -84,6 +85,18 @@ def anndata_decorator(sampler: Sampler, var_names: list, obs_names: dict):
         obs = pd.concat(obs)
         obs = obs[np.unique(obs.columns)]
         return AnnData(obs=obs, X=y)
+
+    result.sample = new_sample
+    return result
+
+def anndata_sample_l(sampler: Sampler, formula: dict, loader: Loader = None):
+    if loader is None:
+        loader = FormulaLoader
+
+    result = deepcopy(sampler)
+    def new_sample(obs: pd.DataFrame):
+        dl = loader(obs, formula, batch_size=len(obs))
+        return AnnData(obs=obs, X=sampler.sample(dl.loader))
 
     result.sample = new_sample
     return result
