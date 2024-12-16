@@ -32,6 +32,21 @@ class NegativeBinomialSampler(Sampler):
             samples.append(nbinom(n=total_count, p=p).rvs())
         return np.concatenate(samples, axis=0)
 
+class CompositeSampler(Sampler):
+    def __init__(self, parameters: list[dict], sampler: Union[Sampler, list[Sampler]]):
+        super().__init__(parameters)
+        self.samplers = sampler
+
+    def sample(self, loader: list[td.DataLoader]):
+        if type(self.samplers) is not "list":
+            self.samplers = [self.samplers] * len(loader)
+
+        samples = []
+        for i, sampler in enumerate(self.samplers):
+            samples.append(sampler(self.parameters[i]).sample(loader[i]))
+        return samples
+
+
 def parameter_dims(parameters: dict):
     n_output = parameters["mu"].shape[0]
     n_input = {k: v.shape[1] for k, v in parameters.items()}
