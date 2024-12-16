@@ -1,8 +1,11 @@
+from .samplers import nb_parameters, linear_module
 from inspect import getmembers
 from lightning.pytorch.callbacks import EarlyStopping
+from scipy.stats import nbinom, norm
 from torch import nn
 from typing import Callable, Union
 import lightning as pl
+import numpy as np
 import torch
 import torch.optim
 import torch.utils.data as td
@@ -108,8 +111,47 @@ class CompositeEstimator(Estimator):
             parameters.append(estimator(self.hyper).estimate(loader[i]))
         return parameters
 
+class GaussianCopula:
+    def __init__(self, hyper: dict):
+        self.hyper = hyper
 
-def data_dims(loader):
+    def estimate(self, loader):
+        margins = self.marginal_estimator(self.hyper).estimate(loader)
+        z = self.gaussianizer.__func__(margins, loader)
+        covariance = self.covariance_fun.__func__(z)
+        return {"covariance": torch.from_numpy(covariance), "margins": margins}
+
+
+def gaussian_copula_factory(marginal_estimator, gaussianizer, covariance_fun=None):
+    if covariance_fun is None:
+        covariance_fun = np.cov
+
+    copula = GaussianCopula
+    copula.marginal_estimator = marginal_estimator
+    copula.gaussianizer = gaussianizer
+    copula.covariance_fun = covariance_fun
+    return copula
+
+
+def negbin_gaussianizer(margins: dict, loader: td.DataLoader):
+    z = []
+    f = linear_module(margins)
+    for y, x in  loader:
+        total_count, p = nb_parameters(f, x)
+        distribution = nbinom(n=total_count, p=p)
+        alpha = np.random.uniform(size=y.shape)
+        u = clip(alpha * distribution.cdf(y) + (1 - alpha) * distribution.cdf(1 + y))
+        z.append(norm().ppf(u))
+
+    return np.concatenate(z)
+
+def clip(u: np.array, min: float=1e-5, max: float=1 - 1e-5):
+    u[u < min] = min
+    u[u > max] = max
+    return u
+
+
+def data_dims(loader: td.DataLoader):
     Y, Xs = next(iter(loader))
     return Y.shape[1], {k: v.shape[1] for k, v in Xs.items()}
 
@@ -117,3 +159,5 @@ def data_dims(loader):
 def args(m, **kwargs):
     members = getmembers(m.__init__)[0][1].keys()
     return {kw: kwargs[kw] for kw in kwargs if kw in members}
+
+NegativeBinomialGCopula = gaussian_copula_factory(NegativeBinomialML, negbin_gaussianizer)
