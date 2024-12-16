@@ -1,7 +1,7 @@
 from inspect import getmembers
 from lightning.pytorch.callbacks import EarlyStopping
 from torch import nn
-from typing import Callable
+from typing import Callable, Union
 import lightning as pl
 import torch
 import torch.optim
@@ -75,7 +75,7 @@ class GeneralizedLinearModelLightning(pl.LightningModule):
 
 class NegativeBinomialML(GeneralizedLinearModelML):
     def __init__(self, hyper: dict):
-        self.hyper = hyper
+        super().__init__(hyper)
 
     def link(self, x, parameter):
         return torch.exp(x)
@@ -91,6 +91,21 @@ class NegativeBinomialML(GeneralizedLinearModelML):
             - torch.lgamma(1 + Y)
             - torch.lgamma(1 / alpha)
         ).mean()
+
+
+class CompositeEstimator(Estimator):
+    def __init__(self, estimators: Union[Estimator, list[Estimator]], hyper: dict):
+        super().__init__(hyper)
+        self.estimators = estimators
+
+    def estimate(self, loader: list[td.DataLoader]):
+        if type(self.estimators) is not "list":
+            self.estimators = [self.estimators] * len(loader)
+
+        parameters = []
+        for i, estimator in enumerate(self.estimators):
+            parameters.append(estimator(self.hyper).estimate(loader[i]))
+        return parameters
 
 
 def data_dims(loader):
