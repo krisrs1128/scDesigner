@@ -1,7 +1,7 @@
-from .samplers import nb_parameters, linear_module
+from .samplers import nb_distn, linear_module
 from inspect import getmembers
 from lightning.pytorch.callbacks import EarlyStopping
-from scipy.stats import nbinom, norm
+from scipy.stats import norm
 from torch import nn
 from typing import Callable, Union
 import lightning as pl
@@ -111,53 +111,52 @@ class CompositeEstimator(Estimator):
             parameters.append(estimator(self.hyper).estimate(loader[i]))
         return parameters
 
-class GaussianCopula:
+class GCopulaEstimator:
     def __init__(self, hyper: dict):
         self.hyper = hyper
 
-    def estimate(self, loader):
+    def estimate(self, loader: td.DataLoader):
         margins = self.marginal_estimator(self.hyper).estimate(loader)
         z = self.gaussianizer.__func__(margins, loader)
-        covariance = self.covariance_fun.__func__(z)
+        covariance = self.covariance_fun.__func__(z.T)
         return {"covariance": torch.from_numpy(covariance), "margins": margins}
 
 
-def gaussian_copula_factory(marginal_estimator, gaussianizer, covariance_fun=None):
+def gcopula_estimator_factory(marginal_estimator: Estimator, gaussianizer: Callable, covariance_fun: Callable=None) -> GCopulaEstimator:
     if covariance_fun is None:
         covariance_fun = np.cov
 
-    copula = GaussianCopula
+    copula = GCopulaEstimator
     copula.marginal_estimator = marginal_estimator
     copula.gaussianizer = gaussianizer
     copula.covariance_fun = covariance_fun
     return copula
 
 
-def negbin_gaussianizer(margins: dict, loader: td.DataLoader):
+def negbin_gaussianizer(margins: dict, loader: td.DataLoader) -> np.array:
     z = []
     f = linear_module(margins)
     for y, x in  loader:
-        total_count, p = nb_parameters(f, x)
-        distribution = nbinom(n=total_count, p=p)
+        distribution = nb_distn(margins, x)
         alpha = np.random.uniform(size=y.shape)
         u = clip(alpha * distribution.cdf(y) + (1 - alpha) * distribution.cdf(1 + y))
         z.append(norm().ppf(u))
 
     return np.concatenate(z)
 
-def clip(u: np.array, min: float=1e-5, max: float=1 - 1e-5):
+def clip(u: np.array, min: float=1e-5, max: float=1 - 1e-5) -> np.array:
     u[u < min] = min
     u[u > max] = max
     return u
 
 
-def data_dims(loader: td.DataLoader):
+def data_dims(loader: td.DataLoader) -> tuple:
     Y, Xs = next(iter(loader))
     return Y.shape[1], {k: v.shape[1] for k, v in Xs.items()}
 
 
-def args(m, **kwargs):
+def args(m: Callable, **kwargs) -> dict:
     members = getmembers(m.__init__)[0][1].keys()
     return {kw: kwargs[kw] for kw in kwargs if kw in members}
 
-NegativeBinomialGCopula = gaussian_copula_factory(NegativeBinomialML, negbin_gaussianizer)
+NegativeBinomialCopulaEstimator = gcopula_estimator_factory(NegativeBinomialML, negbin_gaussianizer)
