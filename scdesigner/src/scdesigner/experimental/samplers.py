@@ -1,9 +1,12 @@
-import numpy as np
-from typing import Union, Callable
+from anndata import AnnData
+from copy import deepcopy
 from scipy.stats import nbinom, norm
-import torch.utils.data as td
 from torch import nn
+from typing import Union, Callable
+import numpy as np
+import pandas as pd
 import torch
+import torch.utils.data as td
 
 
 class Sampler:
@@ -61,6 +64,29 @@ class GCopulaSampler:
             icdf = self.inverter.__func__(self.parameters["margins"], x)
             samples.append(icdf(u))
         return np.concatenate(samples)
+
+
+def anndata_decorator(sampler: Sampler, var_names: list, obs_names: dict):
+    result = deepcopy(sampler)
+
+    def new_sample(loader: td.DataLoader):
+        y = pd.DataFrame(sampler.sample(loader), columns=var_names)
+        obs = []
+        for l in loader:
+            l = process_batch(l)
+            batch = pd.DataFrame()
+            for k in list(l.keys()):
+                cur = pd.DataFrame(l[k], columns=obs_names[k])
+                ix = [c for c in cur.columns if c not in batch.columns]
+                batch = pd.concat([batch, cur[ix]], axis=1)
+            obs.append(batch)
+
+        obs = pd.concat(obs)
+        obs = obs[np.unique(obs.columns)]
+        return AnnData(obs=obs, X=y)
+
+    result.sample = new_sample
+    return result
 
 
 def gcopula_sampler_factory(inverter: Callable):
