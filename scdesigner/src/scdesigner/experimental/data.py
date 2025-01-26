@@ -18,11 +18,10 @@ class BasicDataset(td.Dataset):
         self.obs = obs
 
     def __len__(self):
-        v = list(self.obs.values())[0]
-        return v.shape[0]
+        return self.obs.shape[0]
 
     def __getitem__(self, i):
-        return self.X[i, :], self.obs.values[i, :].astype(np.float32)
+        return self.X[i, :], self.obs.values[i, :]
 
 
 ################################################################################
@@ -49,6 +48,10 @@ class FormulaLoader(Loader):
 class FormulaDataset(BasicDataset):
     def __init__(self, X, obs):
         super().__init__(X, obs)
+
+    def __len__(self):
+        v = list(self.obs.values())[0]
+        return v.shape[0]
 
     def __getitem__(self, i):
         obs_i = {k: v.values[i, :].astype(np.float32) for k, v in self.obs.items()}
