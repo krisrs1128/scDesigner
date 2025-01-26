@@ -6,6 +6,7 @@ from torch import nn
 from typing import Callable, Union
 import lightning as pl
 import numpy as np
+import scipy.sparse
 import torch
 import torch.optim
 import torch.utils.data as td
@@ -122,6 +123,18 @@ class GCopulaEstimator:
         covariance = self.covariance_fun.__func__(z.T)
         return {"covariance": torch.from_numpy(covariance), "margins": margins}
 
+class MementoEstimator(Estimator):
+    def __init__(self, q: float = 1):
+        self.q = q
+
+    def estimate(self, 
+                 X: Union[np.array, scipy.sparse._csc.csc_matrix, 
+                          scipy.sparse._csr.csr_matrix]
+        ) -> dict:
+        mu = np.array(X.mean(axis=0)) / (X.shape[0] * self.q)
+        cell_totals = np.array(X.sum(axis=1))
+        sigma = memento_sigma(X, mu, cell_totals, self.q)
+        return {"covariance": sigma, "mean": mu}
 
 def gcopula_estimator_factory(
     marginal_estimator: Estimator,
@@ -169,3 +182,18 @@ def args(m: Callable, **kwargs) -> dict:
 NegativeBinomialCopulaEstimator = gcopula_estimator_factory(
     NegativeBinomialML, negbin_gaussianizer
 )
+
+def memento_sigma(Y, mu, cell_totals, q=1):
+    n_cells, n_genes = Y.shape
+    cell_totals_ = np.repeat(cell_totals, n_genes, axis=1)
+    mu_ = np.repeat(mu, n_cells, axis=0)
+    sigma_diag = (Y.power(2) - Y * (1 - q)) / ((cell_totals_ * q) ** 2) - mu_ ** 2
+    return sigma_diag.mean(axis=0).flatten()
+
+def memento_covariance(Y, cell_totals, mu, sigma_diag, q=1):
+    n_cells = Y.shape[0]
+    cell_totals_inv_sq = scipy.sparse.diags((cell_totals.flatten() * q) ** -2)
+    sigma = Y.T @ cell_totals_inv_sq @ Y - mu @ mu.T
+    sigma /= n_cells
+    np.fill_diagonal(sigma, sigma_diag)
+    return sigma
