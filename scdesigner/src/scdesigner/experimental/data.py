@@ -28,7 +28,6 @@ class BasicDataset(td.Dataset):
 # Dataloader when there are different predictors across formula terms
 ################################################################################
 
-
 class FormulaLoader(Loader):
     def __init__(
         self, data: Union[anndata.AnnData, pd.DataFrame], formula: dict, **kwargs
@@ -58,6 +57,81 @@ class FormulaDataset(BasicDataset):
         if self.X is not None:
             return self.X[i, :], obs_i
         return obs_i
+
+################################################################################
+# Data loader when we want to track a "group" term outside of the main design
+# matrix. This is mainly useful for mixed effects models, where group is the
+# one-hot-encoded matrix for random effects.
+################################################################################
+
+class FormulaWithGroupsLoader(Loader):
+    def __init__(
+        self, data: Union[anndata.AnnData, pd.DataFrame], formula: str, group: str, **kwargs
+    ):
+        if type(data) is pd.DataFrame:
+            data = anndata.AnnData(obs=data)
+        if "sparse" in str(type(data.X)):
+            data.X = data.X.toarray().astype(np.float32)
+
+        obs = model_matrix(formula, data.obs)
+        groups = model_matrix(f"""-1 + {group}""", data.obs)
+        ds = FormulaWithGroupsDataset(data.X, obs, groups)
+        self.loader = td.DataLoader(ds, **kwargs)
+        self.names = list(data.var_names), obs.columns
+
+class FormulaWithGroupsDataset(BasicDataset):
+    def __init__(self, X, obs, groups):
+        super().__init__(X, obs)
+        self.groups = groups
+
+    def __len__(self):
+        return self.obs.shape[0]
+
+    def __getitem__(self, i):
+        obs_i = self.obs.values[i, :].astype(np.float32)
+        groups_i = self.groups.values[i, :].astype(np.float32)
+        if self.X is not None:
+            return self.X[i, :], obs_i, groups_i
+        return obs_i, groups_i
+
+
+################################################################################
+# A version of the formula-groups that accomodates different formulas for each
+# parameter. This is helpsful when we want to use different relationships for
+# the mean and variance, for example.
+################################################################################
+
+class MultiFormulaWithGroupsLoader(Loader):
+    def __init__(
+        self, data: Union[anndata.AnnData, pd.DataFrame], formula: dict, group: str, **kwargs
+    ):
+        if type(data) is pd.DataFrame:
+            data = anndata.AnnData(obs=data)
+        if "sparse" in str(type(data.X)):
+            data.X = data.X.toarray().astype(np.float32)
+
+        obs = model_matrix_dict(formula, data.obs)
+        groups = model_matrix(f"""-1 + {group}""", data.obs)
+        ds = MultiFormulaWithGroupsDataset(data.X, obs, groups)
+        self.loader = td.DataLoader(ds, **kwargs)
+        self.names = list(data.var_names), {k: list(v.columns) for k, v in obs.items()}
+
+
+class MultiFormulaWithGroupsDataset(BasicDataset):
+    def __init__(self, X, obs, groups):
+        super().__init__(X, obs)
+        self.groups = groups
+
+    def __len__(self):
+        v = list(self.obs.values())[0]
+        return v.shape[0]
+
+    def __getitem__(self, i):
+        obs_i = {k: v.values[i, :].astype(np.float32) for k, v in self.obs.items()}
+        groups_i = self.groups.values[i, :].astype(np.int32)
+        if self.X is not None:
+            return self.X[i, :], obs_i, groups_i
+        return obs_i, groups_i
 
 ################################################################################
 # Read chunks in memory when there are multiple `obs` needed for different

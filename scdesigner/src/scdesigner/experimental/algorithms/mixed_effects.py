@@ -4,6 +4,16 @@ import numpy as np
 from ..estimators import Estimator
 
 class LinearMixedEffectsEstimator(Estimator):
+    """
+    Example
+    -------
+    # example_sce is the data from https://go.wisc.edu/69435h
+    # can create it using example_sce = anndata.read_h5ad(downloaded_data_path)
+
+    loader = FormulaWithGroupsLoader(example_sce, "~ pseudotime", "cell_type", batch_size=10)
+    lme = LinearMixedEffectsEstimator()
+    lme.estimate(loader.loader)
+    """
     def __init__(self, lr: float = 0.01, max_iter: int=1000, init_sigma_b: torch.Tensor=None, init_sigma_e: torch.Tensor=None):
         self.lr = lr
         self.max_iter = max_iter
@@ -26,17 +36,9 @@ def initialize_lme(n_predictors, n_responses, init_sigma_b, init_sigma_e):
 
 
 def linear_mixed_effects(data_loader, init_sigma_b=None, init_sigma_e=None, lr=0.01, max_iter=1000):
-    for X, Y, groups in data_loader:
+    for Y, X, Z in data_loader:
         n_samples, n_predictors = X.shape
         n_responses = Y.shape[1]
-        unique_groups = torch.unique(groups)
-        n_groups = len(unique_groups)
-        
-        # Create group indicator matrix Z
-        Z = torch.zeros((n_samples, n_groups), dtype=torch.float32)
-        for i, group in enumerate(groups):
-            group_idx = (unique_groups == group).nonzero(as_tuple=True)[0][0]
-            Z[i, group_idx] = 1
         
         # Optimization
         init_params = initialize_lme(n_predictors, n_responses, init_sigma_b, init_sigma_e)
