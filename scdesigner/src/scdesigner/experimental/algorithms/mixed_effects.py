@@ -121,6 +121,7 @@ class PoissonMixedEffectsEstimator(Estimator):
     pme = PoissonMixedEffectsEstimator()
     pme.estimate(loader.loader)
     """
+
     def __init__(
         self, lr: float = 0.01, max_iter: int = 1000, init_sigma_b: torch.Tensor = None
     ):
@@ -192,7 +193,9 @@ def poisson_mixed_effects(data_loader, init_sigma_b=1.0, lr=0.01, max_iter=1000)
         optimized_params = init_params.detach()
         beta_start = 0
         beta_end = n_predictors * n_responses
-        beta = optimized_params[beta_start:beta_end].reshape((n_predictors, n_responses))
+        beta = optimized_params[beta_start:beta_end].reshape(
+            (n_predictors, n_responses)
+        )
 
         b_start = beta_end + n_responses
         b = optimized_params[b_start:].reshape((n_groups, n_responses))
