@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 import torch.utils.data as td
 
+
 class Loader:
     def __init__(self, data):
         self.loader = None
@@ -27,6 +28,7 @@ class BasicDataset(td.Dataset):
 ################################################################################
 # Dataloader when there are different predictors across formula terms
 ################################################################################
+
 
 class FormulaLoader(Loader):
     def __init__(
@@ -58,15 +60,21 @@ class FormulaDataset(BasicDataset):
             return self.X[i, :], obs_i
         return obs_i
 
+
 ################################################################################
 # Data loader when we want to track a "group" term outside of the main design
 # matrix. This is mainly useful for mixed effects models, where group is the
 # one-hot-encoded matrix for random effects.
 ################################################################################
 
+
 class FormulaWithGroupsLoader(Loader):
     def __init__(
-        self, data: Union[anndata.AnnData, pd.DataFrame], formula: str, group: str, **kwargs
+        self,
+        data: Union[anndata.AnnData, pd.DataFrame],
+        formula: str,
+        group: str,
+        **kwargs,
     ):
         if type(data) is pd.DataFrame:
             data = anndata.AnnData(obs=data)
@@ -78,6 +86,7 @@ class FormulaWithGroupsLoader(Loader):
         ds = FormulaWithGroupsDataset(data.X, obs, groups)
         self.loader = td.DataLoader(ds, **kwargs)
         self.names = list(data.var_names), obs.columns
+
 
 class FormulaWithGroupsDataset(BasicDataset):
     def __init__(self, X, obs, groups):
@@ -101,9 +110,14 @@ class FormulaWithGroupsDataset(BasicDataset):
 # the mean and variance, for example.
 ################################################################################
 
+
 class MultiFormulaWithGroupsLoader(Loader):
     def __init__(
-        self, data: Union[anndata.AnnData, pd.DataFrame], formula: dict, group: str, **kwargs
+        self,
+        data: Union[anndata.AnnData, pd.DataFrame],
+        formula: dict,
+        group: str,
+        **kwargs,
     ):
         if type(data) is pd.DataFrame:
             data = anndata.AnnData(obs=data)
@@ -133,6 +147,7 @@ class MultiFormulaWithGroupsDataset(BasicDataset):
             return self.X[i, :], obs_i, groups_i
         return obs_i, groups_i
 
+
 ################################################################################
 # Read chunks in memory when there are multiple `obs` needed for different
 # formula elements
@@ -145,7 +160,7 @@ class BackedFormulaLoader(Loader):
         data: Union[anndata.AnnData, pd.DataFrame],
         formula: dict,
         chunk_size=int(2e4),
-        **kwargs
+        **kwargs,
     ):
         if type(data) is pd.DataFrame:
             data = anndata.AnnData(obs=data)
@@ -195,7 +210,7 @@ class CompositeFormulaLoader(Loader):
         self,
         data: Union[list[anndata.AnnData], pd.DataFrame],
         formula: list[dict],
-        **kwargs
+        **kwargs,
     ):
         if type(data) is pd.DataFrame:
             data = [anndata.AnnData(obs=data)] * len(formula)
@@ -216,7 +231,7 @@ class BackedCompositeFormulaLoader(Loader):
         self,
         data: Union[list[anndata.AnnData], pd.DataFrame],
         formula: list[dict],
-        **kwargs
+        **kwargs,
     ):
         if type(data) is pd.DataFrame:
             data = [anndata.AnnData(obs=data)] * len(formula)
@@ -231,18 +246,20 @@ class BackedCompositeFormulaLoader(Loader):
         self.loader = loader
         self.names = names
 
+
 ################################################################################
 # Data for when the .X matrix is a sparse matrix
 ################################################################################
 
+
 class SparseMatrixLoader(Loader):
-    def __init__(self, adata: anndata.AnnData, batch_size: int=None):
+    def __init__(self, adata: anndata.AnnData, batch_size: int = None):
         ds = SparseMatrixDataset(adata, batch_size)
         self.loader = td.DataLoader(ds, batch_size=None)
 
 
 class SparseMatrixDataset(td.IterableDataset):
-    def __init__(self, anndata: anndata.AnnData, batch_size: int=None):
+    def __init__(self, anndata: anndata.AnnData, batch_size: int = None):
         self.n_rows = anndata.X.shape[0]
         if batch_size is None:
             batch_size = self.n_rows
@@ -262,7 +279,7 @@ class SparseMatrixDataset(td.IterableDataset):
             batch_sparse_tensor = torch.sparse_coo_tensor(
                 torch.tensor([batch_indices_rows, batch_indices_cols]),
                 torch.tensor(batch_values, dtype=torch.float32),
-                (len(batch_indices), self.sparse_matrix.shape[1])
+                (len(batch_indices), self.sparse_matrix.shape[1]),
             ).to_sparse_csr()
 
             yield batch_sparse_tensor
