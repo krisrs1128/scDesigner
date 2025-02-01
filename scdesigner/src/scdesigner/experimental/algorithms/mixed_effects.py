@@ -138,13 +138,16 @@ def poisson_mixed_effects_loglik(params, X, Y, Z):
     n_groups = Z.shape[1]
 
     # extract parameters by group
-    beta = params[: n_predictors * n_responses].reshape((n_predictors, n_responses))
-    sigma_b = torch.exp(
-        params[n_predictors * n_responses : n_predictors * n_responses + n_responses]
-    )
-    b = params[n_predictors * n_responses + n_responses :].reshape(
-        (n_groups, n_responses)
-    )
+    beta_start = 0
+    beta_end = n_predictors * n_responses
+    beta = params[beta_start:beta_end].reshape((n_predictors, n_responses))
+
+    sigma_b_start = beta_end
+    sigma_b_end = sigma_b_start + n_responses
+    sigma_b = torch.exp(params[sigma_b_start:sigma_b_end])
+
+    b_start = sigma_b_end
+    b = params[b_start:].reshape((n_groups, n_responses))
 
     # compute log likelihood
     eta = X @ beta + Z @ b
