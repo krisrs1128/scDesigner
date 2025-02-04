@@ -1,4 +1,4 @@
-from .data import Loader, FormulaLoader
+from ..data import Loader, FormulaLoader
 from anndata import AnnData
 from copy import deepcopy
 from scipy.stats import nbinom, norm
