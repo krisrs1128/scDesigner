@@ -1,7 +1,7 @@
 import torch
 import torch.utils.data as td
 import numpy as np
-from ..estimators import Estimator
+from .estimators import Estimator
 from tqdm import tqdm
 
 
