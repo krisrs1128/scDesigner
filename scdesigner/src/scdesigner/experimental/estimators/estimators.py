@@ -1,4 +1,4 @@
-from ..samplers import nb_distn, linear_module
+from ..samplers.samplers import nb_distn, linear_module
 from inspect import getmembers
 from lightning.pytorch.callbacks import EarlyStopping
 from scipy.stats import norm

@@ -30,7 +30,7 @@ class LinearMixedEffectsEstimator(Estimator):
         self.init_sigma_e = init_sigma_e
 
     def estimate(self, loader: td.DataLoader) -> dict:
-        return linear_mixed_effects(
+        return lme_estimate(
             loader, self.init_sigma_b, self.init_sigma_e, self.lr, self.max_iter
         )
 
