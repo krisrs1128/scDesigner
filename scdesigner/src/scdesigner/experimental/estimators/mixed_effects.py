@@ -48,65 +48,46 @@ def initialize_lme(n_predictors, n_responses, init_sigma_b, init_sigma_e):
     return init_params.requires_grad_(True)
 
 
-def linear_mixed_effects(
-    data_loader, init_sigma_b=None, init_sigma_e=None, lr=0.01, max_iter=1000
-):
+def lme_estimate(data_loader, init_sb=None, init_se=None, lr=0.01, max_iter=1000):
     for Y, X, Z in data_loader:
-        n_samples, n_predictors = X.shape
-        n_responses = Y.shape[1]
+        n_samples, n_preds = X.shape
+        n_resps = Y.shape[1]
 
         # Optimization
-        init_params = initialize_lme(
-            n_predictors, n_responses, init_sigma_b, init_sigma_e
-        )
+        init_params = initialize_lme(n_preds, n_resps, init_sb, init_se)
         optimizer = torch.optim.Adam([init_params], lr=lr)
 
         for _ in range(max_iter):
             optimizer.zero_grad()
-            beta = init_params[: n_predictors * n_responses].reshape(
-                (n_predictors, n_responses)
-            )
-            sigma_b = torch.exp(
-                init_params[
-                    n_predictors * n_responses : n_predictors * n_responses
-                    + n_responses
-                ]
-            )
-            sigma_e = torch.exp(init_params[n_predictors * n_responses + n_responses :])
+            beta = init_params[: n_preds * n_resps].reshape((n_preds, n_resps))
+            sb = torch.exp(init_params[n_preds * n_resps : n_preds * n_resps + n_resps])
+            se = torch.exp(init_params[n_preds * n_resps + n_resps :])
 
             V = torch.stack(
                 [
-                    sigma_e[i] ** 2 * torch.eye(n_samples) + sigma_b[i] ** 2 * Z @ Z.T
-                    for i in range(n_responses)
+                    se[i] ** 2 * torch.eye(n_samples) + sb[i] ** 2 * Z @ Z.T
+                    for i in range(n_resps)
                 ]
             )
-            V_inv = torch.stack([torch.inverse(V[i]) for i in range(n_responses)])
-            log_likelihood = -0.5 * sum(
+            V_inv = torch.stack([torch.inverse(V[i]) for i in range(n_resps)])
+            log_lik = -0.5 * sum(
                 n_samples * np.log(2 * np.pi)
                 + torch.logdet(V[i])
                 + (Y[:, i] - X @ beta[:, i]).T @ V_inv[i] @ (Y[:, i] - X @ beta[:, i])
-                for i in range(n_responses)
+                for i in range(n_resps)
             )
-            loss = -log_likelihood
+            loss = -log_lik
             loss.backward()
             optimizer.step()
 
-        optimized_params = init_params.detach()
-        beta = optimized_params[: n_predictors * n_responses].reshape(
-            (n_predictors, n_responses)
-        )
-        sigma_b = torch.exp(
-            optimized_params[
-                n_predictors * n_responses : n_predictors * n_responses + n_responses
-            ]
-        )
-        sigma_e = torch.exp(
-            optimized_params[n_predictors * n_responses + n_responses :]
-        )
+        opt_params = init_params.detach()
+        beta = opt_params[: n_preds * n_resps].reshape((n_preds, n_resps))
+        sb = torch.exp(opt_params[n_preds * n_resps : n_preds * n_resps + n_resps])
+        se = torch.exp(opt_params[n_preds * n_resps + n_resps :])
         return {
             "beta": beta.numpy(),
-            "sigma_b": sigma_b.numpy(),
-            "sigma_e": sigma_e.numpy(),
+            "sigma_b": sb.numpy(),
+            "sigma_e": se.numpy(),
         }
 
 
