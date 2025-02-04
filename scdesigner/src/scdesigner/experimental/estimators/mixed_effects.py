@@ -53,7 +53,7 @@ def lme_estimate(data_loader, init_sb=None, init_se=None, lr=0.01, max_iter=1000
         n_samples, n_preds = X.shape
         n_resps = Y.shape[1]
 
-        # Optimization
+        # initialize optimizers, marginalize b, and run maximum likelihood
         init_params = initialize_lme(n_preds, n_resps, init_sb, init_se)
         optimizer = torch.optim.Adam([init_params], lr=lr)
 
@@ -80,6 +80,7 @@ def lme_estimate(data_loader, init_sb=None, init_se=None, lr=0.01, max_iter=1000
             loss.backward()
             optimizer.step()
 
+        # postprocess estimated parameters
         opt_params = init_params.detach()
         beta = opt_params[: n_preds * n_resps].reshape((n_preds, n_resps))
         sb = torch.exp(opt_params[n_preds * n_resps : n_preds * n_resps + n_resps])

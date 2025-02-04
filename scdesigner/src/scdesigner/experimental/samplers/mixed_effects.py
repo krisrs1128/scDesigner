@@ -18,7 +18,7 @@ class LinearMixedEffectsSampler(Sampler):
     def __init__(self, parameters: dict):
         super().__init__(parameters)
 
-    def sample(self, loader: td.DataLoader):
+    def sample(self, loader: td.DataLoader) -> np.array:
         beta = self.parameters["beta"]
         sigma_e = self.parameters["sigma_e"]
         sigma_b = self.parameters["sigma_b"]
@@ -50,7 +50,7 @@ class PoissonMixedEffectsSampler(Sampler):
     def __init__(self, parameters: dict):
         super().__init__(parameters)
 
-    def sample(self, loader: td.DataLoader):
+    def sample(self, loader: td.DataLoader) -> np.array:
         beta = self.parameters["beta"]
         b = self.parameters["b"]
 
