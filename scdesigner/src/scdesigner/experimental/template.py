@@ -6,8 +6,9 @@ from typing import Union
 class Simulator:
     def __init__(self, data: Union[anndata.AnnData, muon.MuData], **kwargs):
         self.data = data
+        self.parameters = None
 
-    def fit(self, **kwargs) -> dict:
+    def fit(self, **kwargs) -> None:
         raise NotImplementedError("'fit' is not yet implemented for this simulator.")
 
     def sample(self, **kwargs) -> Union[anndata.AnnData, muon.MuData]:
