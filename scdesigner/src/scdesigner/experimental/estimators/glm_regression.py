@@ -1,8 +1,11 @@
-import torch
-import numpy as np
-from torch.utils.data import DataLoader, TensorDataset
-from scipy.stats import nbinom, norm
 from . import docstrings as ds
+from anndata import AnnData
+from formulaic import Formula, model_matrix
+from scipy.stats import nbinom, norm
+from torch.utils.data import DataLoader, TensorDataset
+import numpy as np
+import pandas as pd
+import torch
 
 def negative_binomial_regression_likelihood(params, X, y):
     n_features = X.shape[1]
@@ -24,9 +27,8 @@ def negative_binomial_regression_likelihood(params, X, y):
     )
     return -torch.sum(log_likelihood)
 
-
 @ds.doc(ds.negative_binomial_regression)
-def negative_binomial_regression(
+def negative_binomial_regression_array(
     x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 100
 ) -> dict:
     dataset = TensorDataset(
@@ -48,16 +50,16 @@ def negative_binomial_regression(
     b_elem = n_features * n_outcomes
     beta = params[:b_elem].detach().numpy().reshape(n_features, n_outcomes)
     dispersion = np.exp(params[b_elem:].detach().numpy())
-    return {"beta": beta, "dispersion": dispersion}
+    return {"coefficient": beta, "dispersion": dispersion}
 
 
 @ds.doc(ds.negative_binomial_copula)
-def negative_binomial_copula(
+def negative_binomial_copula_array(
     x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 100
 ) -> dict:
     # get predicted mean and dispersions
-    parameters = negative_binomial_regression(x, y, batch_size, lr, epochs)
-    r, mu = np.exp(parameters["dispersion"]), np.exp(x @ parameters["beta"])
+    parameters = negative_binomial_regression_array(x, y, batch_size, lr, epochs)
+    r, mu = np.exp(parameters["dispersion"]), np.exp(x @ parameters["coefficient"])
     nb_distn = nbinom(n=r, p=r / (r + mu))
 
     # gaussianize and estimate covariance
@@ -71,3 +73,34 @@ def clip(u: np.array, min: float = 1e-5, max: float = 1 - 1e-5) -> np.array:
     u[u < min] = min
     u[u > max] = max
     return u
+
+def format_nb_parameters(parameters: dict, var_names: list, coef_index: list) -> dict:
+    parameters["coefficient"] = pd.DataFrame(
+        parameters["coefficient"],
+        columns=var_names,
+        index=coef_index
+    )
+    parameters["dispersion"] = pd.DataFrame(
+        parameters["dispersion"],
+        columns=["dispersion"],
+        index=var_names
+    )
+    return parameters
+
+def negative_binomial_regression(adata: AnnData, formula: str, **kwargs) -> dict:
+    x = model_matrix(formula, adata.obs)
+    y = adata.X.todense()
+    parameters = negative_binomial_regression_array(np.array(x), y, **kwargs)
+    return format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
+
+def negative_binomial_copula(adata: AnnData, formula: str, **kwargs) -> dict:
+    x = model_matrix(formula, adata.obs)
+    y = adata.X.todense()
+    parameters = negative_binomial_copula_array(np.array(x), y, **kwargs)
+    parameters = format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
+    parameters["covariance"] = pd.DataFrame(
+        parameters["covariance"],
+        columns=list(adata.var_names),
+        index=list(adata.var_names)
+    )
+    return parameters
