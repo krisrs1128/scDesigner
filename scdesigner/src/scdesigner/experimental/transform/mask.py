@@ -8,7 +8,8 @@ def str_match(string: str, string_list: list) -> bool:
             return True
     return False
 
-def data_frame_mask(df, row_pattern=".", col_pattern=".")->np.array:
+
+def data_frame_mask(df, row_pattern=".", col_pattern=".") -> np.array:
     mask = np.zeros(df.shape, dtype=bool)
     if isinstance(col_pattern, str):
         col_pattern = [col_pattern]
