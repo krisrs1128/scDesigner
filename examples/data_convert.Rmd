@@ -5,7 +5,12 @@ title: Prepare Data
 ```{r}
 library(zellkonverter)
 SCGEMMETH_sce <- readRDS((url("https://figshare.com/ndownloader/files/40581998")))
-SCGEMRNA_sce <-readRDS((url("https://figshare.com/ndownloader/files/40582001")))
+SCGEMRNA_sce <- readRDS((url("https://figshare.com/ndownloader/files/40582001")))
 writeH5AD(SCGEMMETH_sce, "multiomic_methylation.h5ad")
 writeH5AD(SCGEMRNA_sce, "multiomic_rna.h5ad")
+```
+
+```{r}
+example_sce <- readRDS((url("https://figshare.com/ndownloader/files/40581977")))
+writeH5AD(example_sce, "ifnb.h5ad")
 ```
