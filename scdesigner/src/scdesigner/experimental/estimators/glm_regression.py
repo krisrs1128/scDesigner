@@ -1,4 +1,3 @@
-from . import docstrings as ds
 from anndata import AnnData
 from formulaic import model_matrix
 from scipy.stats import nbinom, norm
@@ -41,10 +40,23 @@ def to_np(x):
     return x.detach().cpu().numpy()
 
 
-@ds.doc(ds.negative_binomial_regression)
 def negative_binomial_regression_array(
     x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 100
 ) -> dict:
+    """
+    A minimal NB regression model
+
+    # simulate data
+    n_samples, n_features, n_outcomes = 1000, 2, 4
+    x_sim = np.random.normal(size=(n_samples, n_features))
+    beta_sim = np.random.normal(size=(n_features, n_outcomes))
+    mu_sim = np.exp(x_sim @ beta_sim)
+    r_sim = np.random.uniform(.5, 1.5, n_outcomes)
+    y_sim = np.random.negative_binomial(r_sim, r_sim / (r_sim + mu_sim))
+
+    # estimate model
+    negative_binomial_regression(x_sim, y_sim)
+    """
 
     device = check_device()
     dataset = TensorDataset(
@@ -71,10 +83,24 @@ def negative_binomial_regression_array(
     dispersion = np.exp(to_np(params[b_elem:]))
     return {"coefficient": beta, "dispersion": dispersion}
 
-@ds.doc(ds.negative_binomial_copula)
 def negative_binomial_copula_array(
     x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 100
 ) -> dict:
+    """
+    A minimal NB copula model
+
+    # simulate data
+    n_samples, n_features, n_outcomes = 1000, 2, 4
+    x_sim = np.random.normal(size=(n_samples, n_features))
+    beta_sim = np.random.normal(size=(n_features, n_outcomes))
+    mu_sim = np.exp(x_sim @ beta_sim)
+    r_sim = np.random.uniform(.5, 1.5, n_outcomes)
+    y_sim = np.random.negative_binomial(r_sim, r_sim / (r_sim + mu_sim))
+    y_sim[:, 1] = y_sim[:, 0]
+
+    # estimate model
+    negative_binomial_copula(x_sim, y_sim)
+    """
     # get predicted mean and dispersions
     parameters = negative_binomial_regression_array(x, y, batch_size, lr, epochs)
     r, mu = np.exp(parameters["dispersion"]), np.exp(x @ parameters["coefficient"])
