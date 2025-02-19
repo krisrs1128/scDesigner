@@ -1,6 +1,8 @@
 from anndata import AnnData
+from copy import deepcopy
 from formulaic import model_matrix
 from scipy.stats import nbinom, norm
+import scipy.sparse
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import pandas as pd
@@ -41,7 +43,7 @@ def to_np(x):
 
 
 def negative_binomial_regression_array(
-    x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 100
+    x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 20
 ) -> dict:
     """
     A minimal NB regression model
@@ -83,8 +85,9 @@ def negative_binomial_regression_array(
     dispersion = np.exp(to_np(params[b_elem:]))
     return {"coefficient": beta, "dispersion": dispersion}
 
+
 def negative_binomial_copula_array(
-    x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 100
+    x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 20
 ) -> dict:
     """
     A minimal NB copula model
@@ -119,33 +122,45 @@ def clip(u: np.array, min: float = 1e-5, max: float = 1 - 1e-5) -> np.array:
     return u
 
 
+def negative_binomial_regression(adata: AnnData, formula: str, **kwargs) -> dict:
+    adata = format_input_anndata(adata)
+    x = model_matrix(formula, adata.obs)
+    parameters = negative_binomial_regression_array(np.array(x), adata.X, **kwargs)
+    return format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
+
+
+def negative_binomial_copula(adata: AnnData, formula: str, **kwargs) -> dict:
+    adata = format_input_anndata(adata)
+    x = model_matrix(formula, adata.obs)
+
+    parameters = negative_binomial_copula_array(np.array(x), adata.X, **kwargs)
+    parameters = format_nb_parameters(
+        parameters, list(adata.var_names), list(x.columns)
+    )
+
+    parameters["covariance"] = pd.DataFrame(
+        parameters["covariance"],
+        columns=list(adata.var_names),
+        index=list(adata.var_names),
+    )
+    return parameters
+
+###############################################################################
+## Helpers for transforming input and output data
+###############################################################################
+
+def format_input_anndata(adata: AnnData)->AnnData:
+    result = adata.copy()
+    if isinstance(result.X, scipy.sparse._csc.csc_matrix):
+        result.X = result.X.todense()
+    return result
+
+
 def format_nb_parameters(parameters: dict, var_names: list, coef_index: list) -> dict:
     parameters["coefficient"] = pd.DataFrame(
         parameters["coefficient"], columns=var_names, index=coef_index
     )
     parameters["dispersion"] = pd.DataFrame(
         parameters["dispersion"].reshape(1, -1), columns=var_names, index=["dispersion"]
-    )
-    return parameters
-
-
-def negative_binomial_regression(adata: AnnData, formula: str, **kwargs) -> dict:
-    x = model_matrix(formula, adata.obs)
-    y = adata.X.todense()
-    parameters = negative_binomial_regression_array(np.array(x), y, **kwargs)
-    return format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
-
-
-def negative_binomial_copula(adata: AnnData, formula: str, **kwargs) -> dict:
-    x = model_matrix(formula, adata.obs)
-    y = adata.X.todense()
-    parameters = negative_binomial_copula_array(np.array(x), y, **kwargs)
-    parameters = format_nb_parameters(
-        parameters, list(adata.var_names), list(x.columns)
-    )
-    parameters["covariance"] = pd.DataFrame(
-        parameters["covariance"],
-        columns=list(adata.var_names),
-        index=list(adata.var_names),
     )
     return parameters
