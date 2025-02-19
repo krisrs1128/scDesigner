@@ -71,7 +71,6 @@ def negative_binomial_regression_array(
     dispersion = np.exp(to_np(params[b_elem:]))
     return {"coefficient": beta, "dispersion": dispersion}
 
-
 @ds.doc(ds.negative_binomial_copula)
 def negative_binomial_copula_array(
     x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 100
@@ -99,7 +98,7 @@ def format_nb_parameters(parameters: dict, var_names: list, coef_index: list) ->
         parameters["coefficient"], columns=var_names, index=coef_index
     )
     parameters["dispersion"] = pd.DataFrame(
-        parameters["dispersion"], columns=["dispersion"], index=var_names
+        parameters["dispersion"].reshape(1, -1), columns=var_names, index=["dispersion"]
     )
     return parameters
 

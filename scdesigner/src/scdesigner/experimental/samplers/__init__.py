@@ -1,5 +1,6 @@
 from .samplers import NegativeBinomialCopulaSampler, NegativeBinomialSampler, Sampler, GCopulaSampler
 from .mixed_effects import LinearMixedEffectsSampler, PoissonMixedEffectsSampler
+from .glm_regression import negative_binomial_regression_sample_array, negative_binomial_regression_sample, negative_binomial_copula_sample_array, negative_binomial_copula_sample
 
 __all__ = [
     "NegativeBinomialCopulaSampler",
@@ -7,5 +8,9 @@ __all__ = [
     "Sampler",
     "GCopulaSampler",
     "LinearMixedEffectsSampler",
-    "PoissonMixedEffectsSampler"
+    "PoissonMixedEffectsSampler",
+    "negative_binomial_regression_sample_array",
+    "negative_binomial_regression_sample",
+    "negative_binomial_copula_sample_array",
+    "negative_binomial_copula_sample"
 ]
