@@ -3,13 +3,16 @@ import numpy as np
 import pandas as pd
 import altair as alt
 
-def plot_umap(adata, color=None, shape=None, opacity=0.6, **kwargs):
+def plot_umap(adata, color=None, shape=None, facet=None, opacity=0.6, n_comps=20, n_neighbors=15, **kwargs):
     mapping = {"x": "UMAP1", "y": "UMAP2", "color": color, "shape": shape}
     mapping = {k: v for k, v in mapping.items() if v is not None}
 
     adata_ = adata.copy()
     adata_.X = np.log1p(adata_.X)
-    sc.pp.neighbors(adata_)
+
+    # umap on the top PCA dimensions
+    sc.pp.pca(adata_, n_comps=n_comps)
+    sc.pp.neighbors(adata_, n_neighbors=n_neighbors, n_pcs=n_comps)
     sc.tl.umap(adata_, **kwargs)
 
     # get umap embeddings
@@ -17,4 +20,7 @@ def plot_umap(adata, color=None, shape=None, opacity=0.6, **kwargs):
     umap_df = pd.concat([umap_df, adata_.obs.reset_index(drop=True)], axis=1)
 
     # encode and visualize
-    return alt.Chart(umap_df).mark_point(opacity=opacity).encode(**mapping)
+    chart = alt.Chart(umap_df).mark_point(opacity=opacity).encode(**mapping)
+    if facet is not None:
+        chart = chart.facet(column=alt.Facet(facet))
+    return chart
