@@ -27,8 +27,9 @@ def negative_binomial_regression_sample(
     result.var_names = parameters["dispersion"].columns
     return result
 
+
 def negative_binomial_copula_sample_array(
-        parameters: dict, x: np.array, groups: dict
+    parameters: dict, x: np.array, groups: dict
 ) -> np.array:
     # initialize uniformized gaussian samples
     G = parameters["coefficient"].shape[1]
@@ -39,7 +40,9 @@ def negative_binomial_copula_sample_array(
         if type(parameters["covariance"]) is not dict:
             parameters["covariance"] = {group: parameters["covariance"]}
 
-        z = np.random.multivariate_normal(mean=np.zeros(G), cov=parameters["covariance"][group], size=len(ix))
+        z = np.random.multivariate_normal(
+            mean=np.zeros(G), cov=parameters["covariance"][group], size=len(ix)
+        )
         normal_distn = norm(0, np.diag(parameters["covariance"][group] ** 0.5))
         u[ix] = normal_distn.cdf(z)
 
@@ -48,8 +51,9 @@ def negative_binomial_copula_sample_array(
     r = np.repeat(r, mu.shape[0], axis=0)
     return nbinom(n=r, p=r / (r + mu)).ppf(u)
 
+
 def negative_binomial_copula_sample(
-        parameters: dict, obs: pd.DataFrame, formula="~ 1", formula_copula="~ 1"
+    parameters: dict, obs: pd.DataFrame, formula="~ 1", formula_copula="~ 1"
 ) -> ad.AnnData:
     x = model_matrix(formula, obs)
     groups = group_indices(formula_copula, obs)

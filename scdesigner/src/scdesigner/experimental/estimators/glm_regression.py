@@ -87,8 +87,12 @@ def negative_binomial_regression_array(
 
 
 def negative_binomial_copula_array(
-    x: np.array, y: np.array, groups: dict, batch_size: int = 512, 
-    lr: float = 0.1, epochs: int = 20,
+    x: np.array,
+    y: np.array,
+    groups: dict,
+    batch_size: int = 512,
+    lr: float = 0.1,
+    epochs: int = 20,
 ) -> dict:
     """
     A minimal NB copula model
@@ -121,7 +125,7 @@ def copula_covariance(u: np.array, groups: dict):
     result = {}
     for group, ix in groups.items():
         result[group] = np.cov(norm().ppf(u[ix]).T)
- 
+
     if len(result) == 1:
         return list(result.values())[0]
     return result
@@ -140,21 +144,29 @@ def negative_binomial_regression(adata: AnnData, formula: str, **kwargs) -> dict
     return format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
 
 
-def negative_binomial_copula(adata: AnnData, formula: str = "~ 1", formula_copula: str = "~ 1", **kwargs) -> dict:
+def negative_binomial_copula(
+    adata: AnnData, formula: str = "~ 1", formula_copula: str = "~ 1", **kwargs
+) -> dict:
     adata = format_input_anndata(adata)
     x = model_matrix(formula, adata.obs)
 
     groups = group_indices(formula_copula, adata.obs)
     parameters = negative_binomial_copula_array(np.array(x), adata.X, groups, **kwargs)
-    parameters = format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
-    parameters["covariance"] = format_copula_parameters(parameters, list(adata.var_names))
+    parameters = format_nb_parameters(
+        parameters, list(adata.var_names), list(x.columns)
+    )
+    parameters["covariance"] = format_copula_parameters(
+        parameters, list(adata.var_names)
+    )
     return parameters
+
 
 ###############################################################################
 ## Helpers for transforming input and output data
 ###############################################################################
 
-def format_input_anndata(adata: AnnData)->AnnData:
+
+def format_input_anndata(adata: AnnData) -> AnnData:
     result = adata.copy()
     if isinstance(result.X, scipy.sparse._csc.csc_matrix):
         result.X = result.X.todense()
@@ -170,22 +182,22 @@ def format_nb_parameters(parameters: dict, var_names: list, coef_index: list) ->
     )
     return parameters
 
+
 def format_copula_parameters(parameters: dict, var_names: list):
     covariance = parameters["covariance"]
     if type(covariance) is not dict:
         covariance = pd.DataFrame(
-            parameters["covariance"],
-            columns=list(var_names),
-            index=list(var_names)
+            parameters["covariance"], columns=list(var_names), index=list(var_names)
         )
     else:
         for group in covariance.keys():
             covariance[group] = pd.DataFrame(
                 parameters["covariance"][group],
                 columns=list(var_names),
-                index=list(var_names)
+                index=list(var_names),
             )
     return covariance
+
 
 def group_indices(formula: str, obs: pd.DataFrame) -> dict:
     group_matrix = model_matrix(formula, obs)

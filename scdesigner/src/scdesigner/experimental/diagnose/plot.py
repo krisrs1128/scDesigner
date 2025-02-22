@@ -3,7 +3,17 @@ import numpy as np
 import pandas as pd
 import altair as alt
 
-def plot_umap(adata, color=None, shape=None, facet=None, opacity=0.6, n_comps=20, n_neighbors=15, **kwargs):
+
+def plot_umap(
+    adata,
+    color=None,
+    shape=None,
+    facet=None,
+    opacity=0.6,
+    n_comps=20,
+    n_neighbors=15,
+    **kwargs
+):
     mapping = {"x": "UMAP1", "y": "UMAP2", "color": color, "shape": shape}
     mapping = {k: v for k, v in mapping.items() if v is not None}
 
