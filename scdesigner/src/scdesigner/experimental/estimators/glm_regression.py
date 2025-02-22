@@ -43,7 +43,7 @@ def to_np(x):
 
 
 def negative_binomial_regression_array(
-    x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 20
+    x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 40
 ) -> dict:
     """
     A minimal NB regression model
@@ -87,7 +87,8 @@ def negative_binomial_regression_array(
 
 
 def negative_binomial_copula_array(
-    x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 20
+    x: np.array, y: np.array, groups: dict, batch_size: int = 512, 
+    lr: float = 0.1, epochs: int = 20,
 ) -> dict:
     """
     A minimal NB copula model
@@ -112,8 +113,18 @@ def negative_binomial_copula_array(
     # gaussianize and estimate covariance
     alpha = np.random.uniform(size=y.shape)
     u = clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
-    parameters["covariance"] = np.cov(norm().ppf(u).T)
+    parameters["covariance"] = copula_covariance(u, groups)
     return parameters
+
+
+def copula_covariance(u: np.array, groups: dict):
+    result = {}
+    for group, ix in groups.items():
+        result[group] = np.cov(norm().ppf(u[ix]).T)
+ 
+    if len(result) == 1:
+        return list(result.values())[0]
+    return result
 
 
 def clip(u: np.array, min: float = 1e-5, max: float = 1 - 1e-5) -> np.array:
@@ -129,20 +140,14 @@ def negative_binomial_regression(adata: AnnData, formula: str, **kwargs) -> dict
     return format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
 
 
-def negative_binomial_copula(adata: AnnData, formula: str, **kwargs) -> dict:
+def negative_binomial_copula(adata: AnnData, formula: str = "~ 1", formula_copula: str = "~ 1", **kwargs) -> dict:
     adata = format_input_anndata(adata)
     x = model_matrix(formula, adata.obs)
 
-    parameters = negative_binomial_copula_array(np.array(x), adata.X, **kwargs)
-    parameters = format_nb_parameters(
-        parameters, list(adata.var_names), list(x.columns)
-    )
-
-    parameters["covariance"] = pd.DataFrame(
-        parameters["covariance"],
-        columns=list(adata.var_names),
-        index=list(adata.var_names),
-    )
+    groups = group_indices(formula_copula, adata.obs)
+    parameters = negative_binomial_copula_array(np.array(x), adata.X, groups, **kwargs)
+    parameters = format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
+    parameters["covariance"] = format_copula_parameters(parameters, list(adata.var_names))
     return parameters
 
 ###############################################################################
@@ -164,3 +169,28 @@ def format_nb_parameters(parameters: dict, var_names: list, coef_index: list) ->
         parameters["dispersion"].reshape(1, -1), columns=var_names, index=["dispersion"]
     )
     return parameters
+
+def format_copula_parameters(parameters: dict, var_names: list):
+    covariance = parameters["covariance"]
+    if type(covariance) is not dict:
+        covariance = pd.DataFrame(
+            parameters["covariance"],
+            columns=list(var_names),
+            index=list(var_names)
+        )
+    else:
+        for group in covariance.keys():
+            covariance[group] = pd.DataFrame(
+                parameters["covariance"][group],
+                columns=list(var_names),
+                index=list(var_names)
+            )
+    return covariance
+
+def group_indices(formula: str, obs: pd.DataFrame) -> dict:
+    group_matrix = model_matrix(formula, obs)
+    result = {}
+
+    for group in group_matrix.columns:
+        result[group] = np.where(group_matrix[group].values == 1)[0]
+    return result
