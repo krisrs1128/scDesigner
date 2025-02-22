@@ -14,3 +14,8 @@ writeH5AD(SCGEMRNA_sce, "multiomic_rna.h5ad")
 example_sce <- readRDS((url("https://figshare.com/ndownloader/files/40581977")))
 writeH5AD(example_sce, "ifnb.h5ad")
 ```
+
+```{r}
+example_sce <- readRDS((url("https://figshare.com/ndownloader/files/40581965")))
+writeH5AD(example_sce, "pbmcsca.h5ad")
+```
