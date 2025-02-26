@@ -24,3 +24,14 @@ writeH5AD(example_sce, "pbmcsca.h5ad")
 example_sce <- readRDS((url("https://figshare.com/ndownloader/files/40582019")))
 writeH5AD(example_sce, "stxBrain.h5ad")
 ```
+
+```{r}
+library(DuoClustering2018)
+sce <- get("sce_filteredExpr10_Zhengmix4eq")(metadata = FALSE)
+writeH5AD(sce, "sce_filteredExpr10_Zhengmix4eq.h5ad")
+```
+
+```{r}
+example_sce <- readRDS((url("https://figshare.com/ndownloader/files/40581980")))
+writeH5AD(example_sce, "GSE72859.h5ad")
+```
