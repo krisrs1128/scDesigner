@@ -1,13 +1,13 @@
 from anndata import AnnData
 from formulaic import model_matrix
 from scipy.stats import gamma
-from scdesigner.experimental.classes.helper.pnmf import calculate_pnmf
+from ..estimators.pnmf import calculate_pnmf
 import numpy as np
 import pandas as pd
 import torch, scipy
 
 
-class PNMFRegression:
+class PNMFRegressionSimulator:
     def __init__(self):  # default input: cell x gene
         self.var_names = None
         self.W, self.S = None, None

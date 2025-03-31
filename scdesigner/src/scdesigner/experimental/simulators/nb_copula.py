@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 
-class NBCopula:
+class NegBinCopulaSimulator:
     def __init__(self):  # default input: cell x gene
         self.var_names = None
         self.formula = None

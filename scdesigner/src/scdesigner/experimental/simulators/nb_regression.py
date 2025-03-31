@@ -9,7 +9,7 @@ import pandas as pd
 import torch
 
 
-class NBRegression:
+class NegBinRegressionSimulator:
     def __init__(self):  # default input: cell x gene
         self.var_names = None
         self.formula = None
