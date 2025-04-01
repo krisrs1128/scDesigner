@@ -12,12 +12,12 @@ class PNMFRegressionSimulator:
         self.var_names = None
         self.formula = None
 
-    def estimate(self, adata, formula: str, nbase=20, **kwargs):
+    def estimate(self, adata, formula: str, nbase=20, maxIter=100, **kwargs):
         adata = format_input_anndata(adata)
         self.var_names = adata.var_names
         self.formula = formula
         log_data = np.log1p(adata.X).T
-        W, S = pnmf(log_data, nbase)
+        W, S = pnmf(log_data, nbase, maxIter=maxIter)
         adata = AnnData(X=S.T, obs=adata.obs)
 
         x = model_matrix(formula, adata.obs)
@@ -130,8 +130,7 @@ def negative_gamma_log_likelihood(log_a, log_beta, loc, X, y):
     a = torch.exp(log_a.reshape(n_features, n_outcomes))
     beta = torch.exp(log_beta.reshape(n_features, n_outcomes))
     loc = loc.reshape(n_features, n_outcomes)
-    loss = shifted_gamma_pdf(y, X @ a, X @ beta, X @ loc)
-    return loss
+    return shifted_gamma_pdf(y, X @ a, X @ beta, X @ loc)
 
 
 def format_input_anndata(adata: AnnData) -> AnnData:
