@@ -132,9 +132,13 @@ def plot_alpha_sequence(online_result, width=600):
 
 def lord_test(pval, initial_results=None, gammai=None, alpha=0.05, w0=0.005):
     """"
-    This is a direct translation of "version 1" under:
+    This is a translation of "version 1" under:
 
     https://github.com/bioc/onlineFDR/blob/devel/src/lord.cpp
+    
+    The only changes are that we don't recompute threhsolds for hypotheses that
+    we have already seen. This only necessary because we may continue testing
+    for many directions.
     """
     N = len(pval)
 
