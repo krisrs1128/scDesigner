@@ -1,7 +1,7 @@
 from anndata import AnnData
 from formulaic import model_matrix
 from scipy.stats import gamma
-from ..estimators.pnmf import calculate_pnmf
+from ..estimators.pnmf import pnmf
 import numpy as np
 import pandas as pd
 import torch, scipy
@@ -10,7 +10,6 @@ import torch, scipy
 class PNMFRegressionSimulator:
     def __init__(self):  # default input: cell x gene
         self.var_names = None
-        self.W, self.S = None, None
         self.formula = None
 
     def estimate(self, adata, formula: str, nbase=20, **kwargs):
@@ -18,30 +17,31 @@ class PNMFRegressionSimulator:
         self.var_names = adata.var_names
         self.formula = formula
         log_data = np.log1p(adata.X).T
-        self.W, self.S = calculate_pnmf(log_data, nbase)
-        adata = AnnData(X=self.S.T, obs=adata.obs)
+        W, S = pnmf(log_data, nbase)
+        adata = AnnData(X=S.T, obs=adata.obs)
 
         x = model_matrix(formula, adata.obs)
         parameters = gamma_regression_array(np.array(x), adata.X, **kwargs)
-        parameters["W"] = self.W
+        parameters["W"] = W
         return format_gamma_parameters(
-            parameters, list(adata.var_names), list(x.columns)
+            parameters, list(self.var_names), list(x.columns)
         )
 
-    def sample(
-        self, parameters: dict, obs: pd.DataFrame, formula=None, threshold=0.5
-    ) -> AnnData:
+    def sample(self, parameters: dict, obs: pd.DataFrame, formula=None) -> AnnData:
         if formula is not None:
             x = model_matrix(formula, obs)
         else:
             x = obs
 
-        sim_score = gamma_regression_sample_array(parameters, x)
-        samples = np.exp(self.W @ sim_score.T).T
+        W = parameters["W"]
+        params = self.predict(parameters, obs, formula)
+        a, loc, beta = params["a"], params["loc"], params["beta"]
+        sim_score = gamma(a, loc, 1 / beta).rvs()
+        samples = np.exp(W @ sim_score.T).T
 
-        # setting threshold for rounding
+        # thresholding samples
         floor = np.floor(samples)
-        samples = floor + np.where(samples - floor < threshold, 0, 1) - 1
+        samples = floor + np.where(samples - floor < 0.9, 0, 1) - 1
         samples = np.where(samples < 0, 0, samples)
 
         result = AnnData(X=samples, obs=obs)
@@ -58,11 +58,10 @@ class PNMFRegressionSimulator:
             x @ parameters["loc"],
             x @ np.exp(parameters["beta"]),
         )
-        return {"a": a, "loc": loc, "beta": beta, "W": parameters["W"]}
+        return {"a": a, "loc": loc, "beta": beta}
 
-    def __str__(self):
-        return f"""scDesigner object with n_obs x n_vars = {self.S.shape[1]} x {self.W.shape[0]}
-    method: 'PNMFRegression'
+    def __repr__(self):
+        return f"""method: 'PNMFRegression'
     formula: '{self.formula}'
     parameters: 'a', 'loc', 'beta', 'W'"""
 
@@ -82,8 +81,6 @@ def gamma_regression_array(
     for i in range(epochs):
         optimizer.zero_grad()
         loss = negative_gamma_log_likelihood(a, beta, loc, x, y)
-        if i % 1000 == 0:
-            print("epoch: ", i)
         loss.backward()
         optimizer.step()
 
@@ -108,7 +105,8 @@ def gamma_regression_sample_array(parameters: dict, x: np.array) -> np.array:
 
 
 def shifted_gamma_pdf(x, alpha, beta, loc):
-    x = torch.tensor(x)
+    if not torch.is_tensor(x):
+        x = torch.tensor(x)
     mask = x < loc
     y_clamped = torch.clamp(x - loc, min=1e-12)
 
@@ -120,7 +118,7 @@ def shifted_gamma_pdf(x, alpha, beta, loc):
     )
     loss = -torch.mean(log_pdf[~mask])
     n_invalid = mask.sum()
-    if n_invalid > 0:
+    if n_invalid > 0:  # force samples to be greater than loc
         loss = loss + 1e10 * n_invalid.float()
     return loss
 
@@ -148,14 +146,12 @@ def to_np(x):
 
 
 def format_gamma_parameters(
-    parameters: dict, var_names: list, coef_index: list
+    parameters: dict,
+    W_index: list,
+    coef_index: list,
 ) -> dict:
-    parameters["a"] = pd.DataFrame(parameters["a"], columns=var_names, index=coef_index)
-    parameters["loc"] = pd.DataFrame(
-        parameters["loc"], columns=var_names, index=coef_index
-    )
-    parameters["beta"] = pd.DataFrame(
-        parameters["beta"], columns=var_names, index=coef_index
-    )
-    parameters["W"] = pd.DataFrame(parameters["W"], columns=var_names)
+    parameters["a"] = pd.DataFrame(parameters["a"], index=coef_index)
+    parameters["loc"] = pd.DataFrame(parameters["loc"], index=coef_index)
+    parameters["beta"] = pd.DataFrame(parameters["beta"], index=coef_index)
+    parameters["W"] = pd.DataFrame(parameters["W"], index=W_index)
     return parameters
