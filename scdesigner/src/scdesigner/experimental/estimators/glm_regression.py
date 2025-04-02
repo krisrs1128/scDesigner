@@ -1,5 +1,4 @@
 from anndata import AnnData
-from copy import deepcopy
 from formulaic import model_matrix
 from scipy.stats import nbinom, norm
 import scipy.sparse
