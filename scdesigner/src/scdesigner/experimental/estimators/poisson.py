@@ -1,10 +1,12 @@
-import torch
-import numpy as np
-import pandas as pd
-from anndata import AnnData
-from formulaic import model_matrix
+from . import gaussian_copula_factory as gcf
 from . import glm_regression as glm
 from . import glm_regression_factory as factory
+from anndata import AnnData
+from formulaic import model_matrix
+from scipy.stats import poisson
+import numpy as np
+import pandas as pd
+import torch
 
 ###############################################################################
 ## Regression functions that operate on numpy arrays
@@ -56,3 +58,20 @@ def poisson_regression(adata: AnnData, formula: str, **kwargs) -> dict:
     x = model_matrix(formula, adata.obs)
     parameters = poisson_regression_array(np.array(x), adata.X, **kwargs)
     return format_poisson_parameters(parameters, list(adata.var_names), list(x.columns))
+
+###############################################################################
+## Copula versions for poisson regression
+###############################################################################
+
+def poisson_uniformizer(parameters, x, y):
+    mu = np.exp(x @ parameters["beta"])
+    nb_distn = poisson(mu)
+    alpha = np.random.uniform(size=y.shape)
+    return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
+
+
+poisson_copula_array = gcf.gaussian_copula_array_factory(
+    poisson_regression_array, poisson_uniformizer
+)
+
+poisson_copula = gcf.gaussian_copula_factory(poisson_copula_array, format_poisson_parameters)

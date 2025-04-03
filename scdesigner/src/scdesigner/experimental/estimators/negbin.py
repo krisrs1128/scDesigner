@@ -1,12 +1,12 @@
+from . import gaussian_copula_factory as gcf
+from . import glm_regression as glm
+from . import glm_regression_factory as factory
+from anndata import AnnData
+from formulaic import model_matrix
+from scipy.stats import nbinom
 import numpy as np
 import pandas as pd
 import torch
-from scipy.stats import nbinom, norm
-from anndata import AnnData
-from formulaic import model_matrix
-from . import glm_regression as glm
-from . import glm_regression_factory as factory
-from . import gaussian_copula_factory as gcf
 
 ###############################################################################
 ## Regression functions that operate on numpy arrays
@@ -58,7 +58,7 @@ negbin_regression_array2 = factory.glm_regression_generator(
 ###############################################################################
 
 
-def format_nb_parameters(parameters: dict, var_names: list, coef_index: list) -> dict:
+def format_negbin_parameters(parameters: dict, var_names: list, coef_index: list) -> dict:
     parameters["coefficient"] = pd.DataFrame(
         parameters["coefficient"], columns=var_names, index=coef_index
     )
@@ -72,12 +72,13 @@ def negbin_regression2(adata: AnnData, formula: str, **kwargs) -> dict:
     adata = glm.format_input_anndata(adata)
     x = model_matrix(formula, adata.obs)
     parameters = negbin_regression_array2(np.array(x), adata.X, **kwargs)
-    return glm.format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
+    return glm.format_negbin_parameters(parameters, list(adata.var_names), list(x.columns))
 
 
 ###############################################################################
 ## Copula versions for negative binomial regression
 ###############################################################################
+
 
 def negbin_uniformizer(parameters, x, y):
     r, mu = np.exp(parameters["dispersion"]), np.exp(x @ parameters["coefficient"])
@@ -90,4 +91,4 @@ negbin_copula_array = gcf.gaussian_copula_array_factory(
     negbin_regression_array2, negbin_uniformizer
 )
 
-negbin_copula = gcf.gaussian_copula_factory(negbin_copula_array, format_nb_parameters)
+negbin_copula = gcf.gaussian_copula_factory(negbin_copula_array, format_negbin_parameters)
