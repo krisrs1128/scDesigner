@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
 import torch
+from scipy.stats import nbinom, norm
 from anndata import AnnData
 from formulaic import model_matrix
 from . import glm_regression as glm
 from . import glm_regression_factory as factory
+from . import gaussian_copula_factory as gcf
 
 ###############################################################################
 ## Regression functions that operate on numpy arrays
@@ -71,3 +73,21 @@ def negbin_regression2(adata: AnnData, formula: str, **kwargs) -> dict:
     x = model_matrix(formula, adata.obs)
     parameters = negbin_regression_array2(np.array(x), adata.X, **kwargs)
     return glm.format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
+
+
+###############################################################################
+## Copula versions for negative binomial regression
+###############################################################################
+
+def negbin_uniformizer(parameters, x, y):
+    r, mu = np.exp(parameters["dispersion"]), np.exp(x @ parameters["coefficient"])
+    nb_distn = nbinom(n=r, p=r / (r + mu))
+    alpha = np.random.uniform(size=y.shape)
+    return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
+
+
+negbin_copula_array = gcf.gaussian_copula_array_factory(
+    negbin_regression_array2, negbin_uniformizer
+)
+
+negbin_copula = gcf.gaussian_copula_factory(negbin_copula_array, format_nb_parameters)
