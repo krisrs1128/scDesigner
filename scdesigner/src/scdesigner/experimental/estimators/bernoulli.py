@@ -1,6 +1,6 @@
 from . import gaussian_copula_factory as gcf
 from . import glm_regression as glm
-from . import glm_regression_factory as factory
+from . import glm_factory as factory
 from . import poisson as poi
 from anndata import AnnData
 from formulaic import model_matrix

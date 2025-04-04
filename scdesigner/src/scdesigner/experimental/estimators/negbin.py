@@ -1,6 +1,6 @@
 from . import gaussian_copula_factory as gcf
 from . import glm_regression as glm
-from . import glm_regression_factory as factory
+from . import glm_factory as factory
 from anndata import AnnData
 from formulaic import model_matrix
 from scipy.stats import nbinom
@@ -72,7 +72,7 @@ def negbin_regression2(adata: AnnData, formula: str, **kwargs) -> dict:
     adata = glm.format_input_anndata(adata)
     x = model_matrix(formula, adata.obs)
     parameters = negbin_regression_array2(np.array(x), adata.X, **kwargs)
-    return glm.format_negbin_parameters(parameters, list(adata.var_names), list(x.columns))
+    return format_negbin_parameters(parameters, list(adata.var_names), list(x.columns))
 
 
 ###############################################################################
