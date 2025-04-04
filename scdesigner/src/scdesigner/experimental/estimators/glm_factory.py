@@ -1,7 +1,15 @@
 import numpy as np
-from . import glm_regression as glm
 from torch.utils.data import DataLoader, TensorDataset
 import torch
+
+
+
+def check_device():
+    return torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available() else "cpu"
+    )
 
 
 def glm_regression_generator(likelihood, initializer, postprocessor) -> dict:
@@ -12,7 +20,7 @@ def glm_regression_generator(likelihood, initializer, postprocessor) -> dict:
         lr: float = 0.1,
         epochs: int = 40,
     ):
-        device = glm.check_device()
+        device = check_device()
         dataset = TensorDataset(
             torch.tensor(x, dtype=torch.float32).to(device),
             torch.tensor(y, dtype=torch.float32).to(device),
