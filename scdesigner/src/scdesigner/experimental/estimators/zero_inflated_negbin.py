@@ -1,10 +1,12 @@
-import torch
-import numpy as np
-import pandas as pd
-from anndata import AnnData
-from formulaic import model_matrix
+from . import gaussian_copula_factory as gcf
 from . import glm_regression as glm
 from . import glm_regression_factory as factory
+from anndata import AnnData
+from formulaic import model_matrix
+from scipy.stats import nbinom
+import numpy as np
+import pandas as pd
+import torch
 
 ###############################################################################
 ## Regression functions that operate on numpy arrays
@@ -89,3 +91,30 @@ def zero_inflated_negbin_regression(adata: AnnData, formula: str, **kwargs) -> d
     return format_zero_inflated_negbin_parameters(
         parameters, list(adata.var_names), list(x.columns)
     )
+
+
+###############################################################################
+## Copula versions for ZINB regression
+###############################################################################
+
+
+def zero_inflated_negbin_uniformizer(parameters, x, y):
+    r, mu, pi = (
+        np.exp(parameters["dispersion"]),
+        np.exp(x @ parameters["beta"]),
+        parameters["pi"],
+    )
+    nb_distn = nbinom(n=r, p=r / (r + mu))
+    alpha = np.random.uniform(size=y.shape)
+
+    cdf1 = pi + (1 - pi) * nb_distn.cdf(y)
+    cdf2 = pi + (1 - pi) * nb_distn.cdf(1 + y)
+    return gcf.clip(alpha * cdf1 + (1 - alpha) * cdf2)
+
+
+zero_inflated_negbin_copula = gcf.gaussian_copula_factory(
+    gcf.gaussian_copula_array_factory(
+        zero_inflated_negbin_regression_array, zero_inflated_negbin_uniformizer
+    ),
+    format_zero_inflated_negbin_parameters,
+)

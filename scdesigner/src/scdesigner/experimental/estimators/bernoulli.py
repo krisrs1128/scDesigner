@@ -1,10 +1,12 @@
-import torch
-import numpy as np
+from . import gaussian_copula_factory as gcf
+from . import glm_regression as glm
+from . import glm_regression_factory as factory
+from . import poisson as poi
 from anndata import AnnData
 from formulaic import model_matrix
-from . import glm_regression as glm
-from . import poisson as poi
-from . import glm_regression_factory as factory
+from scipy.stats import bernoulli
+import numpy as np
+import torch
 
 ###############################################################################
 ## Regression functions that operate on numpy arrays
@@ -39,3 +41,21 @@ def bernoulli_regression(adata: AnnData, formula: str, **kwargs) -> dict:
     return poi.format_poisson_parameters(
         parameters, list(adata.var_names), list(x.columns)
     )
+
+
+###############################################################################
+## Copula versions for bernoulli regression
+###############################################################################
+
+
+def bernoulli_uniformizer(parameters, x, y):
+    theta = torch.sigmoid(torch.from_numpy(x @ parameters["beta"]))
+    nb_distn = bernoulli(theta.numpy())
+    alpha = np.random.uniform(size=y.shape)
+    return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
+
+
+bernoulli_copula = gcf.gaussian_copula_factory(
+    gcf.gaussian_copula_array_factory(bernoulli_regression_array, bernoulli_uniformizer),
+    poi.format_poisson_parameters
+)

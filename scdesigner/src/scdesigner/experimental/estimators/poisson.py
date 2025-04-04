@@ -59,9 +59,11 @@ def poisson_regression(adata: AnnData, formula: str, **kwargs) -> dict:
     parameters = poisson_regression_array(np.array(x), adata.X, **kwargs)
     return format_poisson_parameters(parameters, list(adata.var_names), list(x.columns))
 
+
 ###############################################################################
 ## Copula versions for poisson regression
 ###############################################################################
+
 
 def poisson_uniformizer(parameters, x, y):
     mu = np.exp(x @ parameters["beta"])
@@ -70,8 +72,7 @@ def poisson_uniformizer(parameters, x, y):
     return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
 
 
-poisson_copula_array = gcf.gaussian_copula_array_factory(
-    poisson_regression_array, poisson_uniformizer
+poisson_copula = gcf.gaussian_copula_factory(
+    gcf.gaussian_copula_array_factory(poisson_regression_array, poisson_uniformizer),
+    format_poisson_parameters,
 )
-
-poisson_copula = gcf.gaussian_copula_factory(poisson_copula_array, format_poisson_parameters)
