@@ -23,4 +23,6 @@ __all__ = [
     "poisson_copula_sample",
     "bernoulli_sample",
     "bernoulli_copula_sample"
+    "zero_inflated_negbin_sample", 
+    "zero_inflated_negbin_copula_sample"
 ]
