@@ -9,9 +9,7 @@ def negbin_regression_sample_array(parameters: dict, x: np.array) -> np.array:
     return nbinom(n=r, p=r / (r + mu)).rvs()
 
 
-def negative_binomial_copula_sample_array(
-    parameters: dict, x: np.array, groups: dict
-) -> np.array:
+def negbin_copula_sample_array(parameters: dict, x: np.array, groups: dict) -> np.array:
     # initialize uniformized gaussian samples
     G = parameters["coefficient"].shape[1]
     u = np.zeros((x.shape[0], G))
@@ -23,9 +21,12 @@ def negative_binomial_copula_sample_array(
     return nbinom(n=r, p=r / (r + mu)).ppf(u)
 
 
-negbin_sample = glm.glm_sample_factory(negbin_regression_sample_array)
+negbin_sample = glm.glm_sample_factory(
+    negbin_regression_sample_array,
+    lambda parameters: parameters["dispersion"].columns,
+)
 
 negbin_copula_sample = glm.gaussian_copula_sample_factory(
-    negative_binomial_copula_sample_array,
+    negbin_copula_sample_array,
     lambda parameters: parameters["dispersion"].columns,
 )

@@ -6,7 +6,7 @@ from scipy.stats import norm
 from formulaic import model_matrix
 
 
-def glm_sample_factory(sample_array):
+def glm_sample_factory(sample_array, var_names_fun):
     def sampler(parameters: dict, obs: pd.DataFrame, formula=None) -> ad.AnnData:
         if formula is not None:
             x = model_matrix(formula, obs)
@@ -15,7 +15,7 @@ def glm_sample_factory(sample_array):
 
         samples = sample_array(parameters, x)
         result = ad.AnnData(X=samples, obs=obs)
-        result.var_names = parameters["dispersion"].columns
+        result.var_names = var_names_fun(parameters)
         return result
     return sampler
 
