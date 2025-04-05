@@ -101,7 +101,7 @@ def prepare_dense(real, simulated):
     return real_, simulated_
 
 
-def compare_variance(real, simulated, transform=lambda x: x):
+def compare_variances(real, simulated, transform=lambda x: x):
     real_, simulated_ = prepare_dense(real, simulated)
     summary = lambda a: np.asarray(np.var(transform(a.X), axis=0)).flatten()
     return compare_summary(real_, simulated_, summary)
