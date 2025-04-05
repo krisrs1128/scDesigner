@@ -12,13 +12,15 @@ def plot_umap(
     opacity=0.6,
     n_comps=20,
     n_neighbors=15,
+    transform = lambda x: np.log1p(x),
     **kwargs
 ):
     mapping = {"x": "UMAP1", "y": "UMAP2", "color": color, "shape": shape}
     mapping = {k: v for k, v in mapping.items() if v is not None}
 
     adata_ = adata.copy()
-    adata_.X = np.log1p(adata_.X)
+    adata_.X = check_sparse(adata_.X)
+    adata_.X = transform(adata_.X)
 
     # umap on the top PCA dimensions
     sc.pp.pca(adata_, n_comps=n_comps)
@@ -57,21 +59,33 @@ def check_sparse(X):
 
 
 def compare_means(real, simulated, transform=lambda x: x):
-    real.X = check_sparse(real.X)
-    simulated.X = check_sparse(simulated.X)
+    real_, simulated_ = prepare_dense(real, simulated)
     summary = lambda a: np.asarray(transform(a.X).mean(axis=0)).flatten()
-    return compare_summary(real, simulated, summary)
+    return compare_summary(real_, simulated_, summary)
+
+def prepare_dense(real, simulated):
+    real_ = real.copy()
+    simulated_ = simulated.copy()
+    real_.X = check_sparse(real_.X)
+    simulated_.X = check_sparse(simulated_.X)
+    return real_, simulated_
 
 
 def compare_variance(real, simulated, transform=lambda x: x):
-    real.X = check_sparse(real.X)
-    simulated.X = check_sparse(simulated.X)
+    real_, simulated_ = prepare_dense(real, simulated)
     summary = lambda a: np.asarray(np.var(transform(a.X), axis=0)).flatten()
-    return compare_summary(real, simulated, summary)
+    return compare_summary(real_, simulated_, summary)
 
 
 def compare_standard_deviation(real, simulated, transform=lambda x: x):
-    real.X = check_sparse(real.X)
-    simulated.X = check_sparse(simulated.X)
+    real_, simulated_ = prepare_dense(real, simulated)
     summary = lambda a: np.asarray(np.std(transform(a.X), axis=0)).flatten()
-    return compare_summary(real, simulated, summary)
+    return compare_summary(real_, simulated_, summary)
+
+
+def compare_umap(real, simulated, transform = lambda x: x, **kwargs):
+    real_, simulated_ = prepare_dense(real, simulated)
+    real_.obs["source"] = "real"
+    simulated_.obs["source"] = "simulated"
+    adata_merged = real_.concatenate(simulated_, join="outer", batch_key=None)
+    return plot_umap(adata_merged, facet="source", transform=transform, **kwargs)
