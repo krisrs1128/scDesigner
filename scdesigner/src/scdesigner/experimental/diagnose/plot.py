@@ -34,3 +34,44 @@ def plot_umap(
     if facet is not None:
         chart = chart.facet(column=alt.Facet(facet))
     return chart
+
+
+def compare_summary(real, simulated, summary_fun):
+    df = pd.DataFrame({"real": summary_fun(real), "simulated": summary_fun(simulated)})
+
+    identity = pd.DataFrame(
+        {
+            "real": [df["real"].min(), df["real"].max()],
+            "simulated": [df["real"].min(), df["real"].max()],
+        }
+    )
+    return alt.Chart(identity).mark_line(color="#dedede").encode(
+        x="real", y="simulated"
+    ) + alt.Chart(df).mark_circle().encode(x="real", y="simulated")
+
+
+def check_sparse(X):
+    if not isinstance(X, np.ndarray):
+        X = X.todense()
+    return X
+
+
+def compare_means(real, simulated, transform=lambda x: x):
+    real.X = check_sparse(real.X)
+    simulated.X = check_sparse(simulated.X)
+    summary = lambda a: np.asarray(transform(a.X).mean(axis=0)).flatten()
+    return compare_summary(real, simulated, summary)
+
+
+def compare_variance(real, simulated, transform=lambda x: x):
+    real.X = check_sparse(real.X)
+    simulated.X = check_sparse(simulated.X)
+    summary = lambda a: np.asarray(np.var(transform(a.X), axis=0)).flatten()
+    return compare_summary(real, simulated, summary)
+
+
+def compare_standard_deviation(real, simulated, transform=lambda x: x):
+    real.X = check_sparse(real.X)
+    simulated.X = check_sparse(simulated.X)
+    summary = lambda a: np.asarray(np.std(transform(a.X), axis=0)).flatten()
+    return compare_summary(real, simulated, summary)
