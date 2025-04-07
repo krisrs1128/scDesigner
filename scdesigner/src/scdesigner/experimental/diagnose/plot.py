@@ -2,6 +2,7 @@ import scanpy as sc
 import numpy as np
 import pandas as pd
 import altair as alt
+import matplotlib.pyplot as plt
 
 
 def plot_umap(
@@ -128,3 +129,15 @@ def compare_umap(real, simulated, transform=lambda x: x, **kwargs):
 def compare_pca(real, simulated, transform=lambda x: x, **kwargs):
     adata = concat_real_sim(real, simulated)
     return plot_pca(adata, facet="source", transform=transform, **kwargs)
+
+
+def plot_hist(sim_data, real_data, idx):
+    sim = sim_data[:, idx]
+    real = real_data[:, idx]
+    b = np.linspace(min(min(sim), min(real)), max(max(sim), max(real)), 50)
+
+    plt.hist([real, sim], b, label=["Real", "Simulated"], histtype="bar")
+    plt.xlabel("x")
+    plt.ylabel("Density")
+    plt.legend()
+    plt.show()
