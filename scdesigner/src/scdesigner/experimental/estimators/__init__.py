@@ -2,12 +2,15 @@ from .memento import MementoEstimator
 from .mixed_effects import LinearMixedEffectsEstimator, PoissonMixedEffectsEstimator
 from .estimators import GeneralizedLinearModelML
 from .glm_regression import negative_binomial_regression, negative_binomial_copula
+from .glm_regression_ondisk import AdataViewDataset, negative_binomial_regression_array_ondisk
 
 __all__ = [
-    "MementoEstimator",
+    "AdataViewDataset",
     "GeneralizedLinearModelML",
     "LinearMixedEffectsEstimator",
-    "negative_binomial_regression",
+    "MementoEstimator",
+    "PoissonMixedEffectsEstimator",
     "negative_binomial_copula",
-    "PoissonMixedEffectsEstimator"
+    "negative_binomial_regression",
+    "negative_binomial_regression_array_ondisk"
 ]
