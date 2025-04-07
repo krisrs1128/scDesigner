@@ -1,4 +1,4 @@
-from .glm_regression import format_input_anndata
+from .format import format_input_anndata
 from anndata import AnnData
 from collections.abc import Callable
 from formulaic import model_matrix

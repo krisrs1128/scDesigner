@@ -1,15 +1,6 @@
-import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
+import numpy as np
 import torch
-
-
-
-def check_device():
-    return torch.device(
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available() else "cpu"
-    )
 
 
 def glm_regression_generator(likelihood, initializer, postprocessor) -> dict:
@@ -39,3 +30,10 @@ def glm_regression_generator(likelihood, initializer, postprocessor) -> dict:
         return postprocessor(params, x.shape[1], y.shape[1])
 
     return estimator
+
+def check_device():
+    return torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available() else "cpu"
+    )

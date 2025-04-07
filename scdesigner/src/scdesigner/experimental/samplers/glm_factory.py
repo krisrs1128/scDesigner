@@ -1,21 +1,17 @@
 import numpy as np
 import pandas as pd
 import anndata as ad
-from ..estimators.glm_regression import group_indices
+from typing import Union
+from ..estimators.gaussian_copula_factory import group_indices
 from scipy.stats import norm
 from formulaic import model_matrix
 
 
-def glm_sample_factory(sample_array, var_names_fun):
-    def sampler(parameters: dict, obs: pd.DataFrame, formula=None) -> ad.AnnData:
-        if formula is not None:
-            x = model_matrix(formula, obs)
-        else:
-            x = obs
-
-        samples = sample_array(parameters, x)
+def glm_sample_factory(sample_array):
+    def sampler(local_parameters: dict, obs: pd.DataFrame) -> ad.AnnData:
+        samples = sample_array(local_parameters)
         result = ad.AnnData(X=samples, obs=obs)
-        result.var_names = var_names_fun(parameters)
+        result.var_names = local_parameters["mean"].columns
         return result
     return sampler
 
@@ -35,16 +31,13 @@ def gaussian_copula_pseudo_obs(N, G, sigma, groups):
     return u
 
 
-def gaussian_copula_sample_factory(copula_sample_array, var_names_fun):
+def gaussian_copula_sample_factory(copula_sample_array):
     def sampler(
-        parameters: dict, obs: pd.DataFrame, formula="~ 1", formula_copula="~ 1"
+        local_parameters: dict, covariance: Union[dict, np.array], groups: dict, obs: pd.DataFrame
     ) -> ad.AnnData:
-        x = model_matrix(formula, obs)
-        groups = group_indices(formula_copula, obs)
-
-        samples = copula_sample_array(parameters, x, groups)
+        samples = copula_sample_array(local_parameters, covariance, groups)
         result = ad.AnnData(X=samples, obs=obs)
-        result.var_names = var_names_fun(parameters)
+        result.var_names = local_parameters["mean"].columns
         return result
     return sampler
 
