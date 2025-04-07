@@ -1,30 +1,27 @@
-from scipy.stats import bernoulli
 from . import glm_factory as glm
+from scipy.stats import bernoulli
+from typing import Union
 import numpy as np
 
 
-def bernoulli_regression_sample_array(parameters: dict, x: np.array) -> np.array:
-    theta = np.exp(x @ parameters["beta"])
+def bernoulli_regression_sample_array(local_parameters: dict) -> np.array:
+    theta = local_parameters["mean"]
     return bernoulli(theta).rvs()
 
 
 def bernoulli_copula_sample_array(
-    parameters: dict, x: np.array, groups: dict
+    local_parameters: dict, covariance: Union[dict, np.array], groups: dict
 ) -> np.array:
-    G = parameters["beta"].shape[1]
-    u = np.zeros((x.shape[0], G))
-    u = glm.gaussian_copula_pseudo_obs(x.shape[0], G, parameters["covariance"], groups)
+    # initialize uniformized gaussian samples
+    N, G = local_parameters["mean"].shape
+    u = glm.gaussian_copula_pseudo_obs(N, G, covariance, groups)
 
-    mu = np.exp(x @ parameters["beta"])
-    return bernoulli(mu).ppf(u)
+    theta = local_parameters["mean"]
+    return bernoulli(theta).ppf(u)
 
 
-bernoulli_sample = glm.glm_sample_factory(
-    bernoulli_regression_sample_array,
-    lambda parameters: parameters["beta"].columns,
-)
+bernoulli_sample = glm.glm_sample_factory(bernoulli_regression_sample_array)
 
 bernoulli_copula_sample = glm.gaussian_copula_sample_factory(
-    bernoulli_copula_sample_array,
-    lambda parameters: parameters["beta"].columns,
+    bernoulli_copula_sample_array
 )

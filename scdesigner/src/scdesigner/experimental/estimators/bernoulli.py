@@ -1,6 +1,6 @@
 from . import gaussian_copula_factory as gcf
-from . import glm_regression as glm
 from . import glm_factory as factory
+from . import format
 from . import poisson as poi
 from anndata import AnnData
 from formulaic import model_matrix
@@ -35,7 +35,7 @@ bernoulli_regression_array = factory.glm_regression_generator(
 
 
 def bernoulli_regression(adata: AnnData, formula: str, **kwargs) -> dict:
-    adata = glm.format_input_anndata(adata)
+    adata = format.format_input_anndata(adata)
     x = model_matrix(formula, adata.obs)
     parameters = bernoulli_regression_array(np.array(x), adata.X, **kwargs)
     return poi.format_poisson_parameters(
