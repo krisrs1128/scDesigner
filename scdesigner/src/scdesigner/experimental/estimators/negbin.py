@@ -1,6 +1,6 @@
 from . import gaussian_copula_factory as gcf
-from . import glm_regression as glm
 from . import glm_factory as factory
+from . import format
 from anndata import AnnData
 from formulaic import model_matrix
 from scipy.stats import nbinom
@@ -43,12 +43,12 @@ def negbin_initializer(x, y, device):
 
 def negbin_postprocessor(params, n_features, n_outcomes):
     b_elem = n_features * n_outcomes
-    beta = glm.to_np(params[:b_elem]).reshape(n_features, n_outcomes)
-    dispersion = np.exp(glm.to_np(params[b_elem:]))
-    return {"coefficient": beta, "dispersion": dispersion}
+    beta = format.to_np(params[:b_elem]).reshape(n_features, n_outcomes)
+    dispersion = np.exp(format.to_np(params[b_elem:]))
+    return {"beta": beta, "gamma": dispersion}
 
 
-negbin_regression_array2 = factory.glm_regression_generator(
+negbin_regression_array = factory.glm_regression_generator(
     negbin_regression_likelihood, negbin_initializer, negbin_postprocessor
 )
 
@@ -58,20 +58,22 @@ negbin_regression_array2 = factory.glm_regression_generator(
 ###############################################################################
 
 
-def format_negbin_parameters(parameters: dict, var_names: list, coef_index: list) -> dict:
-    parameters["coefficient"] = pd.DataFrame(
-        parameters["coefficient"], columns=var_names, index=coef_index
+def format_negbin_parameters(
+    parameters: dict, var_names: list, coef_index: list
+) -> dict:
+    parameters["beta"] = pd.DataFrame(
+        parameters["beta"], columns=var_names, index=coef_index
     )
-    parameters["dispersion"] = pd.DataFrame(
-        parameters["dispersion"].reshape(1, -1), columns=var_names, index=["dispersion"]
+    parameters["gamma"] = pd.DataFrame(
+        parameters["gamma"].reshape(1, -1), columns=var_names, index=["dispersion"]
     )
     return parameters
 
 
-def negbin_regression2(adata: AnnData, formula: str, **kwargs) -> dict:
-    adata = glm.format_input_anndata(adata)
+def negbin_regression(adata: AnnData, formula: str, **kwargs) -> dict:
+    adata = format.format_input_anndata(adata)
     x = model_matrix(formula, adata.obs)
-    parameters = negbin_regression_array2(np.array(x), adata.X, **kwargs)
+    parameters = negbin_regression_array(np.array(x), adata.X, **kwargs)
     return format_negbin_parameters(parameters, list(adata.var_names), list(x.columns))
 
 
@@ -81,14 +83,16 @@ def negbin_regression2(adata: AnnData, formula: str, **kwargs) -> dict:
 
 
 def negbin_uniformizer(parameters, x, y):
-    r, mu = np.exp(parameters["dispersion"]), np.exp(x @ parameters["coefficient"])
+    r, mu = np.exp(parameters["gamma"]), np.exp(x @ parameters["beta"])
     nb_distn = nbinom(n=r, p=r / (r + mu))
-    alpha = np.random.uniform(size=y.shape)
-    return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
+    u = np.random.uniform(size=y.shape)
+    return gcf.clip(u * nb_distn.cdf(y) + (1 - u) * nb_distn.cdf(1 + y))
 
 
 negbin_copula_array = gcf.gaussian_copula_array_factory(
-    negbin_regression_array2, negbin_uniformizer
+    negbin_regression_array, negbin_uniformizer
 )
 
-negbin_copula = gcf.gaussian_copula_factory(negbin_copula_array, format_negbin_parameters)
+negbin_copula = gcf.gaussian_copula_factory(
+    negbin_copula_array, format_negbin_parameters
+)
