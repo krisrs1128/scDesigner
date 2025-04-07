@@ -1,6 +1,6 @@
 from . import gaussian_copula_factory as gcf
-from . import glm_regression as glm
 from . import glm_factory as factory
+from . import format
 from anndata import AnnData
 from formulaic import model_matrix
 from scipy.stats import poisson
@@ -31,7 +31,7 @@ def poisson_initializer(x, y, device):
 
 
 def poisson_postprocessor(params, n_features, n_outcomes):
-    beta = glm.to_np(params).reshape(n_features, n_outcomes)
+    beta = format.to_np(params).reshape(n_features, n_outcomes)
     return {"beta": beta}
 
 
@@ -54,7 +54,7 @@ def format_poisson_parameters(
 
 
 def poisson_regression(adata: AnnData, formula: str, **kwargs) -> dict:
-    adata = glm.format_input_anndata(adata)
+    adata = format.format_input_anndata(adata)
     x = model_matrix(formula, adata.obs)
     parameters = poisson_regression_array(np.array(x), adata.X, **kwargs)
     return format_poisson_parameters(parameters, list(adata.var_names), list(x.columns))

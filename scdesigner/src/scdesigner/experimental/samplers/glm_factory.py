@@ -2,9 +2,7 @@ import numpy as np
 import pandas as pd
 import anndata as ad
 from typing import Union
-from ..estimators.gaussian_copula_factory import group_indices
 from scipy.stats import norm
-from formulaic import model_matrix
 
 
 def glm_sample_factory(sample_array):
