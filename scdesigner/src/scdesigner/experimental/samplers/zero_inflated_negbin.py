@@ -1,25 +1,31 @@
 from scipy.stats import nbinom, bernoulli
 from . import glm_factory as glm
+from typing import Union
 import numpy as np
 
 
-def zero_inflated_negbin_sample_array(parameters: dict, x: np.array) -> np.array:
-    r, mu, pi = np.exp(parameters["dispersion"]), np.exp(x @ parameters["beta"]), parameters["pi"]
-    r = np.repeat(r, mu.shape[0], axis=0)
+def zero_inflated_negbin_sample_array(local_parameters: dict) -> np.array:
+    mu, r, pi = (
+        local_parameters["mean"],
+        local_parameters["dispersion"],
+        local_parameters["zero_inflation"],
+    )
     return nbinom(n=r, p=r / (r + mu)).rvs() * bernoulli(pi).rvs()
 
 
 def zero_inflated_negbin_copula_sample_array(
-    parameters: dict, x: np.array, groups: dict
+    local_parameters: dict, covariance: Union[dict, np.array], groups: dict
 ) -> np.array:
     # initialize uniformized gaussian samples
-    G = parameters["beta"].shape[1]
-    u = np.zeros((x.shape[0], G))
-    u = glm.gaussian_copula_pseudo_obs(x.shape[0], G, parameters["covariance"], groups)
+    N, G = local_parameters["mean"].shape
+    u = glm.gaussian_copula_pseudo_obs(N, G, covariance, groups)
 
     # get zero inflated NB parameters
-    r, mu, pi = np.exp(parameters["dispersion"]), np.exp(x @ parameters["beta"]), parameters["pi"]
-    r = np.repeat(r, mu.shape[0], axis=0)
+    mu, r, pi = (
+        local_parameters["mean"],
+        local_parameters["dispersion"],
+        local_parameters["zero_inflation"],
+    )
 
     # zero inflate after first simulating from NB
     positive_part = nbinom(n=r, p=r / (r + mu)).ppf(u)
@@ -27,12 +33,8 @@ def zero_inflated_negbin_copula_sample_array(
     return zero_inflation * positive_part
 
 
-zero_inflated_negbin_sample = glm.glm_sample_factory(
-    zero_inflated_negbin_sample_array,
-    lambda parameters: parameters["dispersion"].columns,
-)
+zero_inflated_negbin_sample = glm.glm_sample_factory(zero_inflated_negbin_sample_array)
 
 zero_inflated_negbin_copula_sample = glm.gaussian_copula_sample_factory(
-    zero_inflated_negbin_copula_sample_array,
-    lambda parameters: parameters["dispersion"].columns,
+    zero_inflated_negbin_copula_sample_array
 )

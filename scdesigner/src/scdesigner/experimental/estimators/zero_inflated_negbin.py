@@ -1,5 +1,5 @@
 from . import gaussian_copula_factory as gcf
-from . import glm_regression as glm
+from . import format
 from . import glm_factory as factory
 from anndata import AnnData
 from formulaic import model_matrix
@@ -52,10 +52,10 @@ def zero_inflated_negbin_initializer(x, y, device):
 
 def zero_inflated_negbin_postprocessor(params, n_features, n_outcomes):
     b_elem = n_features * n_outcomes
-    beta = glm.to_np(params[:b_elem]).reshape(n_features, n_outcomes)
-    dispersion = glm.to_np(torch.exp(params[b_elem : (b_elem + n_outcomes)]))
-    pi = glm.to_np(torch.sigmoid(params[(b_elem + n_outcomes) :]))
-    return {"beta": beta, "dispersion": dispersion, "pi": pi}
+    beta = format.to_np(params[:b_elem]).reshape(n_features, n_outcomes)
+    gamma = format.to_np(torch.exp(params[b_elem : (b_elem + n_outcomes)]))
+    pi = format.to_np(torch.sigmoid(params[(b_elem + n_outcomes) :]))
+    return {"beta": beta, "gamma": gamma, "pi": pi}
 
 
 zero_inflated_negbin_regression_array = factory.glm_regression_generator(
@@ -75,8 +75,8 @@ def format_zero_inflated_negbin_parameters(
     parameters["beta"] = pd.DataFrame(
         parameters["beta"], columns=var_names, index=coef_index
     )
-    parameters["dispersion"] = pd.DataFrame(
-        parameters["dispersion"].reshape(1, -1), columns=var_names, index=["dispersion"]
+    parameters["gamma"] = pd.DataFrame(
+        parameters["gamma"].reshape(1, -1), columns=var_names, index=["gamma"]
     )
     parameters["pi"] = pd.DataFrame(
         parameters["pi"].reshape(1, -1), columns=var_names, index=["pi"]
@@ -85,7 +85,7 @@ def format_zero_inflated_negbin_parameters(
 
 
 def zero_inflated_negbin_regression(adata: AnnData, formula: str, **kwargs) -> dict:
-    adata = glm.format_input_anndata(adata)
+    adata = format.format_input_anndata(adata)
     x = model_matrix(formula, adata.obs)
     parameters = zero_inflated_negbin_regression_array(np.array(x), adata.X, **kwargs)
     return format_zero_inflated_negbin_parameters(
@@ -100,7 +100,7 @@ def zero_inflated_negbin_regression(adata: AnnData, formula: str, **kwargs) -> d
 
 def zero_inflated_negbin_uniformizer(parameters, x, y):
     r, mu, pi = (
-        np.exp(parameters["dispersion"]),
+        np.exp(parameters["gamma"]),
         np.exp(x @ parameters["beta"]),
         parameters["pi"],
     )
