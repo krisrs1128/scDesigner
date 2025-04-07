@@ -1,14 +1,13 @@
 from anndata import AnnData
 from formulaic import model_matrix
 from scipy.stats import nbinom
-import scipy.sparse
 from ..estimators.glm_regression import (
     negative_binomial_regression_array,
-    format_input_anndata,
     format_nb_parameters,
 )
 import numpy as np
 import pandas as pd
+import scipy.sparse
 
 
 class NegBinRegressionSimulator:
@@ -25,25 +24,16 @@ class NegBinRegressionSimulator:
         parameters = negative_binomial_regression_array(np.array(x), adata.X, **kwargs)
         return format_nb_parameters(parameters, list(adata.var_names), list(x.columns))
 
-    def sample(self, parameters: dict, obs: pd.DataFrame, formula=None) -> AnnData:
-        if formula is not None:
-            x = model_matrix(formula, obs)
-        else:
-            x = obs
-
-        params = self.predict(parameters, x)
+    def sample(self, parameters: dict, obs: pd.DataFrame) -> AnnData:
+        params = self.predict(parameters, obs)
         r, mu = params["dispersion"], params["coefficient"]
         samples = nbinom(n=r, p=r / (r + mu)).rvs()
         result = AnnData(X=samples, obs=obs)
         result.var_names = parameters["dispersion"].columns
         return result
 
-    def predict(self, parameters: dict, obs: pd.DataFrame, formula=None) -> dict:
-        if formula is not None:
-            x = model_matrix(formula, obs)
-        else:
-            x = obs
-
+    def predict(self, parameters: dict, obs: pd.DataFrame) -> dict:
+        x = format_matrix(obs, self.formula)
         r, mu = np.exp(parameters["dispersion"]), np.exp(x @ parameters["coefficient"])
         r = np.repeat(r, mu.shape[0], axis=0)
         return {"coefficient": mu, "dispersion": r}
@@ -53,3 +43,23 @@ class NegBinRegressionSimulator:
     method: 'Negtive Binomial Regression'
     formula: '{self.formula}'
     parameters: 'coefficient', 'dispersion'"""
+
+
+###############################################################################
+## Helpers for processing input data
+###############################################################################
+
+
+def format_input_anndata(adata: AnnData) -> AnnData:
+    result = adata.copy()
+    if isinstance(result.X, scipy.sparse._csc.csc_matrix):
+        result.X = result.X.todense()
+    return result
+
+
+def format_matrix(obs: pd.DataFrame, formula: str):
+    if formula is not None:
+        x = model_matrix(formula, obs)
+    else:
+        x = obs
+    return x

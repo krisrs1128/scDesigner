@@ -1,6 +1,8 @@
 from scipy.sparse.linalg import svds
 from sklearn.cluster import KMeans
 import numpy as np
+import pandas as pd
+import torch
 
 
 # computes PNMF weight and score, ncol specify the number of clusters
@@ -19,6 +21,30 @@ def pnmf(log_data, ncol=3, **kwargs):  # data is np array, log transformed read 
     return W, S
 
 
+def gamma_regression_array(
+    x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 40
+) -> dict:
+    x = torch.tensor(x, dtype=torch.float32)
+    y = torch.tensor(y, dtype=torch.float32)
+
+    n_features, n_outcomes = x.shape[1], y.shape[1]
+    a = torch.zeros(n_features * n_outcomes, requires_grad=True)
+    loc = torch.zeros(n_features * n_outcomes, requires_grad=True)
+    beta = torch.zeros(n_features * n_outcomes, requires_grad=True)
+    optimizer = torch.optim.Adam([a, loc, beta], lr=lr)
+
+    for i in range(epochs):
+        optimizer.zero_grad()
+        loss = negative_gamma_log_likelihood(a, beta, loc, x, y)
+        loss.backward()
+        optimizer.step()
+
+    a = to_np(a).reshape(n_features, n_outcomes)
+    loc = to_np(loc).reshape(n_features, n_outcomes)
+    beta = to_np(beta).reshape(n_features, n_outcomes)
+    return {"a": a, "loc": loc, "beta": beta}
+
+
 def class_generator(score, n_clusters=3):
     """
     Generates one-hot encoding for score classes
@@ -28,7 +54,7 @@ def class_generator(score, n_clusters=3):
     labels = kmeans.labels_
     num_classes = len(np.unique(labels))
     one_hot = np.eye(num_classes)[labels].astype(int)
-    return one_hot
+    return labels
 
 
 ###############################################################################
@@ -82,3 +108,53 @@ def MatFind(A, ZeroThres):
     B = np.zeros(A.shape)
     Atrunc = np.where(A < ZeroThres, B, A)
     return Atrunc
+
+
+###############################################################################
+## Helpers for training PNMF regression
+###############################################################################
+
+
+def shifted_gamma_pdf(x, alpha, beta, loc):
+    if not torch.is_tensor(x):
+        x = torch.tensor(x)
+    mask = x < loc
+    y_clamped = torch.clamp(x - loc, min=1e-12)
+
+    log_pdf = (
+        alpha * torch.log(beta)
+        - torch.lgamma(alpha)
+        + (alpha - 1) * torch.log(y_clamped)
+        - beta * y_clamped
+    )
+    loss = -torch.mean(log_pdf[~mask])
+    n_invalid = mask.sum()
+    if n_invalid > 0:  # force samples to be greater than loc
+        loss = loss + 1e10 * n_invalid.float()
+    return loss
+
+
+def negative_gamma_log_likelihood(log_a, log_beta, loc, X, y):
+    n_features = X.shape[1]
+    n_outcomes = y.shape[1]
+
+    a = torch.exp(log_a.reshape(n_features, n_outcomes))
+    beta = torch.exp(log_beta.reshape(n_features, n_outcomes))
+    loc = loc.reshape(n_features, n_outcomes)
+    return shifted_gamma_pdf(y, X @ a, X @ beta, X @ loc)
+
+
+def to_np(x):
+    return x.detach().cpu().numpy()
+
+
+def format_gamma_parameters(
+    parameters: dict,
+    W_index: list,
+    coef_index: list,
+) -> dict:
+    parameters["a"] = pd.DataFrame(parameters["a"], index=coef_index)
+    parameters["loc"] = pd.DataFrame(parameters["loc"], index=coef_index)
+    parameters["beta"] = pd.DataFrame(parameters["beta"], index=coef_index)
+    parameters["W"] = pd.DataFrame(parameters["W"], index=W_index)
+    return parameters

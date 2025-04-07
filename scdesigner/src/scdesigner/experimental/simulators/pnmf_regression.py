@@ -1,10 +1,10 @@
 from anndata import AnnData
 from formulaic import model_matrix
 from scipy.stats import gamma
-from ..estimators.pnmf import pnmf
+from ..estimators.pnmf import pnmf, gamma_regression_array, format_gamma_parameters
 import numpy as np
 import pandas as pd
-import torch, scipy
+import scipy.sparse
 
 
 class PNMFRegressionSimulator:
@@ -27,14 +27,9 @@ class PNMFRegressionSimulator:
             parameters, list(self.var_names), list(x.columns)
         )
 
-    def sample(self, parameters: dict, obs: pd.DataFrame, formula=None) -> AnnData:
-        if formula is not None:
-            x = model_matrix(formula, obs)
-        else:
-            x = obs
-
+    def sample(self, parameters: dict, obs: pd.DataFrame) -> AnnData:
         W = parameters["W"]
-        params = self.predict(parameters, obs, formula)
+        params = self.predict(parameters, obs)
         a, loc, beta = params["a"], params["loc"], params["beta"]
         sim_score = gamma(a, loc, 1 / beta).rvs()
         samples = np.exp(W @ sim_score.T).T
@@ -48,11 +43,8 @@ class PNMFRegressionSimulator:
         result.var_names = self.var_names
         return result
 
-    def predict(self, parameters: dict, obs: pd.DataFrame, formula=None) -> dict:
-        if formula is not None:
-            x = model_matrix(formula, obs)
-        else:
-            x = obs
+    def predict(self, parameters: dict, obs: pd.DataFrame) -> dict:
+        x = format_matrix(obs, self.formula)
         a, loc, beta = (
             x @ np.exp(parameters["a"]),
             x @ parameters["loc"],
@@ -61,76 +53,15 @@ class PNMFRegressionSimulator:
         return {"a": a, "loc": loc, "beta": beta}
 
     def __repr__(self):
-        return f"""method: 'PNMFRegression'
+        return f"""scDesigner simulator object with
+    method: 'PNMF Regression'
     formula: '{self.formula}'
     parameters: 'a', 'loc', 'beta', 'W'"""
 
 
-def gamma_regression_array(
-    x: np.array, y: np.array, batch_size: int = 512, lr: float = 0.1, epochs: int = 40
-) -> dict:
-    x = torch.tensor(x, dtype=torch.float32)
-    y = torch.tensor(y, dtype=torch.float32)
-
-    n_features, n_outcomes = x.shape[1], y.shape[1]
-    a = torch.zeros(n_features * n_outcomes, requires_grad=True)
-    loc = torch.zeros(n_features * n_outcomes, requires_grad=True)
-    beta = torch.zeros(n_features * n_outcomes, requires_grad=True)
-    optimizer = torch.optim.Adam([a, loc, beta], lr=lr)
-
-    for i in range(epochs):
-        optimizer.zero_grad()
-        loss = negative_gamma_log_likelihood(a, beta, loc, x, y)
-        loss.backward()
-        optimizer.step()
-
-    a = to_np(a).reshape(n_features, n_outcomes)
-    loc = to_np(loc).reshape(n_features, n_outcomes)
-    beta = to_np(beta).reshape(n_features, n_outcomes)
-    return {"a": a, "loc": loc, "beta": beta}
-
-
-def gamma_regression_sample_array(parameters: dict, x: np.array) -> np.array:
-    a, loc, beta = (
-        x @ np.exp(parameters["a"]),
-        x @ parameters["loc"],
-        x @ np.exp(parameters["beta"]),
-    )
-    return gamma(a, loc, 1 / beta).rvs()
-
-
 ###############################################################################
-## Helpers for fitting & sampling gamma distribution
+## Helpers for processing input data
 ###############################################################################
-
-
-def shifted_gamma_pdf(x, alpha, beta, loc):
-    if not torch.is_tensor(x):
-        x = torch.tensor(x)
-    mask = x < loc
-    y_clamped = torch.clamp(x - loc, min=1e-12)
-
-    log_pdf = (
-        alpha * torch.log(beta)
-        - torch.lgamma(alpha)
-        + (alpha - 1) * torch.log(y_clamped)
-        - beta * y_clamped
-    )
-    loss = -torch.mean(log_pdf[~mask])
-    n_invalid = mask.sum()
-    if n_invalid > 0:  # force samples to be greater than loc
-        loss = loss + 1e10 * n_invalid.float()
-    return loss
-
-
-def negative_gamma_log_likelihood(log_a, log_beta, loc, X, y):
-    n_features = X.shape[1]
-    n_outcomes = y.shape[1]
-
-    a = torch.exp(log_a.reshape(n_features, n_outcomes))
-    beta = torch.exp(log_beta.reshape(n_features, n_outcomes))
-    loc = loc.reshape(n_features, n_outcomes)
-    return shifted_gamma_pdf(y, X @ a, X @ beta, X @ loc)
 
 
 def format_input_anndata(adata: AnnData) -> AnnData:
@@ -140,17 +71,9 @@ def format_input_anndata(adata: AnnData) -> AnnData:
     return result
 
 
-def to_np(x):
-    return x.detach().cpu().numpy()
-
-
-def format_gamma_parameters(
-    parameters: dict,
-    W_index: list,
-    coef_index: list,
-) -> dict:
-    parameters["a"] = pd.DataFrame(parameters["a"], index=coef_index)
-    parameters["loc"] = pd.DataFrame(parameters["loc"], index=coef_index)
-    parameters["beta"] = pd.DataFrame(parameters["beta"], index=coef_index)
-    parameters["W"] = pd.DataFrame(parameters["W"], index=W_index)
-    return parameters
+def format_matrix(obs: pd.DataFrame, formula: str):
+    if formula is not None:
+        x = model_matrix(formula, obs)
+    else:
+        x = obs
+    return x

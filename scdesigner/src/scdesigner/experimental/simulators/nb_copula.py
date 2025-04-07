@@ -3,13 +3,13 @@ from scipy.stats import nbinom, norm
 from formulaic import model_matrix
 from ..estimators.glm_regression import (
     negative_binomial_copula_array,
-    format_input_anndata,
     format_copula_parameters,
     format_nb_parameters,
     group_indices,
 )
 import numpy as np
 import pandas as pd
+import scipy.sparse
 
 
 class NegBinCopulaSimulator:
@@ -44,11 +44,9 @@ class NegBinCopulaSimulator:
         )
         return parameters
 
-    def sample(
-        self, parameters: dict, obs: pd.DataFrame, formula="~ 1", formula_copula="~ 1"
-    ) -> AnnData:
-        x = model_matrix(formula, obs)
-        groups = group_indices(formula_copula, obs)
+    def sample(self, parameters: dict, obs: pd.DataFrame) -> AnnData:
+        x = format_matrix(obs, self.formula)
+        groups = group_indices(self.copula_formula, obs)
 
         G = parameters["coefficient"].shape[1]
         u = np.zeros((x.shape[0], G))
@@ -65,16 +63,16 @@ class NegBinCopulaSimulator:
             u[ix] = normal_distn.cdf(z)
 
         r, mu = (
-            self.predict(parameters, obs, formula)["dispersion"],
-            self.predict(parameters, obs, formula)["coefficient"],
+            self.predict(parameters, obs)["dispersion"],
+            self.predict(parameters, obs)["coefficient"],
         )
         samples = nbinom(n=r, p=r / (r + mu)).ppf(u)
         result = AnnData(X=samples, obs=obs)
         result.var_names = parameters["dispersion"].columns
         return result
 
-    def predict(self, parameters: dict, obs: pd.DataFrame, formula="~ 1") -> dict:
-        x = model_matrix(formula, obs)
+    def predict(self, parameters: dict, obs: pd.DataFrame) -> dict:
+        x = format_matrix(obs, self.formula)
         r, mu = np.exp(parameters["dispersion"]), np.exp(x @ parameters["coefficient"])
         r = np.repeat(r, mu.shape[0], axis=0)
         return {
@@ -88,3 +86,23 @@ class NegBinCopulaSimulator:
     formula: '{self.formula}'
     copula formula: '{self.copula_formula}'
     parameters: 'coefficient', 'dispersion', 'covariance'"""
+
+
+###############################################################################
+## Helpers for processing input data
+###############################################################################
+
+
+def format_input_anndata(adata: AnnData) -> AnnData:
+    result = adata.copy()
+    if isinstance(result.X, scipy.sparse._csc.csc_matrix):
+        result.X = result.X.todense()
+    return result
+
+
+def format_matrix(obs: pd.DataFrame, formula: str):
+    if formula is not None:
+        x = model_matrix(formula, obs)
+    else:
+        x = obs
+    return x
