@@ -1,6 +1,5 @@
 from .memento import MementoEstimator
 from .mixed_effects import LinearMixedEffectsEstimator, PoissonMixedEffectsEstimator
-from .estimators import GeneralizedLinearModelML
 from .negbin import negbin_regression, negbin_copula
 from .gaussian_copula_factory import group_indices
 from .poisson import poisson_regression, poisson_copula
@@ -9,7 +8,6 @@ from .zero_inflated_negbin import zero_inflated_negbin_regression, zero_inflated
 
 __all__ = [
     "AdataViewDataset",
-    "GeneralizedLinearModelML",
     "LinearMixedEffectsEstimator",
     "MementoEstimator",
     "PoissonMixedEffectsEstimator",
