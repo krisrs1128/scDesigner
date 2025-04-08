@@ -13,6 +13,7 @@ class NegBinCopulaSimulator:
         self.formula = None
         self.copula_formula = None
         self.shape = None
+        self.params = None
 
     def fit(
         self,
@@ -26,17 +27,17 @@ class NegBinCopulaSimulator:
         self.formula = formula
         self.copula_formula = formula_copula
         self.shape = adata.X.shape
-        return negbin_copula(adata, formula, formula_copula, **kwargs)
+        self.params = negbin_copula(adata, formula, formula_copula, **kwargs)
 
-    def sample(self, parameters: dict, obs: pd.DataFrame) -> AnnData:
+    def sample(self, obs: pd.DataFrame) -> AnnData:
         groups = group_indices(self.copula_formula, obs)
-        local_parameters = self.predict(parameters, obs)
+        local_parameters = self.predict(obs)
         return negbin_copula_sample(
-            local_parameters, parameters["covariance"], groups, obs
+            local_parameters, self.params["covariance"], groups, obs
         )
 
-    def predict(self, parameters: dict, obs: pd.DataFrame) -> dict:
-        return negbin_predict(parameters, obs, self.formula)
+    def predict(self, obs: pd.DataFrame) -> dict:
+        return negbin_predict(self.params, obs, self.formula)
 
     def __repr__(self):
         return f"""scDesigner simulator object with

@@ -11,6 +11,7 @@ class PNMFRegressionSimulator:
     def __init__(self):  # default input: cell x gene
         self.var_names = None
         self.formula = None
+        self.params = None
 
     def fit(self, adata, formula: str, nbase=20, maxIter=100, **kwargs):
         adata = format_input_anndata(adata)
@@ -23,13 +24,13 @@ class PNMFRegressionSimulator:
         x = model_matrix(formula, adata.obs)
         parameters = gamma_regression_array(np.array(x), adata.X, **kwargs)
         parameters["W"] = W
-        return format_gamma_parameters(
+        self.params = format_gamma_parameters(
             parameters, list(self.var_names), list(x.columns)
         )
 
-    def sample(self, parameters: dict, obs: pd.DataFrame) -> AnnData:
-        W = parameters["W"]
-        params = self.predict(parameters, obs)
+    def sample(self, obs: pd.DataFrame) -> AnnData:
+        W = self.params["W"]
+        params = self.predict(obs)
         a, loc, beta = params["a"], params["loc"], params["beta"]
         sim_score = gamma(a, loc, 1 / beta).rvs()
         samples = np.exp(W @ sim_score.T).T
@@ -43,12 +44,12 @@ class PNMFRegressionSimulator:
         result.var_names = self.var_names
         return result
 
-    def predict(self, parameters: dict, obs: pd.DataFrame) -> dict:
+    def predict(self, obs: pd.DataFrame) -> dict:
         x = format_matrix(obs, self.formula)
         a, loc, beta = (
-            x @ np.exp(parameters["a"]),
-            x @ parameters["loc"],
-            x @ np.exp(parameters["beta"]),
+            x @ np.exp(self.params["a"]),
+            x @ self.params["loc"],
+            x @ np.exp(self.params["beta"]),
         )
         return {"a": a, "loc": loc, "beta": beta}
 
