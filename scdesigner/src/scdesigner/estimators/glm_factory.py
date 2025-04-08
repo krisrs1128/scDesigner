@@ -31,6 +31,7 @@ def glm_regression_generator(likelihood, initializer, postprocessor) -> dict:
 
     return estimator
 
+
 def check_device():
     return torch.device(
         "cuda"
