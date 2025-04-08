@@ -1,10 +1,9 @@
-from .samplers import Sampler
 import torch.utils.data as td
 import numpy as np
 import torch
 
 
-class LinearMixedEffectsSampler(Sampler):
+class LinearMixedEffectsSampler():
     """
     Examples
     --------
@@ -35,7 +34,7 @@ class LinearMixedEffectsSampler(Sampler):
         return np.concatenate(samples, axis=0)
 
 
-class PoissonMixedEffectsSampler(Sampler):
+class PoissonMixedEffectsSampler():
     """
     Examples
     --------

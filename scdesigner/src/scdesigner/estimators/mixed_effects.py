@@ -1,11 +1,10 @@
 import torch
 import torch.utils.data as td
 import numpy as np
-from .estimators import Estimator
 from tqdm import tqdm
 
 
-class LinearMixedEffectsEstimator(Estimator):
+class LinearMixedEffectsEstimator():
     """
     Example
     -------
@@ -92,7 +91,7 @@ def lme_estimate(data_loader, init_sb=None, init_se=None, lr=0.01, max_iter=1000
         }
 
 
-class PoissonMixedEffectsEstimator(Estimator):
+class PoissonMixedEffectsEstimator():
     """
     Example
     -------

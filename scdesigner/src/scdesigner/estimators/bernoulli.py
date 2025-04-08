@@ -1,6 +1,6 @@
 from . import gaussian_copula_factory as gcf
 from . import glm_factory as factory
-from . import format
+from .. import format
 from . import poisson as poi
 from anndata import AnnData
 from formulaic import model_matrix

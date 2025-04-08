@@ -1,5 +1,5 @@
 from . import gaussian_copula_factory as gcf
-from . import format
+from .. import format
 from . import glm_factory as factory
 from anndata import AnnData
 from formulaic import model_matrix

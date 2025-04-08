@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from ..estimators.format import format_matrix
+from ..format import format_matrix
 
 
 def bernoulli_predict(parameters: dict, obs: pd.DataFrame, formula: str):
