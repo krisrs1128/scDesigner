@@ -1,6 +1,6 @@
 from anndata import AnnData
 from formulaic import model_matrix
-from ..estimators.format import format_input_anndata, format_matrix
+from ..format import format_input_anndata, format_matrix
 from scipy.stats import gamma
 from ..estimators.pnmf import pnmf, gamma_regression_array, format_gamma_parameters
 import numpy as np
@@ -12,7 +12,7 @@ class PNMFRegressionSimulator:
         self.var_names = None
         self.formula = None
 
-    def estimate(self, adata, formula: str, nbase=20, maxIter=100, **kwargs):
+    def fit(self, adata, formula: str, nbase=20, maxIter=100, **kwargs):
         adata = format_input_anndata(adata)
         self.var_names = adata.var_names
         self.formula = formula
