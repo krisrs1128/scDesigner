@@ -12,7 +12,7 @@ class NegBinRegressionSimulator:
         self.formula = None
         self.shape = None
 
-    def estimate(self, adata: AnnData, formula: str, **kwargs) -> dict:
+    def fit(self, adata: AnnData, formula: str, **kwargs) -> dict:
         self.formula = formula
         return negbin_regression(adata, formula, **kwargs)
 

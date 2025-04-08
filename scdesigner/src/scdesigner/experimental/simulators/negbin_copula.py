@@ -1,5 +1,5 @@
 from anndata import AnnData
-from ..estimators.format import format_input_anndata
+from ..format.format import format_input_anndata
 from ..estimators.negbin import negbin_copula
 from ..predictors.negbin import negbin_predict
 from ..estimators.gaussian_copula_factory import group_indices
@@ -14,7 +14,7 @@ class NegBinCopulaSimulator:
         self.copula_formula = None
         self.shape = None
 
-    def estimate(
+    def fit(
         self,
         adata: AnnData,
         formula: str = "~ 1",
