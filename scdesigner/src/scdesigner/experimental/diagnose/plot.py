@@ -5,6 +5,22 @@ import altair as alt
 import matplotlib.pyplot as plt
 
 
+def adata_df(adata):
+    return (
+        pd.DataFrame(adata.X, columns=adata.var_names)
+        .melt(id_vars=[], value_vars=adata.var_names)
+        .reset_index(drop=True)
+    )
+
+
+def merge_samples(adata, sim):
+    source = adata_df(adata)
+    simulated = adata_df(sim)
+    return pd.concat(
+        {"real": source, "simulated": simulated}, names=["source"]
+    ).reset_index(level="source")
+
+
 def plot_umap(
     adata,
     color=None,
@@ -141,3 +157,80 @@ def plot_hist(sim_data, real_data, idx):
     plt.ylabel("Density")
     plt.legend()
     plt.show()
+
+
+def compare_ecdf(adata, sim, var_names=None, max_plot=10, n_cols=5, **kwargs):
+    if var_names is None:
+        var_names = adata.var_names[:max_plot]
+
+    combined = merge_samples(adata[:, var_names], sim.sample()[:, var_names])
+    alt.data_transformers.enable("vegafusion")
+
+    plot = (
+        alt.Chart(combined)
+        .transform_window(
+            ecdf="cume_dist()", sort=[{"field": "value"}], groupby=["variable"]
+        )
+        .mark_line(
+            interpolate="step-after",
+        )
+        .encode(
+            x="value:Q",
+            y="ecdf:Q",
+            color="source:N",
+            facet=alt.Facet(
+                "variable", sort=alt.EncodingSortField("value"), columns=n_cols
+            ),
+        )
+        .properties(**kwargs)
+    )
+    plot.show()
+    return plot, combined
+
+
+def compare_boxplot(adata, sim, var_names=None, max_plot=20, **kwargs):
+    if var_names is None:
+        var_names = adata.var_names[:max_plot]
+
+    combined = merge_samples(adata[:, var_names], sim.sample()[:, var_names])
+    alt.data_transformers.enable("vegafusion")
+
+    plot = (
+        alt.Chart(combined)
+        .mark_boxplot(extent="min-max")
+        .encode(
+            x=alt.X("value:Q").scale(zero=False),
+            y=alt.Y(
+                "variable:N",
+                sort=alt.EncodingSortField("mid_box_value", order="descending"),
+            ),
+            facet="source:N",
+        )
+        .properties(**kwargs)
+    )
+    plot.show()
+    return plot, combined
+
+
+def compare_histogram(adata, sim, var_names=None, max_plot=20, n_cols=5, **kwargs):
+    if var_names is None:
+        var_names = adata.var_names[:max_plot]
+
+    combined = merge_samples(adata[:, var_names], sim.sample()[:, var_names])
+    alt.data_transformers.enable("vegafusion")
+
+    plot = (
+        alt.Chart(combined)
+        .mark_bar(opacity=0.7)
+        .encode(
+            x=alt.X("value:Q").bin(maxbins=20),
+            y=alt.Y("count()").stack(None),
+            color="source:N",
+            facet=alt.Facet(
+                "variable", sort=alt.EncodingSortField("bin_maxbins_20_value")
+            ),
+        )
+        .properties(**kwargs)
+    )
+    plot.show()
+    return plot, combined
