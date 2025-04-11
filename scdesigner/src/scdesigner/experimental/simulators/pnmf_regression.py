@@ -1,10 +1,10 @@
 from anndata import AnnData
 from formulaic import model_matrix
+from ..estimators.format import format_input_anndata, format_matrix
 from scipy.stats import gamma
 from ..estimators.pnmf import pnmf, gamma_regression_array, format_gamma_parameters
 import numpy as np
 import pandas as pd
-import scipy.sparse
 
 
 class PNMFRegressionSimulator:
@@ -57,23 +57,3 @@ class PNMFRegressionSimulator:
     method: 'PNMF Regression'
     formula: '{self.formula}'
     parameters: 'a', 'loc', 'beta', 'W'"""
-
-
-###############################################################################
-## Helpers for processing input data
-###############################################################################
-
-
-def format_input_anndata(adata: AnnData) -> AnnData:
-    result = adata.copy()
-    if isinstance(result.X, scipy.sparse._csc.csc_matrix):
-        result.X = result.X.todense()
-    return result
-
-
-def format_matrix(obs: pd.DataFrame, formula: str):
-    if formula is not None:
-        x = model_matrix(formula, obs)
-    else:
-        x = obs
-    return x
