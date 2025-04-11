@@ -1,25 +1,42 @@
 from anndata import AnnData
-import torch
-import pandas as pd
-import numpy as np
 from formulaic import model_matrix
+from torch.utils.data import DataLoader, TensorDataset
+import numpy as np
+import pandas as pd
+import scipy.sparse
+import torch
 import torch.utils.data as td
 
 
-class AnndataViewLoader:
-    def __init__(
-        self,
-        adata: AnnData,
-        formula=None,
+def formula_loader(adata: AnnData, formula=None, 
         chunk_size=int(1e4),
-        device=None,
-        batch_size: int = None,
+        batch_size: int=None
     ):
-        ds = AnndataViewDataset(adata, formula, chunk_size, device)
-        self.loader = td.DataLoader(ds, batch_size=batch_size)
+    device = check_device()
+    if adata.isbacked:
+        ds = FormulaViewDataset(adata, formula, chunk_size, device)
+        dataloader = td.DataLoader(ds, batch_size=batch_size)
+        ds.x_names = model_matrix_names(adata, formula, ds.categories)
+    else:
+        # convert sparse to dense matrix
+        y = adata.X
+        if isinstance(y, scipy.sparse._csc.csc_matrix):
+            y = y.todense()
+
+        # create tensor-based loader
+        x = model_matrix(formula, adata.obs)
+        ds = TensorDataset(
+            torch.tensor(np.array(x), dtype=torch.float32).to(device),
+            torch.tensor(y, dtype=torch.float32).to(device),
+        )
+        ds.x_names = list(x.columns)
+        dataloader = DataLoader(ds, batch_size=batch_size)
+
+    return dataloader
 
 
-class AnndataViewDataset(td.Dataset):
+
+class FormulaViewDataset(td.Dataset):
     def __init__(self, view, formula=None, chunk_size=int(1e4), device=None):
         super().__init__()
         self.view = view
@@ -46,15 +63,32 @@ class AnndataViewDataset(td.Dataset):
             )
         return self.x[ix - self.cur_range[0]], self.y[ix - self.cur_range[0]]
 
+def replace_cols(obs, categories):
+    for k in obs.columns:
+        if str(obs[k].dtype) == "category":
+            obs[k] = obs[k].astype(pd.CategoricalDtype(categories[k]))
+    return obs
+    
+
+
+def model_matrix_names(adata, formula, categories):
+    if adata.isbacked:
+        obs = adata[:1].to_memory().obs
+    else:
+        obs = adata.obs
+
+    if formula is None:
+        return list(obs.columns)
+
+    obs = replace_cols(obs, categories)
+    return(list(model_matrix(formula, obs).columns))
+
 
 def safe_model_matrix(obs, formula, categories):
     if formula is None:
         return obs
 
-    for k in obs.columns:
-        if str(obs[k].dtype) == "category":
-            obs[k] = obs[k].astype(pd.CategoricalDtype(categories[k]))
-
+    obs = replace_cols(obs, categories)
     x = model_matrix(formula, obs)
     return torch.from_numpy(np.array(x).astype(np.float32))
 
