@@ -6,7 +6,7 @@ import torch
 
 
 # computes PNMF weight and score, ncol specify the number of clusters
-def pnmf(log_data, ncol=3, **kwargs):  # data is np array, log transformed read data
+def pnmf(log_data, nbase=3, **kwargs):  # data is np array, log transformed read data
     """
     Computes PNMF weight and score.
 
@@ -14,7 +14,7 @@ def pnmf(log_data, ncol=3, **kwargs):  # data is np array, log transformed read 
     :ncol: specify the number of clusters
     :return: W (weights, gene x base) and S (scores, base x cell) as numpy arrays
     """
-    U = left_singular(log_data, ncol)
+    U = left_singular(log_data, nbase)
     W = pnmf_eucdist(log_data, U, **kwargs)
     W = W / np.linalg.norm(W, ord=2)
     S = W.T @ log_data

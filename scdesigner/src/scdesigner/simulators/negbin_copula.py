@@ -8,26 +8,26 @@ import pandas as pd
 
 
 class NegBinCopulaSimulator:
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.var_names = None
         self.formula = None
         self.copula_formula = None
         self.shape = None
         self.params = None
+        self.hyperparams = kwargs
 
     def fit(
         self,
         adata: AnnData,
         formula: str = "~ 1",
-        formula_copula: str = "~ 1",
-        **kwargs,
+        formula_copula: str = "~ 1"
     ) -> dict:
 
         adata = format_input_anndata(adata)
         self.formula = formula
         self.copula_formula = formula_copula
         self.shape = adata.X.shape
-        self.params = negbin_copula(adata, formula, formula_copula, **kwargs)
+        self.params = negbin_copula(adata, formula, formula_copula, self.hyperparams)
 
     def sample(self, obs: pd.DataFrame) -> AnnData:
         groups = group_indices(self.copula_formula, obs)

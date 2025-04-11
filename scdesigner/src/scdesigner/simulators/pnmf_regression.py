@@ -8,21 +8,22 @@ import pandas as pd
 
 
 class PNMFRegressionSimulator:
-    def __init__(self):  # default input: cell x gene
+    def __init__(self, nbase=20, maxIter=100, **kwargs):  # default input: cell x gene
         self.var_names = None
         self.formula = None
         self.params = None
+        self.hyperparams = {"pnmf": {"nbase": nbase, "maxIter": maxIter}, "gamma": kwargs}
 
-    def fit(self, adata, formula: str, nbase=20, maxIter=100, **kwargs):
+    def fit(self, adata, formula: str):
         adata = format_input_anndata(adata)
         self.var_names = adata.var_names
         self.formula = formula
         log_data = np.log1p(adata.X).T
-        W, S = pnmf(log_data, nbase, maxIter=maxIter)
+        W, S = pnmf(log_data, **self.hyperparams["pnmf"])
         adata = AnnData(X=S.T, obs=adata.obs)
 
         x = model_matrix(formula, adata.obs)
-        parameters = gamma_regression_array(np.array(x), adata.X, **kwargs)
+        parameters = gamma_regression_array(np.array(x), adata.X, **self.hyperparams["gamma"])
         parameters["W"] = W
         self.params = format_gamma_parameters(
             parameters, list(self.var_names), list(x.columns)

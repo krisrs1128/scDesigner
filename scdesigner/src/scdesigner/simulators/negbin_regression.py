@@ -6,15 +6,16 @@ import pandas as pd
 
 
 class NegBinRegressionSimulator:
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.var_names = None
         self.formula = None
         self.shape = None
         self.params = None
+        self.hyperparams = kwargs
 
-    def fit(self, adata: AnnData, formula: str, **kwargs) -> dict:
+    def fit(self, adata: AnnData, formula: str) -> dict:
         self.formula = formula
-        self.params = negbin_regression(adata, formula, **kwargs)
+        self.params = negbin_regression(adata, formula, **self.hyperparams)
 
     def sample(self, obs: pd.DataFrame) -> AnnData:
         local_parameters = self.predict(obs)
