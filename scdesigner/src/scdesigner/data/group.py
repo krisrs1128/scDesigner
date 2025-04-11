@@ -8,7 +8,7 @@ import torch.utils.data as td
 
 
 def formula_group_loader(
-    adata: AnnData, formula=None, grouping_variable=None, chunk_size=int(1e4), batch_size: int = None
+    adata: AnnData, formula=None, grouping_variable=None, chunk_size=int(1e4), batch_size: int = 12
 ):
     device = fl.check_device()
     if grouping_variable is None:
@@ -28,10 +28,11 @@ def formula_group_loader(
         # wrap the entire data into a dataset
         x = model_matrix(formula, adata.obs)
         ds = td.StackDataset(
-            td.TensorDataset(torch.tensor(np.array(x), dtype=torch.float32).to(device)),
-            td.TensorDataset(torch.tensor(y, dtype=torch.float32).to(device)),
-            ListDataset(adata.obs[grouping_variable])
+            x=td.TensorDataset(torch.tensor(np.array(x), dtype=torch.float32).to(device)),
+            y=td.TensorDataset(torch.tensor(y, dtype=torch.float32).to(device)),
+            groups=ListDataset(adata.obs[grouping_variable])
         )
+        ds.groups = list(adata.obs[grouping_variable].dtype.categories)
         ds.x_names = list(x.columns)
         dataloader = td.DataLoader(ds, batch_size=batch_size, collate_fn=stack_collate)
 
@@ -84,8 +85,7 @@ class ListDataset(td.Dataset):
 
 
 def stack_collate(batch):
-    import pdb; pdb.set_trace()
-    x = torch.stack([sample[0] for sample in batch])
-    y = torch.stack([sample[1] for sample in batch])
-    groups = tuple([sample[2] for sample in batch])
+    x = torch.stack([sample["x"][0] for sample in batch])
+    y = torch.stack([sample["y"][0] for sample in batch])
+    groups = tuple([sample["groups"] for sample in batch])
     return [x, y, groups]

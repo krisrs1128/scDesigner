@@ -15,8 +15,8 @@ import torch
 
 
 def remove_group_collate(batch):
-    x = torch.stack([x[0] for x in batch])
-    y = torch.stack([x[1] for x in batch])
+    x = torch.stack([sample["x"][0] for sample in batch])
+    y = torch.stack([sample["y"][0] for sample in batch])
     return [x, y]
 
 
@@ -24,7 +24,7 @@ def gaussian_copula_array_factory(marginal_model: Callable, uniformizer: Callabl
     def copula_fun(loader: DataLoader, **kwargs):
         # for the marginal model, ignore the groupings
         formula_loader = deepcopy(loader)
-        formula_loader.collate_fn = remove_group_collate(formula_loader)
+        formula_loader.collate_fn = remove_group_collate
         parameters = marginal_model(formula_loader, **kwargs)
 
         # estimate covariance, allowing for different groups
@@ -50,13 +50,13 @@ def gaussian_copula_factory(copula_array_fun: Callable, parameter_formatter: Cal
 
 
 def copula_covariance(parameters: dict, loader: DataLoader, uniformizer: Callable):
-    D = u.shape[1]
-    result = {g: np.zeros((D, D)) for g in loader.dataset.groups}
+    D = next(iter(loader))[1].shape[1]
+    result = {g: np.eye(D) for g in loader.dataset.groups}
 
-    for memberships, x, y in loader:
-        u = uniformizer(parameters, x, y)
+    for x, y, memberships in loader:
+        u = uniformizer(parameters, x.cpu().numpy(), y.cpu().numpy())
         for g in result.keys():
-            ix = np.where(memberships == g)
+            ix = np.where(np.array(memberships) == g)
             z = norm().ppf(u[ix]).T
             result[g] += z @ z.T
 
