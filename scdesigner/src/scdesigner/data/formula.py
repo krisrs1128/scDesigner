@@ -8,10 +8,9 @@ import torch
 import torch.utils.data as td
 
 
-def formula_loader(adata: AnnData, formula=None, 
-        chunk_size=int(1e4),
-        batch_size: int=None
-    ):
+def formula_loader(
+    adata: AnnData, formula=None, chunk_size=int(1e4), batch_size: int = None
+):
     device = check_device()
     if adata.isbacked:
         ds = FormulaViewDataset(adata, formula, chunk_size, device)
@@ -33,7 +32,6 @@ def formula_loader(adata: AnnData, formula=None,
         dataloader = DataLoader(ds, batch_size=batch_size)
 
     return dataloader
-
 
 
 class FormulaViewDataset(td.Dataset):
@@ -63,12 +61,12 @@ class FormulaViewDataset(td.Dataset):
             )
         return self.x[ix - self.cur_range[0]], self.y[ix - self.cur_range[0]]
 
+
 def replace_cols(obs, categories):
     for k in obs.columns:
         if str(obs[k].dtype) == "category":
             obs[k] = obs[k].astype(pd.CategoricalDtype(categories[k]))
     return obs
-    
 
 
 def model_matrix_names(adata, formula, categories):
@@ -81,7 +79,7 @@ def model_matrix_names(adata, formula, categories):
         return list(obs.columns)
 
     obs = replace_cols(obs, categories)
-    return(list(model_matrix(formula, obs).columns))
+    return list(model_matrix(formula, obs).columns)
 
 
 def safe_model_matrix(obs, formula, categories):
