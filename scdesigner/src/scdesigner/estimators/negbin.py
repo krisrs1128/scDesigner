@@ -3,7 +3,6 @@ from . import glm_factory as factory
 from .. import format
 from .. import data
 from anndata import AnnData
-from formulaic import model_matrix
 from scipy.stats import nbinom
 import numpy as np
 import pandas as pd
