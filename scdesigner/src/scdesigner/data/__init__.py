@@ -1,5 +1,5 @@
 from .formula import FormulaViewDataset, formula_loader
-from .group import GroupViewDataset
+from .group import GroupViewDataset, group_loader
 from .sparse import SparseMatrixDataset, SparseMatrixLoader
 
 __all__ = [
@@ -7,5 +7,6 @@ __all__ = [
     "SparseMatrixDataset",
     "SparseMatrixLoader",
     "GroupViewDataset",
-    "formula_loader"
+    "formula_loader",
+    "group_loader"
 ]
