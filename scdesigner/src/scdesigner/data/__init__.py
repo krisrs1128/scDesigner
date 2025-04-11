@@ -1,9 +1,9 @@
-from .anndata_view import AnndataViewDataset, AnndataViewLoader
+from .anndata_view import FormulaViewDataset, formula_loader
 from .sparse import SparseMatrixDataset, SparseMatrixLoader
 
 __all__ = [
-    "AnndataViewDataset",
-    "AnndataViewLoader",
+    "FormulaViewDataset",
     "SparseMatrixDataset",
-    "SparseMatrixLoader"
+    "SparseMatrixLoader",
+    "formula_loader"
 ]
