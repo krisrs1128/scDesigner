@@ -1,8 +1,8 @@
 from . import gaussian_copula_factory as gcf
 from . import glm_factory as factory
 from .. import format
+from .. import data
 from anndata import AnnData
-from formulaic import model_matrix
 from scipy.stats import nbinom
 import numpy as np
 import pandas as pd
@@ -48,7 +48,7 @@ def negbin_postprocessor(params, n_features, n_outcomes):
     return {"beta": beta, "gamma": dispersion}
 
 
-negbin_regression_array = factory.glm_regression_generator(
+negbin_regression_array = factory.glm_regression_factory(
     negbin_regression_likelihood, negbin_initializer, negbin_postprocessor
 )
 
@@ -70,11 +70,16 @@ def format_negbin_parameters(
     return parameters
 
 
-def negbin_regression(adata: AnnData, formula: str, **kwargs) -> dict:
-    adata = format.format_input_anndata(adata)
-    x = model_matrix(formula, adata.obs)
-    parameters = negbin_regression_array(np.array(x), adata.X, **kwargs)
-    return format_negbin_parameters(parameters, list(adata.var_names), list(x.columns))
+def negbin_regression(
+    adata: AnnData, formula: str, chunk_size: int = int(1e4), batch_size=512, **kwargs
+) -> dict:
+    loader = data.formula_loader(
+        adata, formula, chunk_size=chunk_size, batch_size=batch_size
+    )
+    parameters = negbin_regression_array(loader, **kwargs)
+    return format_negbin_parameters(
+        parameters, list(adata.var_names), loader.dataset.x_names
+    )
 
 
 ###############################################################################
@@ -85,8 +90,8 @@ def negbin_regression(adata: AnnData, formula: str, **kwargs) -> dict:
 def negbin_uniformizer(parameters, x, y):
     r, mu = np.exp(parameters["gamma"]), np.exp(x @ parameters["beta"])
     nb_distn = nbinom(n=r, p=r / (r + mu))
-    u = np.random.uniform(size=y.shape)
-    return gcf.clip(u * nb_distn.cdf(y) + (1 - u) * nb_distn.cdf(1 + y))
+    alpha = np.random.uniform(size=y.shape)
+    return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
 
 
 negbin_copula_array = gcf.gaussian_copula_array_factory(

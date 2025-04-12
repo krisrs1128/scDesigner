@@ -1,9 +1,8 @@
 from . import gaussian_copula_factory as gcf
 from . import glm_factory as factory
-from .. import format
+from .. import data
 from . import poisson as poi
 from anndata import AnnData
-from formulaic import model_matrix
 from scipy.stats import bernoulli
 import numpy as np
 import torch
@@ -25,7 +24,7 @@ def bernoulli_regression_likelihood(params, X, y):
     return -torch.sum(log_likelihood)
 
 
-bernoulli_regression_array = factory.glm_regression_generator(
+bernoulli_regression_array = factory.glm_regression_factory(
     bernoulli_regression_likelihood, poi.poisson_initializer, poi.poisson_postprocessor
 )
 
@@ -34,12 +33,15 @@ bernoulli_regression_array = factory.glm_regression_generator(
 ###############################################################################
 
 
-def bernoulli_regression(adata: AnnData, formula: str, **kwargs) -> dict:
-    adata = format.format_input_anndata(adata)
-    x = model_matrix(formula, adata.obs)
-    parameters = bernoulli_regression_array(np.array(x), adata.X, **kwargs)
+def bernoulli_regression(
+    adata: AnnData, formula: str, chunk_size: int = int(1e4), batch_size=512, **kwargs
+) -> dict:
+    loader = data.formula_loader(
+        adata, formula, chunk_size=chunk_size, batch_size=batch_size
+    )
+    parameters = bernoulli_regression_array(loader, **kwargs)
     return poi.format_poisson_parameters(
-        parameters, list(adata.var_names), list(x.columns)
+        parameters, list(adata.var_names), list(loader.dataset.x_names)
     )
 
 
