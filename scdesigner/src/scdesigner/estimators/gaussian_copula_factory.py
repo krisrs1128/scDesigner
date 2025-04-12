@@ -1,31 +1,22 @@
-from ..data import formula_group_loader
+from ..data import formula_group_loader, stack_collate
 from anndata import AnnData
 from collections.abc import Callable
-from copy import deepcopy
 from formulaic import model_matrix
 from scipy.stats import norm
 from torch.utils.data import DataLoader
 import numpy as np
 import pandas as pd
-import torch
 
 ###############################################################################
 ## General copula factory functions
 ###############################################################################
 
 
-def remove_group_collate(batch):
-    x = torch.stack([sample["x"][0] for sample in batch])
-    y = torch.stack([sample["y"][0] for sample in batch])
-    return [x, y]
-
-
 def gaussian_copula_array_factory(marginal_model: Callable, uniformizer: Callable):
-    def copula_fun(loader: DataLoader, **kwargs):
+    def copula_fun(loader: DataLoader, lr: float = 0.1, epochs: int = 40, **kwargs):
         # for the marginal model, ignore the groupings
-        formula_loader = deepcopy(loader)
-        formula_loader.collate_fn = remove_group_collate
-        parameters = marginal_model(formula_loader, **kwargs)
+        formula_loader = strip_dataloader(loader, pop="Stack" in type(loader.dataset).__name__)
+        parameters = marginal_model(formula_loader, lr=lr, epochs=epochs, **kwargs)
 
         # estimate covariance, allowing for different groups
         parameters["covariance"] = copula_covariance(parameters, loader, uniformizer)
@@ -36,9 +27,20 @@ def gaussian_copula_array_factory(marginal_model: Callable, uniformizer: Callabl
 
 def gaussian_copula_factory(copula_array_fun: Callable, parameter_formatter: Callable):
     def copula_fun(
-        adata: AnnData, formula: str = "~ 1", grouping_variable: str = None, **kwargs
+        adata: AnnData,
+        formula: str = "~ 1",
+        grouping_variable: str = None,
+        chunk_size: int = int(1e4),
+        batch_size: int = 512,
+        **kwargs
     ) -> dict:
-        dl = formula_group_loader(adata, formula, grouping_variable)
+        dl = formula_group_loader(
+            adata,
+            formula,
+            grouping_variable,
+            chunk_size=chunk_size,
+            batch_size=batch_size,
+        )
         parameters = copula_array_fun(dl, **kwargs)
         parameters = parameter_formatter(
             parameters, adata.var_names, dl.dataset.x_names
@@ -51,16 +53,26 @@ def gaussian_copula_factory(copula_array_fun: Callable, parameter_formatter: Cal
 
 def copula_covariance(parameters: dict, loader: DataLoader, uniformizer: Callable):
     D = next(iter(loader))[1].shape[1]
-    result = {g: np.eye(D) for g in loader.dataset.groups}
+    groups = loader.dataset.groups
+    sums = {g: np.zeros(D) for g in groups}
+    second_moments = {g: np.eye(D) for g in groups}
+    Ng = {g: 0 for g in groups}
 
     for x, y, memberships in loader:
         u = uniformizer(parameters, x.cpu().numpy(), y.cpu().numpy())
-        for g in result.keys():
+        for g in groups:
             ix = np.where(np.array(memberships) == g)
-            z = norm().ppf(u[ix]).T
-            result[g] += z @ z.T
+            z = norm().ppf(u[ix])
+            second_moments[g] += z.T @ z
+            sums[g] += z.sum(axis=0)
+            Ng[g] += len(ix[0])
 
-    if len(result) == 1:
+    result = {}
+    for g in groups:
+        mean = sums[g] / Ng[g]
+        result[g] = second_moments[g] / Ng[g] - np.outer(mean, mean)
+
+    if len(groups) == 1:
         return list(result.values())[0]
     return result
 
@@ -99,3 +111,11 @@ def format_copula_parameters(parameters: dict, var_names: list):
                 index=list(var_names),
             )
     return covariance
+
+
+def strip_dataloader(dataloader, pop=False):
+    return DataLoader(
+        dataset=dataloader.dataset,
+        batch_sampler=dataloader.batch_sampler,
+        collate_fn=stack_collate(pop=pop, groups=False),
+    )
