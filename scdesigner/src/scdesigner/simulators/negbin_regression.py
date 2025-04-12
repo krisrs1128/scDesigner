@@ -9,7 +9,6 @@ class NegBinRegressionSimulator:
     def __init__(self, **kwargs):
         self.var_names = None
         self.formula = None
-        self.shape = None
         self.params = None
         self.hyperparams = kwargs
 

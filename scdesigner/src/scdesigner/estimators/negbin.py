@@ -48,7 +48,7 @@ def negbin_postprocessor(params, n_features, n_outcomes):
     return {"beta": beta, "gamma": dispersion}
 
 
-negbin_regression_array = factory.glm_regression_generator(
+negbin_regression_array = factory.glm_regression_factory(
     negbin_regression_likelihood, negbin_initializer, negbin_postprocessor
 )
 
@@ -73,7 +73,7 @@ def format_negbin_parameters(
 def negbin_regression(
     adata: AnnData, formula: str, chunk_size: int = int(1e4), batch_size=512, **kwargs
 ) -> dict:
-    dataloader = data.formula_loader(
+    dataloader = data.formula(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
     parameters = negbin_regression_array(dataloader, **kwargs)
@@ -90,8 +90,8 @@ def negbin_regression(
 def negbin_uniformizer(parameters, x, y):
     r, mu = np.exp(parameters["gamma"]), np.exp(x @ parameters["beta"])
     nb_distn = nbinom(n=r, p=r / (r + mu))
-    u = np.random.uniform(size=y.shape)
-    return gcf.clip(u * nb_distn.cdf(y) + (1 - u) * nb_distn.cdf(1 + y))
+    alpha = np.random.uniform(size=y.shape)
+    return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
 
 
 negbin_copula_array = gcf.gaussian_copula_array_factory(

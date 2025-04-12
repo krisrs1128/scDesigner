@@ -25,7 +25,7 @@ def bernoulli_regression_likelihood(params, X, y):
     return -torch.sum(log_likelihood)
 
 
-bernoulli_regression_array = factory.glm_regression_generator(
+bernoulli_regression_array = factory.glm_regression_factory(
     bernoulli_regression_likelihood, poi.poisson_initializer, poi.poisson_postprocessor
 )
 

@@ -35,7 +35,7 @@ def poisson_postprocessor(params, n_features, n_outcomes):
     return {"beta": beta}
 
 
-poisson_regression_array = factory.glm_regression_generator(
+poisson_regression_array = factory.glm_regression_factory(
     poisson_regression_likelihood, poisson_initializer, poisson_postprocessor
 )
 

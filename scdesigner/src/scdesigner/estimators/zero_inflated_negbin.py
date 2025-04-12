@@ -58,7 +58,7 @@ def zero_inflated_negbin_postprocessor(params, n_features, n_outcomes):
     return {"beta": beta, "gamma": gamma, "pi": pi}
 
 
-zero_inflated_negbin_regression_array = factory.glm_regression_generator(
+zero_inflated_negbin_regression_array = factory.glm_regression_factory(
     zero_inflated_negbin_regression_likelihood,
     zero_inflated_negbin_initializer,
     zero_inflated_negbin_postprocessor,

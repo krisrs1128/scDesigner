@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 import torch
 
 
-def glm_regression_generator(likelihood, initializer, postprocessor) -> dict:
+def glm_regression_factory(likelihood, initializer, postprocessor) -> dict:
     def estimator(
         dataloader: DataLoader,
         lr: float = 0.1,
