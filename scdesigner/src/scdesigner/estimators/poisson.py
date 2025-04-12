@@ -1,8 +1,8 @@
 from . import gaussian_copula_factory as gcf
 from . import glm_factory as factory
+from .. import data
 from .. import format
 from anndata import AnnData
-from formulaic import model_matrix
 from scipy.stats import poisson
 import numpy as np
 import pandas as pd
@@ -53,11 +53,18 @@ def format_poisson_parameters(
     return parameters
 
 
-def poisson_regression(adata: AnnData, formula: str, **kwargs) -> dict:
-    adata = format.format_input_anndata(adata)
-    x = model_matrix(formula, adata.obs)
-    parameters = poisson_regression_array(np.array(x), adata.X, **kwargs)
-    return format_poisson_parameters(parameters, list(adata.var_names), list(x.columns))
+def poisson_regression(
+    adata: AnnData,
+    formula: str,
+    chunk_size: int = int(1e4),
+    batch_size: int = 512,
+    **kwargs
+) -> dict:
+    loader = data.formula_loader(
+        adata, formula, chunk_size=chunk_size, batch_size=batch_size
+    )
+    parameters = poisson_regression_array(loader, **kwargs)
+    return format_poisson_parameters(parameters, list(adata.var_names), list(loader.dataset.x_names))
 
 
 ###############################################################################

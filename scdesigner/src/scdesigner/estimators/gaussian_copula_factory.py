@@ -82,12 +82,10 @@ def copula_covariance(parameters: dict, loader: DataLoader, uniformizer: Callabl
 ###############################################################################
 
 
-def group_indices(formula: str, obs: pd.DataFrame) -> dict:
-    group_matrix = model_matrix(formula, obs)
+def group_indices(grouping_var: str, obs: pd.DataFrame) -> dict:
     result = {}
-
-    for group in group_matrix.columns:
-        result[group] = np.where(group_matrix[group].values == 1)[0]
+    for group in list(obs[grouping_var].dtype.categories):
+        result[group] = np.where(obs[grouping_var].values == group)[0]
     return result
 
 

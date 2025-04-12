@@ -73,12 +73,12 @@ def format_negbin_parameters(
 def negbin_regression(
     adata: AnnData, formula: str, chunk_size: int = int(1e4), batch_size=512, **kwargs
 ) -> dict:
-    dataloader = data.formula(
+    loader = data.formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
-    parameters = negbin_regression_array(dataloader, **kwargs)
+    parameters = negbin_regression_array(loader, **kwargs)
     return format_negbin_parameters(
-        parameters, list(adata.var_names), dataloader.dataset.x_names
+        parameters, list(adata.var_names), loader.dataset.x_names
     )
 
 

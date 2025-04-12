@@ -1,8 +1,8 @@
 from . import gaussian_copula_factory as gcf
 from .. import format
+from .. import data
 from . import glm_factory as factory
 from anndata import AnnData
-from formulaic import model_matrix
 from scipy.stats import nbinom
 import numpy as np
 import pandas as pd
@@ -84,12 +84,15 @@ def format_zero_inflated_negbin_parameters(
     return parameters
 
 
-def zero_inflated_negbin_regression(adata: AnnData, formula: str, **kwargs) -> dict:
-    adata = format.format_input_anndata(adata)
-    x = model_matrix(formula, adata.obs)
-    parameters = zero_inflated_negbin_regression_array(np.array(x), adata.X, **kwargs)
+def zero_inflated_negbin_regression(
+    adata: AnnData, formula: str, chunk_size: int = int(1e4), batch_size=512, **kwargs
+) -> dict:
+    loader = data.formula_loader(
+        adata, formula, chunk_size=chunk_size, batch_size=batch_size
+    )
+    parameters = zero_inflated_negbin_regression_array(loader, **kwargs)
     return format_zero_inflated_negbin_parameters(
-        parameters, list(adata.var_names), list(x.columns)
+        parameters, list(adata.var_names), list(loader.dataset.x_names)
     )
 
 

@@ -18,6 +18,7 @@ def formula_group_loader(
     if grouping_variable is None:
         adata.obs["_copula_group"] = "shared_group"
         grouping_variable = "_copula_group"
+        adata.obs["_copula_group"] = adata.obs["_copula_group"].astype("category")
 
     if adata.isbacked:
         ds = FormulaGroupViewDataset(
