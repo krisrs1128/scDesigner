@@ -8,7 +8,11 @@ import torch.utils.data as td
 
 
 def formula_group_loader(
-    adata: AnnData, formula=None, grouping_variable=None, chunk_size=int(1e4), batch_size: int = 12
+    adata: AnnData,
+    formula=None,
+    grouping_variable=None,
+    chunk_size=int(1e4),
+    batch_size: int = None,
 ):
     device = fl.check_device()
     if grouping_variable is None:
@@ -16,8 +20,10 @@ def formula_group_loader(
         grouping_variable = "_copula_group"
 
     if adata.isbacked:
-        ds = FormulaGroupViewDataset(adata, formula, grouping_variable, chunk_size, device)
-        dataloader = td.DataLoader(ds, batch_size=batch_size)
+        ds = FormulaGroupViewDataset(
+            adata, formula, grouping_variable, chunk_size, device
+        )
+        dataloader = td.DataLoader(ds, batch_size=batch_size, collate_fn=stack_collate())
         ds.x_names = fl.model_matrix_names(adata, formula, ds.categories)
     else:
         # convert sparse to dense matrix
@@ -28,18 +34,28 @@ def formula_group_loader(
         # wrap the entire data into a dataset
         x = model_matrix(formula, adata.obs)
         ds = td.StackDataset(
-            x=td.TensorDataset(torch.tensor(np.array(x), dtype=torch.float32).to(device)),
+            x=td.TensorDataset(
+                torch.tensor(np.array(x), dtype=torch.float32).to(device)
+            ),
             y=td.TensorDataset(torch.tensor(y, dtype=torch.float32).to(device)),
-            groups=ListDataset(adata.obs[grouping_variable])
+            groups=ListDataset(adata.obs[grouping_variable]),
         )
         ds.groups = list(adata.obs[grouping_variable].dtype.categories)
         ds.x_names = list(x.columns)
-        dataloader = td.DataLoader(ds, batch_size=batch_size, collate_fn=stack_collate)
+        dataloader = td.DataLoader(ds, batch_size=batch_size, collate_fn=stack_collate(pop=True))
 
     return dataloader
 
+
 class FormulaGroupViewDataset(td.Dataset):
-    def __init__(self, view, formula=None, grouping_variable=None, chunk_size=int(1e4), device=None):
+    def __init__(
+        self,
+        view,
+        formula=None,
+        grouping_variable=None,
+        chunk_size=int(1e4),
+        device=None,
+    ):
         super().__init__()
         self.device = device or fl.check_device()
         self.formula = formula
@@ -67,7 +83,12 @@ class FormulaGroupViewDataset(td.Dataset):
             self.y = torch.from_numpy(view_inmem.X.toarray().astype(np.float32)).to(
                 self.device
             )
-        return self.x[ix - self.cur_range[0]], self.y[ix - self.cur_range[0]], self.memberships[ix - self.cur_range[0]]
+        return {
+            "x": self.x[ix - self.cur_range[0]],
+            "y": self.y[ix - self.cur_range[0]],
+            "groups": self.memberships[ix - self.cur_range[0]],
+        }
+
 
 class ListDataset(td.Dataset):
     """
@@ -83,9 +104,12 @@ class ListDataset(td.Dataset):
     def __getitem__(self, idx):
         return self.list[idx]
 
-
-def stack_collate(batch):
-    x = torch.stack([sample["x"][0] for sample in batch])
-    y = torch.stack([sample["y"][0] for sample in batch])
-    groups = tuple([sample["groups"] for sample in batch])
-    return [x, y, groups]
+def stack_collate(pop=False, groups=True):
+    def f(batch):
+        x = torch.stack([sample["x"][0] if pop else sample["x"] for sample in batch])
+        y = torch.stack([sample["y"][0] if pop else sample["y"] for sample in batch])
+        if groups:
+            G = tuple([sample["groups"] for sample in batch])
+            return [x, y, G]
+        return [x, y]
+    return f
