@@ -38,5 +38,5 @@ class NegBinCopulaSimulator:
         return f"""scDesigner simulator object with
     method: 'Negtive Binomial Copula'
     formula: '{self.formula}'
-    copula formula: '{self.copula_formula}'
+    copula formula: '{self.copula_groups}'
     parameters: 'coefficient', 'dispersion', 'covariance'"""
