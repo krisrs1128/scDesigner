@@ -1,7 +1,6 @@
 from ..data import formula_group_loader, stack_collate
 from anndata import AnnData
 from collections.abc import Callable
-from formulaic import model_matrix
 from scipy.stats import norm
 from torch.utils.data import DataLoader
 import numpy as np
@@ -29,7 +28,7 @@ def gaussian_copula_factory(copula_array_fun: Callable, parameter_formatter: Cal
     def copula_fun(
         adata: AnnData,
         formula: str = "~ 1",
-        grouping_variable: str = None,
+        grouping_var: str = None,
         chunk_size: int = int(1e4),
         batch_size: int = 512,
         **kwargs
@@ -37,7 +36,7 @@ def gaussian_copula_factory(copula_array_fun: Callable, parameter_formatter: Cal
         dl = formula_group_loader(
             adata,
             formula,
-            grouping_variable,
+            grouping_var,
             chunk_size=chunk_size,
             batch_size=batch_size,
         )
@@ -83,7 +82,10 @@ def copula_covariance(parameters: dict, loader: DataLoader, uniformizer: Callabl
 
 
 def group_indices(grouping_var: str, obs: pd.DataFrame) -> dict:
+    if grouping_var is None:
+        grouping_var = "_copula_group"
     result = {}
+
     for group in list(obs[grouping_var].dtype.categories):
         result[group] = np.where(obs[grouping_var].values == group)[0]
     return result
