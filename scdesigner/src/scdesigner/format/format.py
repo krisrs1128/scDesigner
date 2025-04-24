@@ -14,7 +14,7 @@ def format_input_anndata(adata: AnnData) -> AnnData:
 
 def format_matrix(obs: pd.DataFrame, formula: str):
     if formula is not None:
-        x = model_matrix(formula, obs)
+        x = model_matrix(formula, pd.DataFrame(obs))
     else:
         x = obs
     return x

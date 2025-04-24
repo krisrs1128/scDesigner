@@ -23,7 +23,7 @@ def formula_loader(
             y = y.todense()
 
         # create tensor-based loader
-        x = model_matrix(formula, adata.obs)
+        x = model_matrix(formula, pd.DataFrame(adata.obs))
         ds = TensorDataset(
             torch.tensor(np.array(x), dtype=torch.float32).to(device),
             torch.tensor(y, dtype=torch.float32).to(device),
@@ -79,7 +79,7 @@ def model_matrix_names(adata, formula, categories):
         return list(obs.columns)
 
     obs = replace_cols(obs, categories)
-    return list(model_matrix(formula, obs).columns)
+    return list(model_matrix(formula, pd.DataFrame(obs)).columns)
 
 
 def safe_model_matrix(obs, formula, categories):
@@ -87,7 +87,7 @@ def safe_model_matrix(obs, formula, categories):
         return obs
 
     obs = replace_cols(obs, categories)
-    x = model_matrix(formula, obs)
+    x = model_matrix(formula, pd.DataFrame(obs))
     return torch.from_numpy(np.array(x).astype(np.float32))
 
 

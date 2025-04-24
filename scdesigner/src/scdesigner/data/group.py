@@ -2,6 +2,7 @@ from . import formula as fl
 from anndata import AnnData
 from formulaic import model_matrix
 import numpy as np
+import pandas as pd
 import scipy
 import torch
 import torch.utils.data as td
@@ -33,7 +34,7 @@ def formula_group_loader(
             y = y.todense()
 
         # wrap the entire data into a dataset
-        x = model_matrix(formula, adata.obs)
+        x = model_matrix(formula, pd.DataFrame(adata.obs))
         ds = td.StackDataset(
             x=td.TensorDataset(
                 torch.tensor(np.array(x), dtype=torch.float32).to(device)
