@@ -42,3 +42,8 @@ MOBSP_sce <- readRDS((url("https://figshare.com/ndownloader/files/40581986")))
 writeH5AD(MOBSC_sce, "MOBSC_sce.h5ad")
 writeH5AD(MOBSP_sce, "MOBSP_sce.h5ad")
 ```
+
+```{r}
+example_sce <- readRDS(url("https://figshare.com/ndownloader/files/40581962"))
+writeH5AD(example_sce, "atac.h5ad")
+```
