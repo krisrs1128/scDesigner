@@ -1,7 +1,4 @@
 import anndata
-from .. import estimators as est
-from .. import predictors as prd
-from .. import samplers as smp
 import pandas as pd
 
 
@@ -11,65 +8,65 @@ class CompositeGLMSimulator:
         self.params = {}
         self.hyperparams = kwargs
 
+        for k in self.specification:
+            if "_fitted" not in self.specification[k].keys():
+                self.specification[k]["_fitted"] = False
+
+
     def fit(self, adata: anndata.AnnData) -> dict:
+        self.specification = fill_var_names(self.specification, list(adata.var_names))
+
         for k, spec in self.specification.items():
-            match spec["distribution"]:
-                case "negbin":
-                    self.params[k] = est.negbin_regression(
-                        adata[:, spec["var_names"]], spec["formula"], **self.hyperparams
-                    )
-                case "poisson":
-                    self.params[k] = est.poisson_regression(
-                        adata[:, spec["var_names"]], spec["formula"], **self.hyperparams
-                    )
+            if not spec["_fitted"]:
+                spec["simulator"].fit(adata[:, spec["var_names"]], spec["formula"])
+            self.params[k] = subset_params(spec["simulator"].params, list(spec["var_names"]))
+            self.specification[k]["simulator"].params = self.params[k]
+            self.specification[k]["_fitted"] = True
 
     def sample(self, obs: pd.DataFrame) -> anndata.AnnData:
         anndata_list = []
-        local_parameters = self.predict(obs)
-
-        for k, spec in self.specification.items():
-            match spec["distribution"]:
-                case "negbin":
-                    anndata_list.append(smp.negbin_sample(local_parameters[k], obs))
-                case "poisson":
-                    anndata_list.append(smp.poisson_sample(local_parameters[k], obs))
-
+        for spec in self.specification.values():
+            anndata_list.append(spec["simulator"].sample(obs))
         return anndata.concat(anndata_list, axis="var")
 
     def predict(self, obs: pd.DataFrame) -> dict:
         preds = {}
         for k, spec in self.specification.items():
-            match spec["distribution"]:
-                case "negbin":
-                    preds[k] = prd.negbin_predict(self.params[k], obs, spec["formula"])
-                case "poisson":
-                    preds[k] = prd.poisson_predict(self.params[k], obs, spec["formula"])
-
+            preds[k] = spec["simulator"].predict(obs)
         return preds
 
     def __repr__(self):
-        spec = {
-            k: (v["distribution"], v["formula"], list_string(v["var_names"]))
-            for k, v in self.specification.items()
-        }
+        var_names = {k: list_string(v["var_names"]) for k, v in self.specification.items()}
+        simulators = {k: v["simulator"] for k, v in self.specification.items()}
         return f"""scDesigner simulator object with
     method: 'Composite'
-    specification: {spec}
-    parameters: {nested_keys(self.params)}"""
-
-
-def nested_keys(d, parent_key=""):
-    keys = []
-    for k, v in d.items():
-        full_key = f"{parent_key}.{k}" if parent_key else k
-        if isinstance(v, dict):
-            keys.extend(nested_keys(v, full_key))
-        else:
-            keys.append(full_key)
-    return keys
+    features: {var_names}
+    simulators: {simulators}"""
 
 
 def list_string(l):
+    if l is None:
+        return
     if len(l) <= 3:
         return ", ".join(l)
     return f"[{l[0]},{l[1]}, ..., {l[-1]}]"
+
+def fill_var_names(specification, var_names):
+    all_names = []
+    for k, v in specification.items():
+        if v["var_names"] is not None:
+            all_names += list(v["var_names"])
+
+    for k, v in specification.items():
+        if v["var_names"] is None:
+            specification[k]["var_names"] = list(set(var_names) - set(all_names))
+    return specification
+
+def subset_params(params, var_names):
+    result = {}
+    for k, v in params.items():
+        if "covariance" in k:
+            result[k] = v.loc[var_names, var_names]
+        else:
+            result[k] = v.loc[:, var_names]
+    return result
