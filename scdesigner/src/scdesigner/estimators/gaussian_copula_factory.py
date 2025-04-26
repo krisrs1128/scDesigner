@@ -84,6 +84,8 @@ def copula_covariance(parameters: dict, loader: DataLoader, uniformizer: Callabl
 def group_indices(grouping_var: str, obs: pd.DataFrame) -> dict:
     if grouping_var is None:
         grouping_var = "_copula_group"
+        if "copula_group" not in obs.columns:
+            obs["_copula_group"] = pd.Categorical(["shared_group"] * len(obs))
     result = {}
 
     for group in list(obs[grouping_var].dtype.categories):
