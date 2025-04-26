@@ -8,7 +8,6 @@ import pandas as pd
 
 class NegBinCopulaSimulator:
     def __init__(self, **kwargs):
-        self.var_names = None
         self.formula = None
         self.copula_groups = None
         self.params = None
