@@ -5,19 +5,6 @@ from anndata import AnnData
 import pandas as pd
 
 
-def print_fn(self):
-    params_string = ", ".join(
-        [
-            f"{k} [{self.params[k].shape[0]}x{self.params[k].shape[1]}]"
-            for k in self.params.keys()
-        ]
-    )
-    return f"""scDesigner simulator object with
-method: {self.__class__.__name__}
-formula: {self.formula}
-parameters: {params_string}"""
-
-
 def glm_simulator_generator(class_name, regressor, sampler, predictor):
     def __init__(self, **kwargs):
         self.formula = None
@@ -52,7 +39,16 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
         return predictor(self.params, obs, self.formula)
 
     def __repr__(self):
-        return print_fn(self)
+        params_string = ", ".join(
+            [
+                f"{k} [{self.params[k].shape[0]}x{self.params[k].shape[1]}]"
+                for k in self.params.keys()
+            ]
+        )
+        return f"""scDesigner simulator object with
+    method: {self.__class__.__name__}
+    formula: {self.formula}
+    parameters: {params_string}"""
 
     return type(
         class_name,
