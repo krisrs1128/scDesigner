@@ -37,7 +37,13 @@ def plot_umap(
 
     adata_ = adata.copy()
     adata_.X = check_sparse(adata_.X)
-    adata_.X = transform(adata_.X)
+    Z = transform(adata_.X)
+    if Z.shape[1] == adata_.X.shape[1]:
+        adata_.X = transform(adata_.X)
+    else:
+        adata_ = adata_[:, :Z.shape[1]]
+        adata_.X = Z
+        adata_.var_names = [f"transform_{k}" for k in range(Z.shape[1])]
 
     # umap on the top PCA dimensions
     sc.pp.pca(adata_, n_comps=n_comps)
