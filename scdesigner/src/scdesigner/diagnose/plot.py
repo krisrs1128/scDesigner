@@ -30,7 +30,7 @@ def plot_umap(
     n_comps=20,
     n_neighbors=15,
     transform=lambda x: np.log1p(x),
-    **kwargs,
+    **kwargs
 ):
     mapping = {"x": "UMAP1", "y": "UMAP2", "color": color, "shape": shape}
     mapping = {k: v for k, v in mapping.items() if v is not None}
@@ -69,7 +69,7 @@ def plot_pca(
     opacity=0.6,
     plot_dims=[0, 1],
     transform=lambda x: np.log1p(x),
-    **kwargs,
+    **kwargs
 ):
     mapping = {"x": "PCA1", "y": "PCA2", "color": color, "shape": shape}
     mapping = {k: v for k, v in mapping.items() if v is not None}
