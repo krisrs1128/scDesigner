@@ -118,3 +118,10 @@ ZeroInflatedNegBinCopulaSimulator = glm_simulator_generator(
     smp.zero_inflated_negbin_copula_sample,
     prd.zero_inflated_negbin_predict,
 )
+
+ZeroInflatedPoissonRegressionSimulator = glm_simulator_generator(
+    "ZeroInflatedNegbinRegressionSimulator",
+    est.zero_inflated_poisson_regression,
+    smp.zero_inflated_poisson_sample,
+    prd.zero_inflated_poisson_predict,
+)

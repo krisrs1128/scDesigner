@@ -8,6 +8,7 @@ from .glm_simulator import (
     PoissonRegressionSimulator,
     ZeroInflatedNegBinCopulaSimulator,
     ZeroInflatedNegBinRegressionSimulator,
+    ZeroInflatedPoissonRegressionSimulator,
 )
 from .pnmf_regression import PNMFRegressionSimulator
 
@@ -22,4 +23,5 @@ __all__ = [
     "PoissonRegressionSimulator",
     "ZeroInflatedNegBinCopulaSimulator",
     "ZeroInflatedNegBinRegressionSimulator",
+    "ZeroInflatedPoissonRegressionSimulator",
 ]
