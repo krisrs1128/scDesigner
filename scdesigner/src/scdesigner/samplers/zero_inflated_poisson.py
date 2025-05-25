@@ -8,9 +8,6 @@ def zero_inflated_poisson_sample_array(local_parameters: dict) -> np.array:
         local_parameters["mean"],
         local_parameters["zero_inflation"],
     )
-    # is_zero_inflated = bernoulli(pi).rvs()
-    # poisson_values = poisson(mu).rvs()
-    # result = np.where(is_zero_inflated == 1, 0, poisson_values)
     return poisson(mu).rvs() * bernoulli(1 - pi).rvs()
 
 
