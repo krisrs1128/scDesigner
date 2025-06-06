@@ -1,6 +1,6 @@
 # Notebook Validation Script
 
-This script is used to validate Jupyter notebooks located in the `examples` directory. It executes each notebook and reports any errors encountered during execution, providing detailed error messages and execution statistics.
+This script is used to validate Jupyter notebooks located in the `examples` directory. It executes each notebook and reports any errors encountered during execution, providing truncated error messages, execution statistics, and the location of the error.
 
 ## Quick Start
 
@@ -13,7 +13,7 @@ cd examples/validation && python validate_notebooks.py
 It will automatically validate all notebooks in the `examples` directory, print the error messages and save the log to the `logs` directory under the `validation` directory.
 
 ## Options
-
+- `--directory DIR`: Specify the directory to search for notebooks (default: `examples`).
 - `--timeout SECONDS`: Set the execution timeout per cell (default: 300 seconds).
 - `--verbose`: Enable verbose output for more detailed execution logs.
 - `--no-color`: Disable colored output in the terminal.

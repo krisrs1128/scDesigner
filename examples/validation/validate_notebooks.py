@@ -165,7 +165,18 @@ class LogManager:
                     # Write specific error information
                     if result.error_type and result.error_message:
                         f.write(f"  Error type: {result.error_type}\n")
-                        f.write(f"  Error message: {result.error_message}\n")
+                        
+                        error_lines = result.error_message.split('\n') if result.error_message else []
+                        if len(error_lines) > 10:
+                            f.write(f"  Error message (truncated):")
+                            for line in error_lines[:10]:
+                                f.write(f"    {line}\n")
+                            f.write(f"    ... (truncated)\n")
+                        else:
+                            f.write(f"  Error message:")
+                            for line in error_lines:
+                                f.write(f"    {line}\n")
+                                
                     elif result.error_message:
                         error_lines = result.error_message.split('\n')
                         if len(error_lines) > 10:
@@ -411,7 +422,19 @@ class NotebookValidator:
             
             if result.error_type and result.error_message:
                 error_type_colored = self.colorize(result.error_type, Colors.RED + Colors.BOLD)
-                print(f"      {error_type_colored}: {result.error_message}")
+                
+                # Split error message into lines
+                error_lines = result.error_message.split('\n')
+                
+                if len(error_lines) > 10:
+                    print(f"      {error_type_colored}: (truncated)")
+                    for line in error_lines[:10]:
+                        print(f"        {line}")
+                    print("        ... (truncated)")
+                else:
+                    print(f"      {error_type_colored}:")
+                    for line in error_lines:
+                        print(f"        {line}")
             elif result.error_message:
                 # Fallback to just the error message
                 error_lines = result.error_message.split('\n')
