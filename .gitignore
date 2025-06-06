@@ -5,3 +5,5 @@ examples/data/*.h5ad
 examples/data
 *logs*
 *DS_store
+examples/environment.yaml
+examples/learn/
