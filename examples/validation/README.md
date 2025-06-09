@@ -18,7 +18,6 @@ It will automatically validate all notebooks in the `examples` directory, print 
 - `--verbose`: Enable verbose output for more detailed execution logs.
 - `--no-color`: Disable colored output in the terminal.
 - `--stop-on-error`: Stop execution when the first error is encountered.
-- `--directory DIR`: Specify the directory to search for notebooks (default: `examples`).
 - `--log-file FILE`: Specify the output log file path (default: auto-generated in `logs/`).
 - `--log-format FORMAT`: Set the log file format, either `text` or `json` (default: `text`).
 - `--no-log`: Disable log file output.
