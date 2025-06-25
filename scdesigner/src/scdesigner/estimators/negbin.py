@@ -31,7 +31,7 @@ def negbin_regression_likelihood(params, X, y):
         + y * torch.log(mu)
         - (r + y) * torch.log(r + mu)
     )
-    return -torch.sum(log_likelihood)
+    return log_likelihood
 
 
 def negbin_initializer(x, y, device):
@@ -76,9 +76,13 @@ def negbin_regression(
     loader = data.formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
-    parameters = negbin_regression_array(loader, **kwargs)
-    return format_negbin_parameters(
-        parameters, list(adata.var_names), loader.dataset.x_names
+    parameters, aic, bic = negbin_regression_array(loader, **kwargs)
+    return (
+        format_negbin_parameters(
+            parameters, list(adata.var_names), loader.dataset.x_names
+        ),
+        aic,
+        bic,
     )
 
 

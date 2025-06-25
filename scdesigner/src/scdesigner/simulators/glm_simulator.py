@@ -9,13 +9,19 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
     def __init__(self, **kwargs):
         self.formula = None
         self.params = None
+        self.marginal_aic = None
+        self.marginal_bic = None
+        self.copula_aic = None
+        self.copula_bic = None
         self.hyperparams = kwargs
 
     if "Copula" not in class_name:
         # fitting and sampling methods for plain regressors
         def fit(self, adata: AnnData, formula: str) -> dict:
             self.formula = formula
-            self.params = regressor(adata, formula, **self.hyperparams)
+            self.params, self.marginal_aic, self.marginal_bic = regressor(
+                adata, formula, **self.hyperparams
+            )
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
             local_parameters = self.predict(obs)
@@ -28,7 +34,13 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
         ) -> dict:
             self.formula = formula
             self.coupla_groups = copula_groups
-            self.params = regressor(adata, formula, copula_groups, **self.hyperparams)
+            (
+                self.params,
+                self.marginal_aic,
+                self.marginal_bic,
+                self.copula_aic,
+                self.copula_bic,
+            ) = regressor(adata, formula, copula_groups, **self.hyperparams)
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
             groups = est.gaussian_copula_factory.group_indices(self.coupla_groups, obs)
