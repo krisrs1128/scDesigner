@@ -24,7 +24,7 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
 
     else:
         # fitting and sampling for gaussian copula models
-        # to do: pass dictionary formulas for copula models
+
         def fit(
             self, adata: AnnData, formula: str = "~ 1", copula_groups: str = None
         ) -> dict:

@@ -72,7 +72,6 @@ negbin_regression_array = factory.multiple_formula_regression_factory(
 ## Regression functions that operate on AnnData objects
 ###############################################################################
 
-# to do: align var_names and coef_index
 def format_negbin_parameters(
     parameters: dict, var_names: list, mean_coef_index: list, dispersion_coef_index: list
 ) -> dict:
@@ -122,7 +121,6 @@ def negbin_regression(
     return format_negbin_parameters(
         parameters, list(adata.var_names), loaders["mean"].dataset.x_names, loaders["dispersion"].dataset.x_names
     )
-    # to do: test regression with dictionary formula
 
 ###############################################################################
 ## Copula versions for negative binomial regression

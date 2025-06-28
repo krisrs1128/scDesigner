@@ -45,7 +45,6 @@ def multiple_formula_regression_factory(likelihood, initializer, postprocessor) 
             if not torch.equal(y_dict[key], y_ref):
                 raise ValueError(f"Ys are not the same for {key}")
         params = initializer(x_dict, y_ref, device) # x is a dictionary of tensors, y is a tensor
-        # to do: initializers should accept a dictionary of tensors and a tensor then return the desired parameters
         optimizer = torch.optim.Adam([params], lr=lr)
         
         keys = list(dataloaders.keys())
@@ -60,7 +59,6 @@ def multiple_formula_regression_factory(likelihood, initializer, postprocessor) 
                 y_batch = batches[0][1].to(device)
                 optimizer.zero_grad()
                 loss = likelihood(params, x_batch_dict, y_batch) 
-                # to do: likelihoods should accept a dictionary of tensors and a tensor then return the loss
                 loss.backward()
                 optimizer.step()
                 pbar.set_postfix_str(f"loss: {loss.item()}")
