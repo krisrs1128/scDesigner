@@ -8,7 +8,7 @@ from typing import Union
 
 def glm_simulator_generator(class_name, regressor, sampler, predictor):
     def __init__(self, **kwargs):
-        self.formula = None
+        self.formula = None # formula should be a string or a dictionary of strings
         self.params = None
         self.hyperparams = kwargs
 
@@ -19,7 +19,7 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
             self.params = regressor(adata, formula, **self.hyperparams)
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
-            local_parameters = self.predict(obs)
+            local_parameters = self.predict(obs) # a dictionary of parameters
             return sampler(local_parameters, obs)
 
     else:
@@ -39,6 +39,7 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
 
     def predict(self, obs: pd.DataFrame) -> dict:
         return predictor(self.params, obs, self.formula)
+        # The predictor function should handle different formula types: dict or string
 
     def __repr__(self):
         params_string = ", ".join(

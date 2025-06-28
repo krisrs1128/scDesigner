@@ -58,9 +58,9 @@ def negbin_postprocessor(params, x_dict, y):
     num_dispersion_features = x_dict["dispersion"].shape[1]
     beta_mean = format.to_np(params[:num_mean_features * num_outcomes]).\
         reshape(num_mean_features, num_outcomes)
-    beta_dispersion = np.exp(format.to_np(params[num_mean_features * num_outcomes:])).\
+    beta_dispersion = format.to_np(params[num_mean_features * num_outcomes:]).\
         reshape(num_dispersion_features, num_outcomes)
-    return {"beta_mean": beta_mean, "beta_dispersion": beta_dispersion}
+    return {"beta": beta_mean, "gamma": beta_dispersion}
 
 
 negbin_regression_array = factory.multiple_formula_regression_factory(
@@ -76,11 +76,11 @@ negbin_regression_array = factory.multiple_formula_regression_factory(
 def format_negbin_parameters(
     parameters: dict, var_names: list, mean_coef_index: list, dispersion_coef_index: list
 ) -> dict:
-    parameters["beta_mean"] = pd.DataFrame(
-        parameters["beta_mean"], columns=var_names, index=mean_coef_index
+    parameters["beta"] = pd.DataFrame(
+        parameters["beta"], columns=var_names, index=mean_coef_index
     )
-    parameters["beta_dispersion"] = pd.DataFrame(
-        parameters["beta_dispersion"], columns=var_names, index=dispersion_coef_index
+    parameters["gamma"] = pd.DataFrame(
+        parameters["gamma"], columns=var_names, index=dispersion_coef_index
     )
     return parameters
 
@@ -118,7 +118,6 @@ def negbin_regression(
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     ) # a dictionary of dataloaders for each formula
-    print(loaders)
     parameters = negbin_regression_array(loaders, **kwargs)
     return format_negbin_parameters(
         parameters, list(adata.var_names), loaders["mean"].dataset.x_names, loaders["dispersion"].dataset.x_names
