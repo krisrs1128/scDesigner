@@ -3,6 +3,7 @@ from .. import predictors as prd
 from .. import samplers as smp
 from anndata import AnnData
 import pandas as pd
+from typing import Union
 
 
 def glm_simulator_generator(class_name, regressor, sampler, predictor):
@@ -13,7 +14,7 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
 
     if "Copula" not in class_name:
         # fitting and sampling methods for plain regressors
-        def fit(self, adata: AnnData, formula: str) -> dict:
+        def fit(self, adata: AnnData, formula: Union[str, dict]) -> dict:
             self.formula = formula
             self.params = regressor(adata, formula, **self.hyperparams)
 
@@ -23,6 +24,7 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
 
     else:
         # fitting and sampling for gaussian copula models
+        # to do: pass dictionary formulas for copula models
         def fit(
             self, adata: AnnData, formula: str = "~ 1", copula_groups: str = None
         ) -> dict:
@@ -72,7 +74,7 @@ NegBinRegressionSimulator = glm_simulator_generator(
 
 NegBinCopulaSimulator = glm_simulator_generator(
     "NegBinCopulaSimulator",
-    est.negbin_copula,
+    est.negbin_copula, 
     smp.negbin_copula_sample,
     prd.negbin_predict,
 )
@@ -97,7 +99,7 @@ BernoulliRegressionSimulator = glm_simulator_generator(
     smp.bernoulli_sample,
     prd.bernoulli_predict,
 )
-
+ 
 BernoulliCopulaSimulator = glm_simulator_generator(
     "BernoulliCopulaSimulator",
     est.bernoulli_copula,
