@@ -33,7 +33,6 @@ def multiple_formula_regression_factory(likelihood, initializer, postprocessor) 
         lr: float = 0.1,
         epochs: int = 40,
     ):  
-        print('entering multiple formula regression factory')
         device = check_device()
         x_dict = {}
         y_dict = {}
