@@ -16,17 +16,17 @@ from typing import Union
 
 
 def negbin_regression_likelihood(params, X_dict, y):    
-    num_mean_features = X_dict["mean"].shape[1]
-    num_dispersion_features = X_dict["dispersion"].shape[1]
+    n_mean_features = X_dict["mean"].shape[1]
+    n_dispersion_features = X_dict["dispersion"].shape[1]
     n_outcomes = y.shape[1]
 
     # form the mean and dispersion parameters
-    beta_mean = params[: num_mean_features * n_outcomes].\
-        reshape(num_mean_features, n_outcomes)
-    beta_dispersion = params[num_mean_features * n_outcomes :].\
-        reshape(num_dispersion_features, n_outcomes)
-    r, mu = torch.exp(X_dict["dispersion"] @ beta_dispersion), \
-        torch.exp(X_dict["mean"] @ beta_mean)
+    beta_mean = params[: n_mean_features * n_outcomes].\
+        reshape(n_mean_features, n_outcomes)
+    beta_dispersion = params[n_mean_features * n_outcomes :].\
+        reshape(n_dispersion_features, n_outcomes)
+    r = torch.exp(X_dict["dispersion"] @ beta_dispersion)
+    mu = torch.exp(X_dict["mean"] @ beta_mean)
 
     # compute the negative log likelihood
     log_likelihood = (
@@ -42,24 +42,24 @@ def negbin_regression_likelihood(params, X_dict, y):
 
 
 def negbin_initializer(x_dict, y, device):
-    num_mean_features = x_dict["mean"].shape[1]
-    num_outcomes = y.shape[1]
-    num_dispersion_features = x_dict["dispersion"].shape[1]
+    n_mean_features = x_dict["mean"].shape[1]
+    n_outcomes = y.shape[1]
+    n_dispersion_features = x_dict["dispersion"].shape[1]
     return torch.zeros(
-        num_mean_features * num_outcomes\
-            + num_dispersion_features * num_outcomes, 
+        n_mean_features * n_outcomes\
+            + n_dispersion_features * n_outcomes, 
         requires_grad=True, device=device
     )
 
 
 def negbin_postprocessor(params, x_dict, y):
-    num_mean_features = x_dict["mean"].shape[1]
-    num_outcomes = y.shape[1]
-    num_dispersion_features = x_dict["dispersion"].shape[1]
-    beta_mean = format.to_np(params[:num_mean_features * num_outcomes]).\
-        reshape(num_mean_features, num_outcomes)
-    beta_dispersion = format.to_np(params[num_mean_features * num_outcomes:]).\
-        reshape(num_dispersion_features, num_outcomes)
+    n_mean_features = x_dict["mean"].shape[1]
+    n_outcomes = y.shape[1]
+    n_dispersion_features = x_dict["dispersion"].shape[1]
+    beta_mean = format.to_np(params[:n_mean_features * n_outcomes]).\
+        reshape(n_mean_features, n_outcomes)
+    beta_dispersion = format.to_np(params[n_mean_features * n_outcomes:]).\
+        reshape(n_dispersion_features, n_outcomes)
     return {"beta": beta_mean, "gamma": beta_dispersion}
 
 
@@ -73,7 +73,8 @@ negbin_regression_array = factory.multiple_formula_regression_factory(
 ###############################################################################
 
 def format_negbin_parameters(
-    parameters: dict, var_names: list, mean_coef_index: list, dispersion_coef_index: list
+    parameters: dict, var_names: list, mean_coef_index: list, 
+    dispersion_coef_index: list
 ) -> dict:
     parameters["beta"] = pd.DataFrame(
         parameters["beta"], columns=var_names, index=mean_coef_index
@@ -130,8 +131,9 @@ def negbin_regression(
 ###############################################################################
 
 
-def negbin_uniformizer(parameters, x, y):
-    r, mu = np.exp(parameters["gamma"]), np.exp(x @ parameters["beta"])
+def negbin_uniformizer(parameters, X_dict, y):
+    r = np.exp(X_dict["dispersion"] @ parameters["beta_dispersion"])
+    mu = np.exp(X_dict["mean"] @ parameters["beta_mean"])
     nb_distn = nbinom(n=r, p=r / (r + mu))
     alpha = np.random.uniform(size=y.shape)
     return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))

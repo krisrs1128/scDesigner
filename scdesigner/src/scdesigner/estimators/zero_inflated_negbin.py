@@ -1,3 +1,4 @@
+import warnings
 from . import gaussian_copula_factory as gcf
 from .. import format
 from .. import data
@@ -7,26 +8,35 @@ from scipy.stats import nbinom
 import numpy as np
 import pandas as pd
 import torch
+from typing import Union
 
 ###############################################################################
 ## Regression functions that operate on numpy arrays
 ###############################################################################
 
 
-def zero_inflated_negbin_regression_likelihood(params, X, y):
+def zero_inflated_negbin_regression_likelihood(params, X_dict, y):
     # get appropriate parameter shape
-    n_features = X.shape[1]
+    n_mean_features = X_dict["mean"].shape[1]
+    n_dispersion_features = X_dict["dispersion"].shape[1]
+    n_zero_inflation_features = X_dict["zero_inflation"].shape[1]
     n_outcomes = y.shape[1]
 
     # define the likelihood parameters
-    b_elem = n_features * n_outcomes
-    beta = params[:b_elem].reshape(n_features, n_outcomes)
-    log_r = params[b_elem : (b_elem + n_outcomes)]
-    logit_pi = params[(b_elem + n_outcomes) :]
-    pi = torch.sigmoid(logit_pi)
+    beta_mean = params[: n_mean_features * n_outcomes].\
+        reshape(n_mean_features, n_outcomes)
+    beta_dispersion = params[n_mean_features * n_outcomes :\
+        n_mean_features * n_outcomes + n_dispersion_features * n_outcomes].\
+        reshape(n_dispersion_features, n_outcomes)
+    beta_zero_inflation = params[n_mean_features * n_outcomes + \
+        n_dispersion_features * n_outcomes :].\
+        reshape(n_zero_inflation_features, n_outcomes)
+    
+    mu = torch.exp(X_dict["mean"] @ beta_mean)
+    r = torch.exp(X_dict["dispersion"] @ beta_dispersion)
+    pi = torch.sigmoid(X_dict["zero_inflation"] @ beta_zero_inflation)
 
     # negative binomial component
-    r, mu = torch.exp(log_r), torch.exp(X @ beta)
     negbin_loglikelihood = (
         torch.lgamma(y + r)
         - torch.lgamma(r)
@@ -43,22 +53,35 @@ def zero_inflated_negbin_regression_likelihood(params, X, y):
     return -torch.sum(log_likelihood)
 
 
-def zero_inflated_negbin_initializer(x, y, device):
-    n_features, n_outcomes = x.shape[1], y.shape[1]
+def zero_inflated_negbin_initializer(X_dict, y, device):
+    n_mean_features = X_dict["mean"].shape[1]
+    n_dispersion_features = X_dict["dispersion"].shape[1]
+    n_zero_inflation_features = X_dict["zero_inflation"].shape[1]
+    n_outcomes = y.shape[1]
     return torch.zeros(
-        n_features * n_outcomes + 2 * n_outcomes, requires_grad=True, device=device
+        n_mean_features * n_outcomes + n_dispersion_features * n_outcomes + \
+        n_zero_inflation_features * n_outcomes, requires_grad=True, device=device
     )
 
 
-def zero_inflated_negbin_postprocessor(params, n_features, n_outcomes):
-    b_elem = n_features * n_outcomes
-    beta = format.to_np(params[:b_elem]).reshape(n_features, n_outcomes)
-    gamma = format.to_np(torch.exp(params[b_elem : (b_elem + n_outcomes)]))
-    pi = format.to_np(torch.sigmoid(params[(b_elem + n_outcomes) :]))
-    return {"beta": beta, "gamma": gamma, "pi": pi}
+def zero_inflated_negbin_postprocessor(params, X_dict, y):
+    n_mean_features = X_dict["mean"].shape[1]
+    n_dispersion_features = X_dict["dispersion"].shape[1]
+    n_zero_inflation_features = X_dict["zero_inflation"].shape[1]
+    n_outcomes = y.shape[1]
+    beta_mean = format.to_np(params[:n_mean_features * n_outcomes]).\
+        reshape(n_mean_features, n_outcomes)
+    beta_dispersion = format.to_np(params[n_mean_features * n_outcomes\
+        : n_mean_features * n_outcomes + n_dispersion_features * n_outcomes]).\
+        reshape(n_dispersion_features, n_outcomes)
+    beta_zero_inflation = format.to_np(params[n_mean_features * n_outcomes \
+        + n_dispersion_features * n_outcomes :]).\
+        reshape(n_zero_inflation_features, n_outcomes)
+    return {"beta_mean": beta_mean, "beta_dispersion": beta_dispersion,\
+        "beta_zero_inflation": beta_zero_inflation}
 
 
-zero_inflated_negbin_regression_array = factory.glm_regression_factory(
+zero_inflated_negbin_regression_array = factory.multiple_formula_regression_factory(
     zero_inflated_negbin_regression_likelihood,
     zero_inflated_negbin_initializer,
     zero_inflated_negbin_postprocessor,
@@ -70,29 +93,58 @@ zero_inflated_negbin_regression_array = factory.glm_regression_factory(
 
 
 def format_zero_inflated_negbin_parameters(
-    parameters: dict, var_names: list, coef_index: list
+    parameters: dict, var_names: list, mean_coef_index: 
+        list, dispersion_coef_index: list, zero_inflation_coef_index: list
 ) -> dict:
-    parameters["beta"] = pd.DataFrame(
-        parameters["beta"], columns=var_names, index=coef_index
+    parameters["beta_mean"] = pd.DataFrame(
+        parameters["beta_mean"], columns=var_names, index=mean_coef_index
     )
-    parameters["gamma"] = pd.DataFrame(
-        parameters["gamma"].reshape(1, -1), columns=var_names, index=["gamma"]
+    parameters["beta_dispersion"] = pd.DataFrame(
+        parameters["beta_dispersion"], columns=var_names, index=dispersion_coef_index
     )
-    parameters["pi"] = pd.DataFrame(
-        parameters["pi"].reshape(1, -1), columns=var_names, index=["pi"]
+    parameters["beta_zero_inflation"] = pd.DataFrame(
+        parameters["beta_zero_inflation"], columns=var_names, index=zero_inflation_coef_index
     )
     return parameters
 
 
 def zero_inflated_negbin_regression(
-    adata: AnnData, formula: str, chunk_size: int = int(1e4), batch_size=512, **kwargs
+    adata: AnnData, formula: Union[str, dict], chunk_size: int = int(1e4), batch_size=512, **kwargs
 ) -> dict:
-    loader = data.formula_loader(
+    
+    # Convert string formula to dict and validate type
+    formula = {'mean': formula, 'dispersion': '~ 1', 'zero_inflation': '~ 1'} \
+        if isinstance(formula, str) else formula
+    if not isinstance(formula, dict):
+        raise ValueError("formula must be a string or a dictionary")
+    
+    # Define allowed keys and set defaults
+    allowed_keys = {'mean', 'dispersion', 'zero_inflation'}
+    formula_keys = set(formula.keys())
+
+    # check for required keys and warn about extras
+    if not formula_keys & allowed_keys:
+        raise ValueError("formula must have at least one of \
+                the following keys: mean, dispersion, zero_inflation")
+    
+    # warn about unused keys
+    if extra_keys := formula_keys - allowed_keys:
+        warnings.warn(
+            f"Invalid formulas in dictionary for zero-inflated \
+                negative binomial regression: {extra_keys}",
+            UserWarning,
+        )
+    
+    # set default values for missing keys
+    formula.update({k: '~ 1' for k in allowed_keys - formula_keys})
+    
+    loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
-    parameters = zero_inflated_negbin_regression_array(loader, **kwargs)
+    parameters = zero_inflated_negbin_regression_array(loaders, **kwargs)
     return format_zero_inflated_negbin_parameters(
-        parameters, list(adata.var_names), list(loader.dataset.x_names)
+        parameters, list(adata.var_names), loaders["mean"].dataset.x_names, 
+        loaders["dispersion"].dataset.x_names, loaders["zero_inflation"].dataset.x_names
     )
 
 
@@ -101,11 +153,11 @@ def zero_inflated_negbin_regression(
 ###############################################################################
 
 
-def zero_inflated_negbin_uniformizer(parameters, x, y):
+def zero_inflated_negbin_uniformizer(parameters, X_dict, y):
     r, mu, pi = (
-        np.exp(parameters["gamma"]),
-        np.exp(x @ parameters["beta"]),
-        parameters["pi"],
+        np.exp(parameters["beta_dispersion"]),
+        np.exp(X_dict["mean"] @ parameters["beta_mean"]),
+        torch.sigmoid(X_dict["zero_inflation"] @ parameters["beta_zero_inflation"]),
     )
     nb_distn = nbinom(n=r, p=r / (r + mu))
     alpha = np.random.uniform(size=y.shape)
