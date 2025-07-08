@@ -95,28 +95,31 @@ def negbin_regression(
         and if "dispersion" key is not provided, it is set to "~ 1"
     """
     
-    if isinstance(formula, str):
-        formula = {'mean': formula, 'dispersion': '~ 1'}
-    elif not isinstance(formula, dict):
+    # Convert string formula to dict and validate type
+    formula = {'mean': formula, 'dispersion': '~ 1'} if isinstance(formula, str) else formula
+    if not isinstance(formula, dict):
         raise ValueError("formula must be a string or a dictionary")
     
-    allowed_keys = ['mean', 'dispersion']
-    extra_keys = [key for key in formula if key not in allowed_keys]
-
-    if extra_keys:
+    # Define allowed keys and set defaults
+    allowed_keys = {'mean', 'dispersion'}
+    formula_keys = set(formula.keys())
+    
+    # Check for required keys and warn about extras
+    if not formula_keys & allowed_keys:
+        raise ValueError("formula must have at least one of the following keys: mean, dispersion")
+    
+    if extra_keys := formula_keys - allowed_keys:
         warnings.warn(
-            f"There are unused formulas in the dictionary formula for negative binomial \
-                regression: {extra_keys}",
+            f"Invalid formulas in dictionary for negative binomial regression: {extra_keys}",
             UserWarning,
         )
-
-    if "dispersion" not in formula:
-        formula["dispersion"] = "~ 1"
     
+    # Set defaults for missing keys
+    formula.update({k: '~ 1' for k in allowed_keys - formula_keys})
     
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
-    ) # a dictionary of dataloaders for each formula
+    )
     parameters = negbin_regression_array(loaders, **kwargs)
     return format_negbin_parameters(
         parameters, list(adata.var_names), loaders["mean"].dataset.x_names, loaders["dispersion"].dataset.x_names
