@@ -51,6 +51,10 @@ def zero_inflated_negbin_initializer(x, y, device):
 
 
 def zero_inflated_negbin_postprocessor(params, n_features, n_outcomes):
+    # validation for param unwrapper
+    series = pd.Series(params.cpu().detach().numpy())
+    series.to_csv('data/zinb.csv', index=False, header=False)
+    
     b_elem = n_features * n_outcomes
     beta = format.to_np(params[:b_elem]).reshape(n_features, n_outcomes)
     gamma = format.to_np(torch.exp(params[b_elem : (b_elem + n_outcomes)]))
@@ -90,10 +94,11 @@ def zero_inflated_negbin_regression(
     loader = data.formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
-    parameters = zero_inflated_negbin_regression_array(loader, **kwargs)
-    return format_zero_inflated_negbin_parameters(
-        parameters, list(adata.var_names), list(loader.dataset.x_names)
+    result = zero_inflated_negbin_regression_array(loader, **kwargs)
+    result["parameters"] = format_zero_inflated_negbin_parameters(
+        result["parameters"], list(adata.var_names), list(loader.dataset.x_names)
     )
+    return result
 
 
 ###############################################################################

@@ -1,6 +1,6 @@
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from ..diagnose.aic_bic import marginal
+from ..diagnose.aic_bic import marginal_aic_bic
 import torch
 import numpy as np
 import pandas as pd
@@ -28,21 +28,22 @@ def glm_regression_factory(likelihood, initializer, postprocessor) -> dict:
                 loss.backward()
                 optimizer.step()
                 pbar.set_postfix_str(f"loss: {loss.item()}")
-        X = []
-        Y = []
-        for x, y in dataloader:
-            X.append(x)
-            Y.append(y)
-        X = torch.cat(X, dim=0)
-        Y = torch.cat(Y, dim=0)
-        log_likelihood = torch.sum(likelihood(params, X, Y))
+
+        log_likelihood = 0
+        n_sample = 0
+        with torch.no_grad():
+            for x_batch, y_batch in dataloader:
+                log_likelihood += torch.sum(likelihood(params, x_batch, y_batch))
+                n_sample += y_batch.shape[0]
         parameters = postprocessor(params, x.shape[1], y.shape[1])
-        aic, bic = marginal(params, log_likelihood, Y)
-        return (
-            parameters,
-            aic.cpu().detach().numpy().item(),
-            bic.cpu().detach().numpy().item(),
-        )
+        aic, bic = marginal_aic_bic(params, log_likelihood, n_sample)
+        return {  # return as a dictionary as {"parameters":, "summaries": {"aic":, "bic":}}
+            "parameters": parameters,
+            "summaries": {
+                "marginal_aic": aic.cpu().detach().numpy().item(),
+                "marginal_bic": bic.cpu().detach().numpy().item(),
+            },
+        }
 
     return estimator
 

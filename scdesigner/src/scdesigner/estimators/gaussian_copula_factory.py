@@ -1,5 +1,5 @@
 from ..data import formula_group_loader, stack_collate
-from ..diagnose.aic_bic import gaussian_copula
+from ..diagnose.aic_bic import gaussian_copula, gaussian_copula_aic_bic
 from anndata import AnnData
 from collections.abc import Callable
 from scipy.stats import norm
@@ -19,12 +19,15 @@ def gaussian_copula_array_factory(marginal_model: Callable, uniformizer: Callabl
         formula_loader = strip_dataloader(
             loader, pop="Stack" in type(loader.dataset).__name__
         )
-        parameters, marginal_aic, marginal_bic = marginal_model(
-            formula_loader, lr=lr, epochs=epochs, **kwargs
-        )
+        result = marginal_model(formula_loader, lr=lr, epochs=epochs, **kwargs)
 
         # estimate covariance, allowing for different groups
-        parameters["covariance"] = copula_covariance(parameters, loader, uniformizer)
+        result["parameters"]["covariance"] = copula_covariance(
+            result["parameters"], loader, uniformizer
+        )
+        # copula_aic, copula_bic = gaussian_copula_aic_bic(
+        #     loader, result["parameters"], uniformizer
+        # )
         X = []
         Y = []
         for x, y, _ in loader:
@@ -32,9 +35,11 @@ def gaussian_copula_array_factory(marginal_model: Callable, uniformizer: Callabl
             Y.append(y)
         X = torch.cat(X, dim=0)
         Y = torch.cat(Y, dim=0)
-        u = uniformizer(parameters, X.cpu().numpy(), Y.cpu().numpy())
-        copula_aic, copula_bic = gaussian_copula(parameters["covariance"], u)
-        return parameters, marginal_aic, marginal_bic, copula_aic, copula_bic
+        u = uniformizer(result["parameters"], X.cpu().numpy(), Y.cpu().numpy())
+        copula_aic, copula_bic = gaussian_copula(result["parameters"]["covariance"], u)
+        result["summaries"]["copula_aic"] = copula_aic
+        result["summaries"]["copula_bic"] = copula_bic
+        return result
 
     return copula_fun
 
@@ -55,15 +60,15 @@ def gaussian_copula_factory(copula_array_fun: Callable, parameter_formatter: Cal
             chunk_size=chunk_size,
             batch_size=batch_size,
         )
-        parameters, marginal_aic, marginal_bic, copula_aic, copula_bic = (
-            copula_array_fun(dl, **kwargs)
+        result = copula_array_fun(dl, **kwargs)
+        result["parameters"] = parameter_formatter(
+            result["parameters"], adata.var_names, dl.dataset.x_names
         )
-        parameters = parameter_formatter(
-            parameters, adata.var_names, dl.dataset.x_names
+        result["parameters"]["covariance"] = format_copula_parameters(
+            result["parameters"], adata.var_names
         )
-        parameters["covariance"] = format_copula_parameters(parameters, adata.var_names)
 
-        return parameters, marginal_aic, marginal_bic, copula_aic, copula_bic
+        return result
 
     return copula_fun
 

@@ -19,9 +19,10 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
         # fitting and sampling methods for plain regressors
         def fit(self, adata: AnnData, formula: str) -> dict:
             self.formula = formula
-            self.params, self.marginal_aic, self.marginal_bic = regressor(
-                adata, formula, **self.hyperparams
-            )
+            result = regressor(adata, formula, **self.hyperparams)
+            self.params = result["parameters"]
+            self.marginal_aic = result["summaries"]["marginal_aic"]
+            self.marginal_bic = result["summaries"]["marginal_bic"]
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
             local_parameters = self.predict(obs)
@@ -34,13 +35,12 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
         ) -> dict:
             self.formula = formula
             self.coupla_groups = copula_groups
-            (
-                self.params,
-                self.marginal_aic,
-                self.marginal_bic,
-                self.copula_aic,
-                self.copula_bic,
-            ) = regressor(adata, formula, copula_groups, **self.hyperparams)
+            result = regressor(adata, formula, copula_groups, **self.hyperparams)
+            self.params = result["parameters"]
+            self.marginal_aic = result["summaries"]["marginal_aic"]
+            self.marginal_bic = result["summaries"]["marginal_bic"]
+            self.copula_aic = result["summaries"]["copula_aic"]
+            self.copula_bic = result["summaries"]["copula_bic"]
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
             groups = est.gaussian_copula_factory.group_indices(self.coupla_groups, obs)

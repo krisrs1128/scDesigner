@@ -31,6 +31,10 @@ def poisson_initializer(x, y, device):
 
 
 def poisson_postprocessor(params, n_features, n_outcomes):
+    # validation for param unwrapper
+    series = pd.Series(params.cpu().detach().numpy())
+    series.to_csv('data/poi.csv', index=False, header=False)
+    
     beta = format.to_np(params).reshape(n_features, n_outcomes)
     return {"beta": beta}
 
@@ -63,8 +67,9 @@ def poisson_regression(
     loader = data.formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
-    parameters = poisson_regression_array(loader, **kwargs)
-    return format_poisson_parameters(parameters, list(adata.var_names), list(loader.dataset.x_names))
+    result = poisson_regression_array(loader, **kwargs)
+    result["parameters"] = format_poisson_parameters(result["parameters"], list(adata.var_names), list(loader.dataset.x_names))
+    return result
 
 
 ###############################################################################

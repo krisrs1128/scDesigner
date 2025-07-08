@@ -35,6 +35,10 @@ def zero_inflated_poisson_initializer(x, y, device):
 
 
 def zero_inflated_poisson_postprocessor(params, n_features, n_outcomes):
+    # validation for param unwrapper
+    series = pd.Series(params.cpu().detach().numpy())
+    series.to_csv('data/zipoi.csv', index=False, header=False)
+    
     b_elem = n_features * n_outcomes
     beta = format.to_np(params[:b_elem]).reshape(n_features, n_outcomes)
     pi = format.to_np(torch.sigmoid(params[b_elem:]))
