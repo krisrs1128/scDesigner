@@ -26,7 +26,7 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
         # fitting and sampling for gaussian copula models
 
         def fit(
-            self, adata: AnnData, formula: str = "~ 1", copula_groups: str = None
+            self, adata: AnnData, formula: Union[str, dict] = "~ 1", copula_groups: str = None
         ) -> dict:
             self.formula = formula
             self.coupla_groups = copula_groups

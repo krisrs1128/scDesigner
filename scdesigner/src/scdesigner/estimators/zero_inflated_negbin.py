@@ -108,10 +108,12 @@ def format_zero_inflated_negbin_parameters(
     return parameters
 
 
-def zero_inflated_negbin_regression(
-    adata: AnnData, formula: Union[str, dict], chunk_size: int = int(1e4), batch_size=512, **kwargs
-) -> dict:
-    
+def standardize_zero_inflated_negbin_formula(formula: Union[str, dict]) -> dict:
+    '''
+    Convert string formula to dict and validate type.
+    If formula is a string, it is the formula for the mean parameter.
+    If formula is a dictionary, it is a dictionary of formulas for the mean, dispersion, and zero_inflation parameters.
+    '''
     # Convert string formula to dict and validate type
     formula = {'mean': formula, 'dispersion': '~ 1', 'zero_inflation': '~ 1'} \
         if isinstance(formula, str) else formula
@@ -137,6 +139,13 @@ def zero_inflated_negbin_regression(
     
     # set default values for missing keys
     formula.update({k: '~ 1' for k in allowed_keys - formula_keys})
+    return formula
+
+
+def zero_inflated_negbin_regression(
+    adata: AnnData, formula: Union[str, dict], chunk_size: int = int(1e4), batch_size=512, **kwargs
+) -> dict:
+    formula = standardize_zero_inflated_negbin_formula(formula)
     
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
@@ -172,4 +181,5 @@ zero_inflated_negbin_copula = gcf.gaussian_copula_factory(
         zero_inflated_negbin_regression_array, zero_inflated_negbin_uniformizer
     ),
     format_zero_inflated_negbin_parameters,
+    standardize_zero_inflated_negbin_formula,
 )

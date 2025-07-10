@@ -60,7 +60,7 @@ def negbin_postprocessor(params, x_dict, y):
         reshape(n_mean_features, n_outcomes)
     beta_dispersion = format.to_np(params[n_mean_features * n_outcomes:]).\
         reshape(n_dispersion_features, n_outcomes)
-    return {"beta": beta_mean, "gamma": beta_dispersion}
+    return {"beta_mean": beta_mean, "beta_dispersion": beta_dispersion}
 
 
 negbin_regression_array = factory.multiple_formula_regression_factory(
@@ -84,19 +84,29 @@ def format_negbin_parameters(
     )
     return parameters
 
-
-def negbin_regression(
-    adata: AnnData, formula: Union[str, dict], chunk_size: int = int(1e4), batch_size=512, **kwargs
+def format_negbin_parameters_with_loaders(
+    parameters: dict, var_names: list, dls: dict
 ) -> dict:
-    """
-    formula: Union[str, dict]
-    if formula is a string, it is the formula for the mean parameter
-    if formula is a dictionary, it is a dictionary of formulas for the mean and dispersion parameters
-    if a dictionary is provided, it should have "mean" key, 
-        and if "dispersion" key is not provided, it is set to "~ 1"
-    """
+    # Extract the coefficient indices from the dataloaders
+    mean_coef_index = dls["mean"].dataset.x_names
+    dispersion_coef_index = dls["dispersion"].dataset.x_names
     
-    # Convert string formula to dict and validate type
+    parameters["beta_mean"] = pd.DataFrame(
+        parameters["beta_mean"], columns=var_names, index=mean_coef_index
+    )
+    parameters["beta_dispersion"] = pd.DataFrame(
+        parameters["beta_dispersion"], columns=var_names, index=dispersion_coef_index
+    )
+    return parameters
+
+def standardize_negbin_formula(formula: Union[str, dict]) -> dict:
+    '''
+    Convert string formula to dict and validate type.
+    If formula is a string, it is the formula for the mean parameter.
+    If formula is a dictionary, it is a dictionary of formulas for the mean and dispersion parameters. 
+    If a dictionary is provided, it should have "mean" key, and if "dispersion" key is not provided, it is set to "~ 1".
+    '''
+    
     formula = {'mean': formula, 'dispersion': '~ 1'} if isinstance(formula, str) else formula
     if not isinstance(formula, dict):
         raise ValueError("formula must be a string or a dictionary")
@@ -117,6 +127,15 @@ def negbin_regression(
     
     # Set defaults for missing keys
     formula.update({k: '~ 1' for k in allowed_keys - formula_keys})
+    return formula
+
+def negbin_regression(
+    adata: AnnData, formula: Union[str, dict], chunk_size: int = int(1e4), batch_size=512, **kwargs
+) -> dict:
+    """
+
+    """
+    formula = standardize_negbin_formula(formula)
     
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
@@ -141,8 +160,8 @@ def negbin_uniformizer(parameters, X_dict, y):
 
 negbin_copula_array = gcf.gaussian_copula_array_factory(
     negbin_regression_array, negbin_uniformizer
-)
+) # should accept a dictionary of dataloaders
 
 negbin_copula = gcf.gaussian_copula_factory(
-    negbin_copula_array, format_negbin_parameters
+    negbin_copula_array, format_negbin_parameters_with_loaders, standardize_negbin_formula
 )
