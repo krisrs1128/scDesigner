@@ -76,11 +76,11 @@ def format_negbin_parameters(
     parameters: dict, var_names: list, mean_coef_index: list, 
     dispersion_coef_index: list
 ) -> dict:
-    parameters["beta"] = pd.DataFrame(
-        parameters["beta"], columns=var_names, index=mean_coef_index
+    parameters["beta_mean"] = pd.DataFrame(
+        parameters["beta_mean"], columns=var_names, index=mean_coef_index
     )
-    parameters["gamma"] = pd.DataFrame(
-        parameters["gamma"], columns=var_names, index=dispersion_coef_index
+    parameters["beta_dispersion"] = pd.DataFrame(
+        parameters["beta_dispersion"], columns=var_names, index=dispersion_coef_index
     )
     return parameters
 
