@@ -29,11 +29,11 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
             self, adata: AnnData, formula: Union[str, dict] = "~ 1", copula_groups: str = None
         ) -> dict:
             self.formula = formula
-            self.coupla_groups = copula_groups
+            self.copula_groups = copula_groups
             self.params = regressor(adata, formula, copula_groups, **self.hyperparams)
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
-            groups = est.gaussian_copula_factory.group_indices(self.coupla_groups, obs)
+            groups = est.gaussian_copula_factory.group_indices(self.copula_groups, obs)
             local_parameters = self.predict(obs)
             return sampler(local_parameters, self.params["covariance"], groups, obs)
 

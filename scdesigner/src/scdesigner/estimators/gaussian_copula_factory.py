@@ -105,8 +105,8 @@ def copula_covariance(parameters: dict, loaders: dict[str, DataLoader], uniformi
         result[g] = second_moments[g] / Ng[g] - np.outer(mean, mean)
 
     if len(groups) == 1:
-        return list(result.values())[0] # return a single covariance matrix
-    return result # a dictionary of covariance matrices for each group
+        return list(result.values())[0] 
+    return result 
 
 
 ###############################################################################

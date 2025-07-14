@@ -150,12 +150,23 @@ def negbin_regression(
 ###############################################################################
 
 
-def negbin_uniformizer(parameters, X_dict, y):
+# def negbin_uniformizer(parameters, X_dict, y):
+#     r = np.exp(X_dict["dispersion"] @ parameters["beta_dispersion"])
+#     mu = np.exp(X_dict["mean"] @ parameters["beta_mean"])
+#     nb_distn = nbinom(n=r, p=r / (r + mu))
+#     alpha = np.random.uniform(size=y.shape)
+#     return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
+
+def negbin_uniformizer(parameters, X_dict, y, epsilon=1e-3):
+    np.random.seed(42)
     r = np.exp(X_dict["dispersion"] @ parameters["beta_dispersion"])
     mu = np.exp(X_dict["mean"] @ parameters["beta_mean"])
-    nb_distn = nbinom(n=r, p=r / (r + mu))
-    alpha = np.random.uniform(size=y.shape)
-    return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
+    u1 = nbinom(n=r, p=r / (r + mu)).cdf(y)
+    u2 = np.where(y > 0, nbinom(n=r, p=r / (r + mu)).cdf(y - 1), 0)
+    v = np.random.uniform(size=y.shape)
+    # may need to add extra step for selecting partial cells?
+    p = np.clip(v * u1 + (1 - v) * u2, epsilon, 1 - epsilon)
+    return p
 
 
 negbin_copula_array = gcf.gaussian_copula_array_factory(
