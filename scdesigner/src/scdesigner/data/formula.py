@@ -12,7 +12,9 @@ def formula_loader(
     adata: AnnData, formula=None, chunk_size=int(1e4), batch_size: int = None
 ):
     device = check_device()
+    # print(formula)
     if adata.isbacked:
+        # print('using backed')
         ds = FormulaViewDataset(adata, formula, chunk_size, device)
         dataloader = td.DataLoader(ds, batch_size=batch_size)
         ds.x_names = model_matrix_names(adata, formula, ds.categories)
@@ -23,11 +25,21 @@ def formula_loader(
             y = y.todense()
 
         # create tensor-based loader
-        x = model_matrix(formula, pd.DataFrame(adata.obs))
-        ds = TensorDataset(
-            torch.tensor(np.array(x), dtype=torch.float32).to(device),
-            torch.tensor(y, dtype=torch.float32).to(device),
-        )
+        if formula == '~ 1':
+            x = model_matrix(formula, pd.DataFrame(adata.obs))
+            ds = TensorDataset(
+                torch.tensor(np.array(x).astype(int), dtype=torch.int32).to(device),
+                torch.tensor(y, dtype=torch.float32).to(device),
+            )
+            # print('using ~1')
+        else:
+            # print('using')
+            # print(formula)
+            x = model_matrix(formula, pd.DataFrame(adata.obs))
+            ds = TensorDataset(
+                torch.tensor(np.array(x), dtype=torch.float32).to(device),
+                torch.tensor(y, dtype=torch.float32).to(device),
+            )
         ds.x_names = list(x.columns)
         dataloader = DataLoader(ds, batch_size=batch_size, shuffle=False)
 

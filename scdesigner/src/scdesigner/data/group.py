@@ -34,14 +34,22 @@ def formula_group_loader(
             y = y.todense()
 
         # wrap the entire data into a dataset
-        x = model_matrix(formula, pd.DataFrame(adata.obs))
-        ds = td.StackDataset(
-            x=td.TensorDataset(
-                torch.tensor(np.array(x), dtype=torch.float32).to(device)
-            ),
-            y=td.TensorDataset(torch.tensor(y, dtype=torch.float32).to(device)),
-            groups=ListDataset(adata.obs[grouping_variable]),
-        )
+        if formula == '~ 1':
+            print('using ~1')
+            x = model_matrix(formula, pd.DataFrame(adata.obs))
+            ds = td.TensorDataset(
+                torch.tensor(np.array(x).astype(int), dtype=torch.int32).to(device),
+                torch.tensor(y, dtype=torch.float32).to(device),
+            )
+        else:
+            x = model_matrix(formula, pd.DataFrame(adata.obs))
+            ds = td.StackDataset(
+                x=td.TensorDataset(
+                    torch.tensor(np.array(x), dtype=torch.float32).to(device)
+                ),
+                y=td.TensorDataset(torch.tensor(y, dtype=torch.float32).to(device)),
+                groups=ListDataset(adata.obs[grouping_variable]),
+            )
         ds.groups = list(adata.obs[grouping_variable].dtype.categories)
         ds.x_names = list(x.columns)
         dataloader = td.DataLoader(ds, batch_size=batch_size, collate_fn=stack_collate(pop=True))
