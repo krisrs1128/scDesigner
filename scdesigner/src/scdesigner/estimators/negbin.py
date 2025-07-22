@@ -91,13 +91,7 @@ def format_negbin_parameters_with_loaders(
     mean_coef_index = dls["mean"].dataset.x_names
     dispersion_coef_index = dls["dispersion"].dataset.x_names
     
-    parameters["beta_mean"] = pd.DataFrame(
-        parameters["beta_mean"], columns=var_names, index=mean_coef_index
-    )
-    parameters["beta_dispersion"] = pd.DataFrame(
-        parameters["beta_dispersion"], columns=var_names, index=dispersion_coef_index
-    )
-    return parameters
+    return format_negbin_parameters(parameters, var_names, mean_coef_index, dispersion_coef_index)
 
 def standardize_negbin_formula(formula: Union[str, dict]) -> dict:
     '''

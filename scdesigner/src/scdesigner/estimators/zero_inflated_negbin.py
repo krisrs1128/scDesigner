@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import torch
 from typing import Union
+from scipy.special import expit
 
 ###############################################################################
 ## Regression functions that operate on numpy arrays
@@ -107,6 +108,15 @@ def format_zero_inflated_negbin_parameters(
     )
     return parameters
 
+def format_zero_inflated_negbin_parameters_with_loaders(
+    parameters: dict, var_names: list, dls: dict
+) -> dict:
+    mean_coef_index = dls["mean"].dataset.x_names
+    dispersion_coef_index = dls["dispersion"].dataset.x_names
+    zero_inflation_coef_index = dls["zero_inflation"].dataset.x_names
+    return format_zero_inflated_negbin_parameters(
+        parameters, var_names, mean_coef_index, dispersion_coef_index, zero_inflation_coef_index
+    )
 
 def standardize_zero_inflated_negbin_formula(formula: Union[str, dict]) -> dict:
     '''
@@ -166,7 +176,7 @@ def zero_inflated_negbin_uniformizer(parameters, X_dict, y):
     r, mu, pi = (
         np.exp(parameters["beta_dispersion"]),
         np.exp(X_dict["mean"] @ parameters["beta_mean"]),
-        torch.sigmoid(X_dict["zero_inflation"] @ parameters["beta_zero_inflation"]),
+        expit(X_dict["zero_inflation"] @ parameters["beta_zero_inflation"]),
     )
     nb_distn = nbinom(n=r, p=r / (r + mu))
     alpha = np.random.uniform(size=y.shape)
@@ -180,6 +190,6 @@ zero_inflated_negbin_copula = gcf.gaussian_copula_factory(
     gcf.gaussian_copula_array_factory(
         zero_inflated_negbin_regression_array, zero_inflated_negbin_uniformizer
     ),
-    format_zero_inflated_negbin_parameters,
+    format_zero_inflated_negbin_parameters_with_loaders,
     standardize_zero_inflated_negbin_formula,
 )
