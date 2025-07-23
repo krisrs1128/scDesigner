@@ -1,12 +1,13 @@
 from anndata import AnnData
 from formulaic import model_matrix
 from torch.utils.data import DataLoader, TensorDataset
+from typing import Union
 import numpy as np
 import pandas as pd
 import scipy.sparse
 import torch
 import torch.utils.data as td
-import itertools
+import itertools, warnings
 
 def formula_loader(
     adata: AnnData, formula=None, chunk_size=int(1e4), batch_size: int = None
@@ -157,3 +158,23 @@ def check_device():
         if torch.cuda.is_available()
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
+
+def standardize_formula(formula: Union[str, dict], allowed_keys={'mean', 'dispersion'}):
+    formula = {list(allowed_keys)[0]: formula} if isinstance(formula, str) else formula
+    if not isinstance(formula, dict):
+        raise ValueError("formula must be a string or a dictionary")
+    
+    formula_keys = set(formula.keys())
+
+    if not formula_keys & allowed_keys:
+        raise ValueError(f"formula must have at least one of the following keys: {allowed_keys}")
+    
+    if extra_keys := formula_keys - allowed_keys:
+        warnings.warn(
+            f"Invalid formulas in dictionary for negative binomial regression: {extra_keys}",
+            UserWarning,
+        )
+    
+    # Set defaults for missing keys
+    formula.update({k: '~ 1' for k in allowed_keys - formula_keys})
+    return formula

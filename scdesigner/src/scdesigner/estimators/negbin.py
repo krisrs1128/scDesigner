@@ -53,6 +53,9 @@ def negbin_initializer(x_dict, y, device):
 
 
 def negbin_postprocessor(params, x_dict, y):
+    # series = pd.Series(params.cpu().detach().numpy())
+    # series.to_csv('data/nbreg.csv', index=False, header=False)
+
     n_mean_features = x_dict["mean"].shape[1]
     n_outcomes = y.shape[1]
     n_dispersion_features = x_dict["dispersion"].shape[1]
@@ -60,7 +63,7 @@ def negbin_postprocessor(params, x_dict, y):
         reshape(n_mean_features, n_outcomes)
     beta_dispersion = format.to_np(params[n_mean_features * n_outcomes:]).\
         reshape(n_dispersion_features, n_outcomes)
-    return {"beta_mean": beta_mean, "beta_dispersion": beta_dispersion}
+    return {"mean": beta_mean, "dispersion": beta_dispersion}
 
 
 negbin_regression_array = factory.multiple_formula_regression_factory(
@@ -76,11 +79,11 @@ def format_negbin_parameters(
     parameters: dict, var_names: list, mean_coef_index: list, 
     dispersion_coef_index: list
 ) -> dict:
-    parameters["beta_mean"] = pd.DataFrame(
-        parameters["beta_mean"], columns=var_names, index=mean_coef_index
+    parameters["mean"] = pd.DataFrame(
+        parameters["mean"], columns=var_names, index=mean_coef_index
     )
-    parameters["beta_dispersion"] = pd.DataFrame(
-        parameters["beta_dispersion"], columns=var_names, index=dispersion_coef_index
+    parameters["dispersion"] = pd.DataFrame(
+        parameters["dispersion"], columns=var_names, index=dispersion_coef_index
     )
     return parameters
 
@@ -91,11 +94,11 @@ def format_negbin_parameters_with_loaders(
     mean_coef_index = dls["mean"].dataset.x_names
     dispersion_coef_index = dls["dispersion"].dataset.x_names
     
-    parameters["beta_mean"] = pd.DataFrame(
-        parameters["beta_mean"], columns=var_names, index=mean_coef_index
+    parameters["mean"] = pd.DataFrame(
+        parameters["mean"], columns=var_names, index=mean_coef_index
     )
-    parameters["beta_dispersion"] = pd.DataFrame(
-        parameters["beta_dispersion"], columns=var_names, index=dispersion_coef_index
+    parameters["dispersion"] = pd.DataFrame(
+        parameters["dispersion"], columns=var_names, index=dispersion_coef_index
     )
     return parameters
 
@@ -135,7 +138,7 @@ def negbin_regression(
     """
 
     """
-    formula = standardize_negbin_formula(formula)
+    formula = data.standardize_negbin_formula(formula)
     
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
@@ -151,8 +154,8 @@ def negbin_regression(
 
 
 def negbin_uniformizer(parameters, X_dict, y):
-    r = np.exp(X_dict["dispersion"] @ parameters["beta_dispersion"])
-    mu = np.exp(X_dict["mean"] @ parameters["beta_mean"])
+    r = np.exp(X_dict["dispersion"] @ parameters["dispersion"])
+    mu = np.exp(X_dict["mean"] @ parameters["mean"])
     nb_distn = nbinom(n=r, p=r / (r + mu))
     alpha = np.random.uniform(size=y.shape)
     return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
@@ -163,5 +166,5 @@ negbin_copula_array = gcf.gaussian_copula_array_factory(
 ) # should accept a dictionary of dataloaders
 
 negbin_copula = gcf.gaussian_copula_factory(
-    negbin_copula_array, format_negbin_parameters_with_loaders, standardize_negbin_formula
+    negbin_copula_array, format_negbin_parameters_with_loaders, {"mean", "dispersion"}
 )

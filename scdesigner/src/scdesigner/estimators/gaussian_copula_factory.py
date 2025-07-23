@@ -1,4 +1,5 @@
 from ..data import formula_group_loader, stack_collate, multiple_formula_group_loader
+from .. import data
 from anndata import AnnData
 from collections.abc import Callable
 from typing import Union
@@ -32,7 +33,7 @@ def gaussian_copula_array_factory(marginal_model: Callable, uniformizer: Callabl
 
 def gaussian_copula_factory(copula_array_fun: Callable, 
                             parameter_formatter: Callable, 
-                            standardize_formula: Callable = None):
+                            param_name = None):
     def copula_fun(
         adata: AnnData,
         formula: Union[str, dict] = "~ 1",
@@ -42,8 +43,8 @@ def gaussian_copula_factory(copula_array_fun: Callable,
         **kwargs
     ) -> dict:  
         
-        if standardize_formula is not None:
-            formula = standardize_formula(formula)
+        if param_name is not None:
+            formula = data.standardize_formula(formula, param_name)
         
         dls = multiple_formula_group_loader(
             adata,
