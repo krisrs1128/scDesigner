@@ -159,10 +159,11 @@ def check_device():
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
 
-def standardize_formula(formula: Union[str, dict], allowed_keys={'mean', 'dispersion'}):
+def standardize_formula(formula: Union[str, dict], allowed_keys = None):
+    if allowed_keys is None:
+        raise ValueError("Internal error: allowed_keys must be specified")
+    # The first element of allowed_keys should be the name of default parameter
     formula = {list(allowed_keys)[0]: formula} if isinstance(formula, str) else formula
-    if not isinstance(formula, dict):
-        raise ValueError("formula must be a string or a dictionary")
     
     formula_keys = set(formula.keys())
 

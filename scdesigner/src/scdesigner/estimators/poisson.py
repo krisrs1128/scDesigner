@@ -32,6 +32,7 @@ def poisson_initializer(x, y, device):
 
 
 def poisson_postprocessor(params, x, y):
+    # better use "mean" instead of "beta" for the key name
     coef_beta = format.to_np(params).reshape(x['beta'].shape[1], y.shape[1])
     return {"coef_beta": coef_beta}
 
