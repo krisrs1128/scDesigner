@@ -129,7 +129,7 @@ def negbin_regression(
     """
 
     """
-    formula = standardize_negbin_formula(formula)
+    formula = data.standardize_formula(formula, allowed_keys={'mean', 'dispersion'})
     
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
@@ -161,5 +161,6 @@ negbin_copula_array = gcf.gaussian_copula_array_factory(
 ) # should accept a dictionary of dataloaders
 
 negbin_copula = gcf.gaussian_copula_factory(
-    negbin_copula_array, format_negbin_parameters_with_loaders, standardize_negbin_formula
+    negbin_copula_array, format_negbin_parameters_with_loaders, 
+    param_name={'mean', 'dispersion'}
 )

@@ -5,8 +5,7 @@ from typing import Union
 
 def poisson_predict(parameters: dict, obs: pd.DataFrame, formula: Union[str, dict]):
     if isinstance(formula, dict):
-        formula = formula["mean"]
-    
+        formula = formula['beta']
     x = format_matrix(obs, formula)
     mu = np.exp(x @ parameters["beta"])
     return {"mean": mu}

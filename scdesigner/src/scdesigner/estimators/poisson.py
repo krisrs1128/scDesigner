@@ -4,6 +4,7 @@ from .. import data
 from .. import format
 from anndata import AnnData
 from scipy.stats import poisson
+from typing import Union
 import numpy as np
 import pandas as pd
 import torch
@@ -15,27 +16,27 @@ import torch
 
 def poisson_regression_likelihood(params, X, y):
     # get appropriate parameter shape
-    n_features = X.shape[1]
+    n_features = X['beta'].shape[1]
     n_outcomes = y.shape[1]
 
     # compute the negative log likelihood
     beta = params.reshape(n_features, n_outcomes)
-    mu = torch.exp(X @ beta)
+    mu = torch.exp(X['beta'] @ beta)
     log_likelihood = y * torch.log(mu) - mu - torch.lgamma(y)
     return -torch.sum(log_likelihood)
 
 
 def poisson_initializer(x, y, device):
-    n_features, n_outcomes = x.shape[1], y.shape[1]
+    n_features, n_outcomes = x['beta'].shape[1], y.shape[1]
     return torch.zeros(n_features * n_outcomes, requires_grad=True, device=device)
 
 
-def poisson_postprocessor(params, n_features, n_outcomes):
-    beta = format.to_np(params).reshape(n_features, n_outcomes)
-    return {"beta": beta}
+def poisson_postprocessor(params, x, y):
+    coef_beta = format.to_np(params).reshape(x['beta'].shape[1], y.shape[1])
+    return {"coef_beta": coef_beta}
 
 
-poisson_regression_array = factory.glm_regression_factory(
+poisson_regression_array = factory.multiple_formula_regression_factory(
     poisson_regression_likelihood, poisson_initializer, poisson_postprocessor
 )
 
@@ -47,8 +48,8 @@ poisson_regression_array = factory.glm_regression_factory(
 def format_poisson_parameters(
     parameters: dict, var_names: list, coef_index: list
 ) -> dict:
-    parameters["beta"] = pd.DataFrame(
-        parameters["beta"], columns=var_names, index=coef_index
+    parameters["coef_beta"] = pd.DataFrame(
+        parameters["coef_beta"], columns=var_names, index=coef_index
     )
     return parameters
 
@@ -60,12 +61,26 @@ def poisson_regression(
     batch_size: int = 512,
     **kwargs
 ) -> dict:
-    loader = data.formula_loader(
+    formula = data.standardize_formula(formula, allowed_keys={'beta'})
+    loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
-    parameters = poisson_regression_array(loader, **kwargs)
-    return format_poisson_parameters(parameters, list(adata.var_names), list(loader.dataset.x_names))
+    parameters = poisson_regression_array(loaders, **kwargs)
+    return format_poisson_parameters(
+        parameters, list(adata.var_names), loaders["beta"].dataset.x_names
+    )
 
+
+# def standardize_formula(formula: Union[str, dict], keys={'mean', 'dispersion'}):
+#     formula = {list(keys)[0]: formula} if isinstance(formula, str) else formula
+#     if not isinstance(formula, dict):
+#         raise ValueError("formula must be a string or a dictionary")
+    
+#     formula_keys = set(formula.keys())
+    
+#     # Set defaults for missing keys
+#     formula.update({k: '~ 1' for k in keys - formula_keys})
+#     return formula
 
 ###############################################################################
 ## Copula versions for poisson regression
@@ -73,13 +88,23 @@ def poisson_regression(
 
 
 def poisson_uniformizer(parameters, x, y):
-    mu = np.exp(x @ parameters["beta"])
+    mu = np.exp(x['beta'] @ parameters["coef_beta"])
     nb_distn = poisson(mu)
     alpha = np.random.uniform(size=y.shape)
     return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
 
+def format_poisson_parameters_with_loaders(parameters: dict, var_names: list, dls: dict) -> dict:
+    beta_coef_index = dls["beta"].dataset.x_names
+    
+    parameters["coef_beta"] = pd.DataFrame(
+        parameters["coef_beta"], columns=var_names, index=beta_coef_index
+    )
+    return parameters
+
+poisson_copula_array = gcf.gaussian_copula_array_factory(
+    poisson_regression_array, poisson_uniformizer
+) 
 
 poisson_copula = gcf.gaussian_copula_factory(
-    gcf.gaussian_copula_array_factory(poisson_regression_array, poisson_uniformizer),
-    format_poisson_parameters,
+    poisson_copula_array, format_poisson_parameters_with_loaders, {"beta"}
 )

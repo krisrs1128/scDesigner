@@ -2,50 +2,62 @@ from anndata import AnnData
 from .. import format
 from .. import data
 from . import glm_factory as factory
+from typing import Union
 import pandas as pd
 import torch
 
 
 def zero_inflated_poisson_regression_likelihood(params, X, y):
     # get appropriate parameter shape
-    n_features = X.shape[1]
+    beta_n_features = X['beta'].shape[1]
+    pi_n_features = X['pi'].shape[1]
     n_outcomes = y.shape[1]
 
     # define the likelihood parameters
-    b_elem = n_features * n_outcomes
-    beta = params[:b_elem].reshape(n_features, n_outcomes)
-    logit_pi = params[b_elem:]
-    pi = torch.sigmoid(logit_pi)
+    b_elem = beta_n_features * n_outcomes
+    coef_beta = params[:b_elem].reshape(beta_n_features, n_outcomes)
+    coef_pi = params[b_elem:].reshape(pi_n_features, n_outcomes)
 
-    mu = torch.exp(X @ beta)
-    poisson_loglikelihood = y * torch.log(mu) - mu - torch.lgamma(y)
+    pi = torch.sigmoid(X['pi'] @ coef_pi)
+    mu = torch.exp(X['beta'] @ coef_beta)
+    poisson_loglikelihood = y * torch.log(mu + 1e-10) - mu - torch.lgamma(y + 1e-10)
 
     # return the mixture, with an offset to prevent log(0)
+    # log_likelihood = torch.log(
+    #     pi * (y == 0) + (1 - pi) * torch.exp(poisson_loglikelihood) + 1e-10
+    # )
     log_likelihood = torch.log(
-        pi * (y == 0) + (1 - pi) * torch.exp(poisson_loglikelihood) + 1e-10
+        (pi + (1 - pi) * torch.exp(-mu)) * (y == 0) 
+        + ((1 - pi) * torch.exp(poisson_loglikelihood)) * (y > 0) + 1e-10
     )
     return -torch.sum(log_likelihood)
 
 
 def zero_inflated_poisson_initializer(x, y, device):
-    n_features, n_outcomes = x.shape[1], y.shape[1]
+    beta_n_features = x['beta'].shape[1]
+    pi_n_features = x['pi'].shape[1]
+    n_outcomes = y.shape[1]
     return torch.zeros(
-        n_features * n_outcomes + n_outcomes, requires_grad=True, device=device
+        beta_n_features * n_outcomes + pi_n_features * n_outcomes, requires_grad=True, device=device
     )
 
 
-def zero_inflated_poisson_postprocessor(params, n_features, n_outcomes):
-    b_elem = n_features * n_outcomes
-    beta = format.to_np(params[:b_elem]).reshape(n_features, n_outcomes)
-    pi = format.to_np(torch.sigmoid(params[b_elem:]))
-    return {"beta": beta, "pi": pi}
+def zero_inflated_poisson_postprocessor(params, x, y):
+    beta_n_features = x['beta'].shape[1]
+    pi_n_features = x['pi'].shape[1]
+    n_outcomes = y.shape[1]
+    b_elem = beta_n_features * n_outcomes
+    coef_beta = format.to_np(params[:b_elem]).reshape(beta_n_features, n_outcomes)
+    coef_pi = format.to_np(params[b_elem:]).reshape(pi_n_features, n_outcomes)
+    return {"coef_beta": coef_beta, "coef_pi": coef_pi}
 
 
-zero_inflated_poisson_regression_array = factory.glm_regression_factory(
+zero_inflated_poisson_regression_array = factory.multiple_formula_regression_factory(
     zero_inflated_poisson_regression_likelihood,
     zero_inflated_poisson_initializer,
     zero_inflated_poisson_postprocessor,
 )
+
 
 ###############################################################################
 ## Regression functions that operate on AnnData objects
@@ -53,13 +65,14 @@ zero_inflated_poisson_regression_array = factory.glm_regression_factory(
 
 
 def format_zero_inflated_poisson_parameters(
-    parameters: dict, var_names: list, coef_index: list
+    parameters: dict, var_names: list, beta_coef_index: list, 
+    pi_coef_index: list
 ) -> dict:
-    parameters["beta"] = pd.DataFrame(
-        parameters["beta"], columns=var_names, index=coef_index
+    parameters["coef_beta"] = pd.DataFrame(
+        parameters["coef_beta"], columns=var_names, index=beta_coef_index
     )
-    parameters["pi"] = pd.DataFrame(
-        parameters["pi"].reshape(1, -1), columns=var_names, index=["pi"]
+    parameters["coef_pi"] = pd.DataFrame(
+        parameters["coef_pi"], columns=var_names, index=pi_coef_index
     )
     return parameters
 
@@ -67,10 +80,11 @@ def format_zero_inflated_poisson_parameters(
 def zero_inflated_poisson_regression(
     adata: AnnData, formula: str, chunk_size: int = int(1e4), batch_size=512, **kwargs
 ) -> dict:
-    loader = data.formula_loader(
+    formula = data.standardize_formula(formula, allowed_keys={'beta', 'pi'})
+    loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
-    parameters = zero_inflated_poisson_regression_array(loader, **kwargs)
+    parameters = zero_inflated_poisson_regression_array(loaders, **kwargs)
     return format_zero_inflated_poisson_parameters(
-        parameters, list(adata.var_names), list(loader.dataset.x_names)
+        parameters, list(adata.var_names), loaders["beta"].dataset.x_names, loaders["pi"].dataset.x_names
     )
