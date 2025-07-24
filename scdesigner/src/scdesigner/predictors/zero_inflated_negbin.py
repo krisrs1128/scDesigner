@@ -11,8 +11,8 @@ def zero_inflated_negbin_predict(parameters: dict, obs: pd.DataFrame, formula: U
     x_dispersion = format_matrix(obs, formula["dispersion"])
     x_zero_inflation = format_matrix(obs, formula["zero_inflation"])
     r, mu, pi = (
-        np.exp(x_dispersion @ parameters["beta_dispersion"]),
-        np.exp(x_mean @ parameters["beta_mean"]),
-        expit(x_zero_inflation @ parameters["beta_zero_inflation"]),
+        np.exp(x_dispersion @ parameters["coef_dispersion"]),
+        np.exp(x_mean @ parameters["coef_mean"]),
+        expit(x_zero_inflation @ parameters["coef_zero_inflation"]),
     )
     return {"mean": mu, "dispersion": r, "zero_inflation": pi}

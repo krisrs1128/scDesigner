@@ -24,18 +24,18 @@ def zero_inflated_negbin_regression_likelihood(params, X_dict, y):
     n_outcomes = y.shape[1]
 
     # define the likelihood parameters
-    beta_mean = params[: n_mean_features * n_outcomes].\
+    coef_mean = params[: n_mean_features * n_outcomes].\
         reshape(n_mean_features, n_outcomes)
-    beta_dispersion = params[n_mean_features * n_outcomes :\
+    coef_dispersion = params[n_mean_features * n_outcomes :\
         n_mean_features * n_outcomes + n_dispersion_features * n_outcomes].\
         reshape(n_dispersion_features, n_outcomes)
-    beta_zero_inflation = params[n_mean_features * n_outcomes + \
+    coef_zero_inflation = params[n_mean_features * n_outcomes + \
         n_dispersion_features * n_outcomes :].\
         reshape(n_zero_inflation_features, n_outcomes)
     
-    mu = torch.exp(X_dict["mean"] @ beta_mean)
-    r = torch.exp(X_dict["dispersion"] @ beta_dispersion)
-    pi = torch.sigmoid(X_dict["zero_inflation"] @ beta_zero_inflation)
+    mu = torch.exp(X_dict["mean"] @ coef_mean)
+    r = torch.exp(X_dict["dispersion"] @ coef_dispersion)
+    pi = torch.sigmoid(X_dict["zero_inflation"] @ coef_zero_inflation)
 
     # negative binomial component
     negbin_loglikelihood = (
@@ -70,16 +70,16 @@ def zero_inflated_negbin_postprocessor(params, X_dict, y):
     n_dispersion_features = X_dict["dispersion"].shape[1]
     n_zero_inflation_features = X_dict["zero_inflation"].shape[1]
     n_outcomes = y.shape[1]
-    beta_mean = format.to_np(params[:n_mean_features * n_outcomes]).\
+    coef_mean = format.to_np(params[:n_mean_features * n_outcomes]).\
         reshape(n_mean_features, n_outcomes)
-    beta_dispersion = format.to_np(params[n_mean_features * n_outcomes\
+    coef_dispersion = format.to_np(params[n_mean_features * n_outcomes\
         : n_mean_features * n_outcomes + n_dispersion_features * n_outcomes]).\
         reshape(n_dispersion_features, n_outcomes)
-    beta_zero_inflation = format.to_np(params[n_mean_features * n_outcomes \
+    coef_zero_inflation = format.to_np(params[n_mean_features * n_outcomes \
         + n_dispersion_features * n_outcomes :]).\
         reshape(n_zero_inflation_features, n_outcomes)
-    return {"beta_mean": beta_mean, "beta_dispersion": beta_dispersion,\
-        "beta_zero_inflation": beta_zero_inflation}
+    return {"coef_mean": coef_mean, "coef_dispersion": coef_dispersion,\
+        "coef_zero_inflation": coef_zero_inflation}
 
 
 zero_inflated_negbin_regression_array = factory.multiple_formula_regression_factory(
@@ -97,14 +97,14 @@ def format_zero_inflated_negbin_parameters(
     parameters: dict, var_names: list, mean_coef_index: 
         list, dispersion_coef_index: list, zero_inflation_coef_index: list
 ) -> dict:
-    parameters["beta_mean"] = pd.DataFrame(
-        parameters["beta_mean"], columns=var_names, index=mean_coef_index
+    parameters["coef_mean"] = pd.DataFrame(
+        parameters["coef_mean"], columns=var_names, index=mean_coef_index
     )
-    parameters["beta_dispersion"] = pd.DataFrame(
-        parameters["beta_dispersion"], columns=var_names, index=dispersion_coef_index
+    parameters["coef_dispersion"] = pd.DataFrame(
+        parameters["coef_dispersion"], columns=var_names, index=dispersion_coef_index
     )
-    parameters["beta_zero_inflation"] = pd.DataFrame(
-        parameters["beta_zero_inflation"], columns=var_names, index=zero_inflation_coef_index
+    parameters["coef_zero_inflation"] = pd.DataFrame(
+        parameters["coef_zero_inflation"], columns=var_names, index=zero_inflation_coef_index
     )
     return parameters
 
@@ -174,9 +174,9 @@ def zero_inflated_negbin_regression(
 
 def zero_inflated_negbin_uniformizer(parameters, X_dict, y):
     r, mu, pi = (
-        np.exp(parameters["beta_dispersion"]),
-        np.exp(X_dict["mean"] @ parameters["beta_mean"]),
-        expit(X_dict["zero_inflation"] @ parameters["beta_zero_inflation"]),
+        np.exp(parameters["coef_dispersion"]),
+        np.exp(X_dict["mean"] @ parameters["coef_mean"]),
+        expit(X_dict["zero_inflation"] @ parameters["coef_zero_inflation"]),
     )
     nb_distn = nbinom(n=r, p=r / (r + mu))
     alpha = np.random.uniform(size=y.shape)
