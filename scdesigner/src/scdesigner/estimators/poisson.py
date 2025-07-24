@@ -32,8 +32,8 @@ def poisson_initializer(x, y, device):
 
 
 def poisson_postprocessor(params, x, y):
-    beta = format.to_np(params).reshape(x['beta'].shape[1], y.shape[1])
-    return {"beta": beta}
+    coef_beta = format.to_np(params).reshape(x['beta'].shape[1], y.shape[1])
+    return {"coef_beta": coef_beta}
 
 
 poisson_regression_array = factory.multiple_formula_regression_factory(
@@ -48,8 +48,8 @@ poisson_regression_array = factory.multiple_formula_regression_factory(
 def format_poisson_parameters(
     parameters: dict, var_names: list, coef_index: list
 ) -> dict:
-    parameters["beta"] = pd.DataFrame(
-        parameters["beta"], columns=var_names, index=coef_index
+    parameters["coef_beta"] = pd.DataFrame(
+        parameters["coef_beta"], columns=var_names, index=coef_index
     )
     return parameters
 
@@ -88,7 +88,7 @@ def poisson_regression(
 
 
 def poisson_uniformizer(parameters, x, y):
-    mu = np.exp(x['beta'] @ parameters["beta"])
+    mu = np.exp(x['beta'] @ parameters["coef_beta"])
     nb_distn = poisson(mu)
     alpha = np.random.uniform(size=y.shape)
     return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
@@ -96,8 +96,8 @@ def poisson_uniformizer(parameters, x, y):
 def format_poisson_parameters_with_loaders(parameters: dict, var_names: list, dls: dict) -> dict:
     beta_coef_index = dls["beta"].dataset.x_names
     
-    parameters["beta"] = pd.DataFrame(
-        parameters["beta"], columns=var_names, index=beta_coef_index
+    parameters["coef_beta"] = pd.DataFrame(
+        parameters["coef_beta"], columns=var_names, index=beta_coef_index
     )
     return parameters
 

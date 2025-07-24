@@ -21,12 +21,12 @@ def negbin_regression_likelihood(params, X_dict, y):
     n_outcomes = y.shape[1]
 
     # form the mean and dispersion parameters
-    beta_mean = params[: n_mean_features * n_outcomes].\
+    coef_mean = params[: n_mean_features * n_outcomes].\
         reshape(n_mean_features, n_outcomes)
-    beta_dispersion = params[n_mean_features * n_outcomes :].\
+    coef_dispersion = params[n_mean_features * n_outcomes :].\
         reshape(n_dispersion_features, n_outcomes)
-    r = torch.exp(X_dict["dispersion"] @ beta_dispersion)
-    mu = torch.exp(X_dict["mean"] @ beta_mean)
+    r = torch.exp(X_dict["dispersion"] @ coef_dispersion)
+    mu = torch.exp(X_dict["mean"] @ coef_mean)
 
     # compute the negative log likelihood
     log_likelihood = (
@@ -59,11 +59,11 @@ def negbin_postprocessor(params, x_dict, y):
     n_mean_features = x_dict["mean"].shape[1]
     n_outcomes = y.shape[1]
     n_dispersion_features = x_dict["dispersion"].shape[1]
-    beta_mean = format.to_np(params[:n_mean_features * n_outcomes]).\
+    coef_mean = format.to_np(params[:n_mean_features * n_outcomes]).\
         reshape(n_mean_features, n_outcomes)
-    beta_dispersion = format.to_np(params[n_mean_features * n_outcomes:]).\
+    coef_dispersion = format.to_np(params[n_mean_features * n_outcomes:]).\
         reshape(n_dispersion_features, n_outcomes)
-    return {"mean": beta_mean, "dispersion": beta_dispersion}
+    return {"coef_mean": coef_mean, "coef_dispersion": coef_dispersion}
 
 
 negbin_regression_array = factory.multiple_formula_regression_factory(
@@ -79,11 +79,11 @@ def format_negbin_parameters(
     parameters: dict, var_names: list, mean_coef_index: list, 
     dispersion_coef_index: list
 ) -> dict:
-    parameters["mean"] = pd.DataFrame(
-        parameters["mean"], columns=var_names, index=mean_coef_index
+    parameters["coef_mean"] = pd.DataFrame(
+        parameters["coef_mean"], columns=var_names, index=mean_coef_index
     )
-    parameters["dispersion"] = pd.DataFrame(
-        parameters["dispersion"], columns=var_names, index=dispersion_coef_index
+    parameters["coef_dispersion"] = pd.DataFrame(
+        parameters["coef_dispersion"], columns=var_names, index=dispersion_coef_index
     )
     return parameters
 
@@ -94,11 +94,11 @@ def format_negbin_parameters_with_loaders(
     mean_coef_index = dls["mean"].dataset.x_names
     dispersion_coef_index = dls["dispersion"].dataset.x_names
     
-    parameters["mean"] = pd.DataFrame(
-        parameters["mean"], columns=var_names, index=mean_coef_index
+    parameters["coef_mean"] = pd.DataFrame(
+        parameters["coef_mean"], columns=var_names, index=mean_coef_index
     )
-    parameters["dispersion"] = pd.DataFrame(
-        parameters["dispersion"], columns=var_names, index=dispersion_coef_index
+    parameters["coef_dispersion"] = pd.DataFrame(
+        parameters["coef_dispersion"], columns=var_names, index=dispersion_coef_index
     )
     return parameters
 
@@ -138,7 +138,7 @@ def negbin_regression(
     """
 
     """
-    formula = data.standardize_negbin_formula(formula)
+    formula = data.standardize_formula(formula, allowed_keys={'mean', 'dispersion'})
     
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
@@ -154,8 +154,8 @@ def negbin_regression(
 
 
 def negbin_uniformizer(parameters, X_dict, y):
-    r = np.exp(X_dict["dispersion"] @ parameters["dispersion"])
-    mu = np.exp(X_dict["mean"] @ parameters["mean"])
+    r = np.exp(X_dict["dispersion"] @ parameters["coef_dispersion"])
+    mu = np.exp(X_dict["mean"] @ parameters["coef_mean"])
     nb_distn = nbinom(n=r, p=r / (r + mu))
     alpha = np.random.uniform(size=y.shape)
     return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
@@ -166,5 +166,5 @@ negbin_copula_array = gcf.gaussian_copula_array_factory(
 ) # should accept a dictionary of dataloaders
 
 negbin_copula = gcf.gaussian_copula_factory(
-    negbin_copula_array, format_negbin_parameters_with_loaders, {"mean", "dispersion"}
+    negbin_copula_array, format_negbin_parameters_with_loaders, param_name="coef_mean"
 )

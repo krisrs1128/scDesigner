@@ -15,11 +15,11 @@ def zero_inflated_poisson_regression_likelihood(params, X, y):
 
     # define the likelihood parameters
     b_elem = beta_n_features * n_outcomes
-    log_beta = params[:b_elem].reshape(beta_n_features, n_outcomes)
-    logit_pi = params[b_elem:].reshape(pi_n_features, n_outcomes)
+    coef_beta = params[:b_elem].reshape(beta_n_features, n_outcomes)
+    coef_pi = params[b_elem:].reshape(pi_n_features, n_outcomes)
 
-    pi = torch.sigmoid(X['pi'] @ logit_pi)
-    mu = torch.exp(X['beta'] @ log_beta)
+    pi = torch.sigmoid(X['pi'] @ coef_pi)
+    mu = torch.exp(X['beta'] @ coef_beta)
     poisson_loglikelihood = y * torch.log(mu + 1e-10) - mu - torch.lgamma(y + 1e-10)
 
     # return the mixture, with an offset to prevent log(0)
@@ -47,9 +47,9 @@ def zero_inflated_poisson_postprocessor(params, x, y):
     pi_n_features = x['pi'].shape[1]
     n_outcomes = y.shape[1]
     b_elem = beta_n_features * n_outcomes
-    beta = format.to_np(params[:b_elem]).reshape(beta_n_features, n_outcomes)
-    pi = format.to_np(params[b_elem:]).reshape(pi_n_features, n_outcomes)
-    return {"beta": beta, "pi": pi}
+    coef_beta = format.to_np(params[:b_elem]).reshape(beta_n_features, n_outcomes)
+    coef_pi = format.to_np(params[b_elem:]).reshape(pi_n_features, n_outcomes)
+    return {"coef_beta": coef_beta, "coef_pi": coef_pi}
 
 
 zero_inflated_poisson_regression_array = factory.multiple_formula_regression_factory(
@@ -68,11 +68,11 @@ def format_zero_inflated_poisson_parameters(
     parameters: dict, var_names: list, beta_coef_index: list, 
     pi_coef_index: list
 ) -> dict:
-    parameters["beta"] = pd.DataFrame(
-        parameters["beta"], columns=var_names, index=beta_coef_index
+    parameters["coef_beta"] = pd.DataFrame(
+        parameters["coef_beta"], columns=var_names, index=beta_coef_index
     )
-    parameters["pi"] = pd.DataFrame(
-        parameters["pi"], columns=var_names, index=pi_coef_index
+    parameters["coef_pi"] = pd.DataFrame(
+        parameters["coef_pi"], columns=var_names, index=pi_coef_index
     )
     return parameters
 
