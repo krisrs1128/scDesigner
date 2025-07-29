@@ -31,7 +31,7 @@ def negbin_regression_likelihood(params, X, y):
         + y * torch.log(mu)
         - (r + y) * torch.log(r + mu)
     )
-    return log_likelihood
+    return -torch.sum(log_likelihood)
 
 
 def negbin_initializer(x, y, device):
@@ -42,10 +42,6 @@ def negbin_initializer(x, y, device):
 
 
 def negbin_postprocessor(params, n_features, n_outcomes):
-    # validation for param unwrapper
-    series = pd.Series(params.cpu().detach().numpy())
-    series.to_csv('data/nbreg.csv', index=False, header=False)
-
     b_elem = n_features * n_outcomes
     beta = format.to_np(params[:b_elem]).reshape(n_features, n_outcomes)
     dispersion = format.to_np(params[b_elem:])
@@ -80,11 +76,10 @@ def negbin_regression(
     loader = data.formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
-    result = negbin_regression_array(loader, **kwargs)
-    result["parameters"] = format_negbin_parameters(
-        result["parameters"], list(adata.var_names), loader.dataset.x_names
+    parameters = negbin_regression_array(loader, **kwargs)
+    return format_negbin_parameters(
+        parameters, list(adata.var_names), loader.dataset.x_names
     )
-    return result
 
 
 ###############################################################################
@@ -92,22 +87,13 @@ def negbin_regression(
 ###############################################################################
 
 
-# def negbin_uniformizer(parameters, x, y):
-#     r, mu = np.exp(parameters["gamma"]), np.exp(x @ parameters["beta"])
-#     nb_distn = nbinom(n=r, p=r / (r + mu))
-#     alpha = np.random.uniform(size=y.shape)
-#     return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
-
-
-def negbin_uniformizer(parameters, x, y, epsilon=1e-3):
-    np.random.seed(42)
+def negbin_uniformizer(parameters, x, y, epsilon=1e-3, random_seed=42):
+    np.random.seed(random_seed)
     r, mu = np.exp(parameters["gamma"]), np.exp(x @ parameters["beta"])
     u1 = nbinom(n=r, p=r / (r + mu)).cdf(y)
     u2 = np.where(y > 0, nbinom(n=r, p=r / (r + mu)).cdf(y - 1), 0)
     v = np.random.uniform(size=y.shape)
-    # may need to add extra step for selecting partial cells?
-    p = np.clip(v * u1 + (1 - v) * u2, epsilon, 1 - epsilon)
-    return p
+    return np.clip(v * u1 + (1 - v) * u2, epsilon, 1 - epsilon)
 
 
 negbin_copula_array = gcf.gaussian_copula_array_factory(
