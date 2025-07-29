@@ -1,11 +1,12 @@
 from .. import estimators as est
 from .. import predictors as prd
 from .. import samplers as smp
+from .. import diagnose
 from anndata import AnnData
 import pandas as pd
 
 
-def glm_simulator_generator(class_name, regressor, sampler, predictor):
+def glm_simulator_generator(class_name, regressor, sampler, predictor, diagnose):
     def __init__(self, **kwargs):
         self.formula = None
         self.params = None
@@ -19,10 +20,8 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
         # fitting and sampling methods for plain regressors
         def fit(self, adata: AnnData, formula: str) -> dict:
             self.formula = formula
-            result = regressor(adata, formula, **self.hyperparams)
-            self.params = result["parameters"]
-            self.marginal_aic = result["summaries"]["marginal_aic"]
-            self.marginal_bic = result["summaries"]["marginal_bic"]
+            self.params = regressor(adata, formula, **self.hyperparams)
+            self.marginal_aic, self.marginal_bic = diagnose(self.params, adata, formula, **self.hyperparams)
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
             local_parameters = self.predict(obs)
@@ -35,12 +34,8 @@ def glm_simulator_generator(class_name, regressor, sampler, predictor):
         ) -> dict:
             self.formula = formula
             self.coupla_groups = copula_groups
-            result = regressor(adata, formula, copula_groups, **self.hyperparams)
-            self.params = result["parameters"]
-            self.marginal_aic = result["summaries"]["marginal_aic"]
-            self.marginal_bic = result["summaries"]["marginal_bic"]
-            self.copula_aic = result["summaries"]["copula_aic"]
-            self.copula_bic = result["summaries"]["copula_bic"]
+            self.params = regressor(adata, formula, copula_groups, **self.hyperparams)
+            self.marginal_aic, self.marginal_bic, self.copula_aic, self.copula_bic = diagnose(self.params, adata, formula, copula_groups, **self.hyperparams)
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
             groups = est.gaussian_copula_factory.group_indices(self.coupla_groups, obs)
@@ -80,6 +75,7 @@ NegBinRegressionSimulator = glm_simulator_generator(
     est.negbin_regression,
     smp.negbin_sample,
     prd.negbin_predict,
+    diagnose.negbin_regression_diagnose
 )
 
 NegBinCopulaSimulator = glm_simulator_generator(
@@ -87,6 +83,7 @@ NegBinCopulaSimulator = glm_simulator_generator(
     est.negbin_copula,
     smp.negbin_copula_sample,
     prd.negbin_predict,
+    diagnose.negbin_gcopula_diagnose,
 )
 
 PoissonRegressionSimulator = glm_simulator_generator(
@@ -94,6 +91,7 @@ PoissonRegressionSimulator = glm_simulator_generator(
     est.poisson_regression,
     smp.poisson_sample,
     prd.poisson_predict,
+    diagnose.poisson_regression_diagnose,
 )
 
 PoissonCopulaSimulator = glm_simulator_generator(
@@ -101,6 +99,7 @@ PoissonCopulaSimulator = glm_simulator_generator(
     est.poisson_copula,
     smp.poisson_copula_sample,
     prd.poisson_predict,
+    diagnose.poisson_gcopula_diagnose,
 )
 
 BernoulliRegressionSimulator = glm_simulator_generator(
@@ -108,6 +107,7 @@ BernoulliRegressionSimulator = glm_simulator_generator(
     est.bernoulli_regression,
     smp.bernoulli_sample,
     prd.bernoulli_predict,
+    diagnose.bernoulli_regression_diagnose,
 )
 
 BernoulliCopulaSimulator = glm_simulator_generator(
@@ -115,6 +115,7 @@ BernoulliCopulaSimulator = glm_simulator_generator(
     est.bernoulli_copula,
     smp.bernoulli_copula_sample,
     prd.bernoulli_predict,
+    diagnose.bernoulli_gcopula_diagnose,
 )
 
 ZeroInflatedNegBinRegressionSimulator = glm_simulator_generator(
@@ -122,6 +123,7 @@ ZeroInflatedNegBinRegressionSimulator = glm_simulator_generator(
     est.zero_inflated_negbin_regression,
     smp.zero_inflated_negbin_sample,
     prd.zero_inflated_negbin_predict,
+    diagnose.zinb_regression_diagnose,
 )
 
 ZeroInflatedNegBinCopulaSimulator = glm_simulator_generator(
@@ -129,6 +131,7 @@ ZeroInflatedNegBinCopulaSimulator = glm_simulator_generator(
     est.zero_inflated_negbin_copula,
     smp.zero_inflated_negbin_copula_sample,
     prd.zero_inflated_negbin_predict,
+    diagnose.zinb_gcopula_diagnose,
 )
 
 ZeroInflatedPoissonRegressionSimulator = glm_simulator_generator(
@@ -136,4 +139,5 @@ ZeroInflatedPoissonRegressionSimulator = glm_simulator_generator(
     est.zero_inflated_poisson_regression,
     smp.zero_inflated_poisson_sample,
     prd.zero_inflated_poisson_predict,
+    diagnose.zip_regression_diagnose,
 )

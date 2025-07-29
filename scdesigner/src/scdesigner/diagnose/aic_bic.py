@@ -1,89 +1,101 @@
+from anndata import AnnData
 from scipy.stats import norm, multivariate_normal
-import torch
+from formulaic import model_matrix
+from .. import data
+from .. import estimators as est
 import numpy as np
-import pandas as pd
+import torch, scipy
 
 
-def marginal_aic_bic(parameters, likelihood, n_sample):
-    nparam = len(parameters)
-    aic = 2 * nparam - 2 * likelihood
-    bic = np.log(n_sample) * nparam - 2 * likelihood
-    return aic, bic
-
-
-def gaussian_copula_aic_bic(loader, parameters, uniformizer):
-    covariance = parameters["covariance"]
+def marginal_aic_bic(likelihood, params: dict, adata: AnnData, formula: str, 
+                     param_order: list = None, transform: list = None, 
+                     chunk_size: int = int(1e4), batch_size=512):
+    device = data.formula.check_device()
+    nsample = len(adata)
+    params = likelihood_unwrapper(params, param_order, transform).to(device)
+    nparam = len(params)
+    loader = data.formula_loader(
+        adata, formula, chunk_size=chunk_size, batch_size=batch_size
+    )
+    ll = 0
     with torch.no_grad():
-        if not isinstance(covariance, dict):
-            nop = (np.sum(covariance != 0) - covariance.shape[0]) / 2
-            total_copula_ln = 0
-            total_marginal_ln = 0
-            n_sample = 0
-            for x, y, _ in loader:
-                u = uniformizer(parameters, x.cpu().numpy(), y.cpu().numpy())
-                z = norm().ppf(u)
-                copula_ln = multivariate_normal.logpdf(
-                    z, np.zeros(covariance.shape[0]), covariance
-                )
-                marginal_ln = norm.logpdf(z)
-                total_copula_ln += np.sum(copula_ln)
-                total_marginal_ln += np.sum(marginal_ln)
-                n_sample += z.shape[0]
-            aic = -2 * (total_copula_ln - total_marginal_ln) + 2 * nop
-            bic = -2 * (total_copula_ln - total_marginal_ln) + np.log(n_sample) * nop
-            return aic, bic
-        else:
-            groups = covariance.keys()
-            nop = {
-                g: (np.sum(covariance[g] != 0) - covariance[g].shape[0]) / 2
-                for g in groups
-            }
-            for x, y, memberships in loader:
-                aic = 0
-                bic = 0
-                for g in groups:
-                    ix = np.where(np.array(memberships) == g)
-                    z = norm().ppf(u[ix])
-                    copula_ln = multivariate_normal.logpdf(
-                        z, np.zeros(covariance[g].shape[0]), covariance[g]
-                    )
-                    marginal_ln = norm.logpdf(z)
-                    aic += -2 * (np.sum(copula_ln) - np.sum(marginal_ln)) + 2 * nop[g]
-                    bic += (
-                        -2 * (np.sum(copula_ln) - np.sum(marginal_ln))
-                        + np.log(z.shape[0]) * nop[g]
-                    )
-    return aic, bic
+        for x, y in loader:
+            ll += -likelihood(params, x, y)
+    aic = 2 * nparam - 2 * ll
+    bic = np.log(nsample) * nparam - 2 * ll
+    return aic.cpu().item(), bic.cpu().item()
 
 
-def gaussian_copula(covariance, uniformizer, memberships=None):
-    u = uniformizer
-    if not isinstance(covariance, dict):
-        nop = (np.sum(covariance != 0) - covariance.shape[0]) / 2
-        z = norm().ppf(u)
-        copula_ln = multivariate_normal.logpdf(
-            z, np.zeros(covariance.shape[0]), covariance
-        )
-        marginal_ln = norm.logpdf(z)
-        aic = -2 * (np.sum(copula_ln) - np.sum(marginal_ln)) + 2 * nop
-        bic = -2 * (np.sum(copula_ln) - np.sum(marginal_ln)) + np.log(z.shape[0]) * nop
+def gaussian_copula_aic_bic(uniformizer, params: dict, adata: AnnData, formula: str, copula_groups=None):
+    params = uniformizer_unwrapper(params)
+    covariance = params['covariance']
+    y = adata.X
+    if isinstance(y, scipy.sparse._csc.csc_matrix):
+        y = y.todense()
+    X = model_matrix(formula, adata.obs)
+    if copula_groups is not None:
+        memberships = adata.obs[copula_groups]
     else:
-        groups = covariance.keys()
-        nop = {
-            g: (np.sum(covariance[g] != 0) - covariance[g].shape[0]) / 2 for g in groups
-        }
-        aic = 0  # aic = {g: 0 for g in groups}
-        bic = 0  # bic = {g: 0 for g in groups}
-        for g in groups:
-            ix = np.where(np.array(memberships) == g)
-            z = norm().ppf(u[ix])
-            copula_ln = multivariate_normal.logpdf(
-                z, np.zeros(covariance[g].shape[0]), covariance[g]
-            )
-            marginal_ln = norm.logpdf(z)
-            aic += -2 * (np.sum(copula_ln) - np.sum(marginal_ln)) + 2 * nop[g]
-            bic += (
-                -2 * (np.sum(copula_ln) - np.sum(marginal_ln))
-                + np.log(z.shape[0]) * nop[g]
-            )
+        covariance = {"shared_group": covariance}
+        copula_groups = "shared_group"
+        memberships = np.array(["shared_group"] * y.shape[0])
+        
+    u = uniformizer(params, X, y)
+    groups = covariance.keys()
+    nparam = {
+        g: (np.sum(covariance[g] != 0) - covariance[g].shape[0]) / 2 for g in groups
+    }
+    aic = 0 # in the future may add group-wise AIC/BIC
+    bic = 0
+    for g in groups:
+        ix = np.where(memberships == g)[0]
+        z = norm().ppf(u[ix])
+        copula_ll = multivariate_normal.logpdf(
+            z, np.zeros(covariance[g].shape[0]), covariance[g]
+        )
+        marginal_ll = norm.logpdf(z)
+        aic += -2 * (np.sum(copula_ll) - np.sum(marginal_ll)) + 2 * nparam[g]
+        bic += (
+            -2 * (np.sum(copula_ll) - np.sum(marginal_ll))
+            + np.log(z.shape[0]) * nparam[g]
+        )
     return aic, bic
+
+
+def compose_marginal_diagnose(likelihood, param_order: list = None, transform: list = None):
+    def diagnose(params: dict, adata: AnnData, formula: str,
+                chunk_size: int = int(1e4), batch_size=512):
+        return marginal_aic_bic(likelihood, params, adata, formula, 
+                                param_order, transform, chunk_size, batch_size)
+    return diagnose
+
+
+def compose_gcopula_diagnose(likelihood, uniformizer, param_order: list = None, transform: list = None):
+    def diagnose(params: dict, adata: AnnData, formula: str, copula_groups=None,
+                 chunk_size: int = int(1e4), batch_size=512):
+        marginal_aic, marginal_bic = marginal_aic_bic(likelihood, params, adata, formula, 
+                                                    param_order, transform, chunk_size, batch_size)
+        copula_aic, copula_bic = gaussian_copula_aic_bic(uniformizer, params, adata, formula, copula_groups)
+        return marginal_aic, marginal_bic, copula_aic, copula_bic
+    return diagnose
+
+
+###############################################################################
+## Helper for converting params to match likelihood/uniformizer input format
+###############################################################################
+
+def likelihood_unwrapper(params: dict, param_order: list = None, transform: list = None):
+    l = []
+    keys_to_process = [k for k in params if k != "covariance"] if param_order is None else param_order
+
+    for idx, k in enumerate(keys_to_process):
+        feature = params[k]
+        v = torch.Tensor(feature.values).reshape(1, feature.shape[0] * feature.shape[1])[0]
+        if transform is not None:
+            v = transform[idx](v)
+        l.append(v)
+
+    return torch.cat(l, dim=0)
+
+def uniformizer_unwrapper(params):
+    return {key: params[key].values for key in params}
