@@ -4,6 +4,7 @@ from .. import data
 from .. import format
 from anndata import AnnData
 from scipy.stats import poisson
+from typing import Union
 import numpy as np
 import pandas as pd
 import torch
@@ -13,33 +14,30 @@ import torch
 ###############################################################################
 
 
-def poisson_regression_likelihood(params, X, y):
+def poisson_regression_likelihood(params, X, y, epsilon=1e-6):
     # get appropriate parameter shape
-    n_features = X.shape[1]
+    n_features = X['beta'].shape[1]
     n_outcomes = y.shape[1]
 
     # compute the negative log likelihood
     beta = params.reshape(n_features, n_outcomes)
-    mu = torch.exp(X @ beta)
-    log_likelihood = y * torch.log(mu) - mu - torch.lgamma(y)
+    mu = torch.exp(X['beta'] @ beta)
+    log_likelihood = y * torch.log(mu+epsilon) - mu - torch.lgamma(y + 1)
     return -torch.sum(log_likelihood)
 
 
 def poisson_initializer(x, y, device):
-    n_features, n_outcomes = x.shape[1], y.shape[1]
+    n_features, n_outcomes = x['beta'].shape[1], y.shape[1]
     return torch.zeros(n_features * n_outcomes, requires_grad=True, device=device)
 
 
-def poisson_postprocessor(params, n_features, n_outcomes):
-    # validation for param unwrapper
-    series = pd.Series(params.cpu().detach().numpy())
-    series.to_csv('data/poi.csv', index=False, header=False)
-    
-    beta = format.to_np(params).reshape(n_features, n_outcomes)
-    return {"beta": beta}
+def poisson_postprocessor(params, x, y):
+    # better use "mean" instead of "beta" for the key name
+    coef_beta = format.to_np(params).reshape(x['beta'].shape[1], y.shape[1])
+    return {"coef_beta": coef_beta}
 
 
-poisson_regression_array = factory.glm_regression_factory(
+poisson_regression_array = factory.multiple_formula_regression_factory(
     poisson_regression_likelihood, poisson_initializer, poisson_postprocessor
 )
 
@@ -51,8 +49,8 @@ poisson_regression_array = factory.glm_regression_factory(
 def format_poisson_parameters(
     parameters: dict, var_names: list, coef_index: list
 ) -> dict:
-    parameters["beta"] = pd.DataFrame(
-        parameters["beta"], columns=var_names, index=coef_index
+    parameters["coef_beta"] = pd.DataFrame(
+        parameters["coef_beta"], columns=var_names, index=coef_index
     )
     return parameters
 
@@ -64,12 +62,15 @@ def poisson_regression(
     batch_size: int = 512,
     **kwargs
 ) -> dict:
-    loader = data.formula_loader(
+    formula = data.standardize_formula(formula, allowed_keys={'beta'})
+    loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
-    result = poisson_regression_array(loader, **kwargs)
-    result["parameters"] = format_poisson_parameters(result["parameters"], list(adata.var_names), list(loader.dataset.x_names))
-    return result
+
+    parameters = poisson_regression_array(loaders, **kwargs)
+    return format_poisson_parameters(
+        parameters, list(adata.var_names), loaders["beta"].dataset.x_names
+    )
 
 
 ###############################################################################
@@ -77,14 +78,29 @@ def poisson_regression(
 ###############################################################################
 
 
-def poisson_uniformizer(parameters, x, y):
-    mu = np.exp(x @ parameters["beta"])
-    nb_distn = poisson(mu)
-    alpha = np.random.uniform(size=y.shape)
-    return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
+def poisson_uniformizer(parameters, x, y, epsilon=1e-3, random_seed=42):
+    np.random.seed(random_seed)
+    mu = np.exp(x['beta'] @ parameters["coef_beta"])
+    u1 = poisson(mu).cdf(y)
+    u2 = np.where(y > 0, poisson(mu).cdf(y - 1), 0)
+    v = np.random.uniform(size=y.shape)
+    return np.clip(v * u1 + (1 - v) * u2, epsilon, 1 - epsilon)
+    # nb_distn = poisson(mu)
+    # alpha = np.random.uniform(size=y.shape)
+    # return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
 
+def format_poisson_parameters_with_loaders(parameters: dict, var_names: list, dls: dict) -> dict:
+    beta_coef_index = dls["beta"].dataset.x_names
+    
+    parameters["coef_beta"] = pd.DataFrame(
+        parameters["coef_beta"], columns=var_names, index=beta_coef_index
+    )
+    return parameters
+
+poisson_copula_array = gcf.gaussian_copula_array_factory(
+    poisson_regression_array, poisson_uniformizer
+) 
 
 poisson_copula = gcf.gaussian_copula_factory(
-    gcf.gaussian_copula_array_factory(poisson_regression_array, poisson_uniformizer),
-    format_poisson_parameters,
+    poisson_copula_array, format_poisson_parameters_with_loaders, {"beta"}
 )

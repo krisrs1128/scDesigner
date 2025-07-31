@@ -1,38 +1,51 @@
 from anndata import AnnData
 from scipy.stats import norm, multivariate_normal
 from formulaic import model_matrix
+from typing import Union
 from .. import data
 from .. import estimators as est
 import numpy as np
 import torch, scipy
 
 
-def marginal_aic_bic(likelihood, params: dict, adata: AnnData, formula: str, 
+def marginal_aic_bic(likelihood, params: dict, adata: AnnData, 
+                     formula: Union[str, dict], allowed_keys: set,
                      param_order: list = None, transform: list = None, 
                      chunk_size: int = int(1e4), batch_size=512):
     device = data.formula.check_device()
     nsample = len(adata)
     params = likelihood_unwrapper(params, param_order, transform).to(device)
     nparam = len(params)
-    loader = data.formula_loader(
+
+    # create batches for likelihood calculation
+    formula = data.standardize_formula(formula, allowed_keys)
+    loader = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
+    keys = list(loader.keys())
+    loaders = list(loader.values())
+    num_keys = len(keys)
+    
     ll = 0
     with torch.no_grad():
-        for x, y in loader:
+        for batches in zip(*loaders):
+            x = {keys[i]: batches[i][0].to(device) for i in range(num_keys)}
+            y = batches[0][1].to(device)
             ll += -likelihood(params, x, y)
     aic = 2 * nparam - 2 * ll
     bic = np.log(nsample) * nparam - 2 * ll
     return aic.cpu().item(), bic.cpu().item()
 
 
-def gaussian_copula_aic_bic(uniformizer, params: dict, adata: AnnData, formula: str, copula_groups=None):
+def gaussian_copula_aic_bic(uniformizer, params: dict, adata: AnnData, 
+                            formula: Union[str, dict], allowed_keys: set, copula_groups=None):
     params = uniformizer_unwrapper(params)
     covariance = params['covariance']
     y = adata.X
     if isinstance(y, scipy.sparse._csc.csc_matrix):
         y = y.todense()
-    X = model_matrix(formula, adata.obs)
+    formula = data.standardize_formula(formula, allowed_keys)
+    X = {key: model_matrix(formula[key], adata.obs) for key in formula}
     if copula_groups is not None:
         memberships = adata.obs[copula_groups]
     else:
@@ -62,20 +75,21 @@ def gaussian_copula_aic_bic(uniformizer, params: dict, adata: AnnData, formula: 
     return aic, bic
 
 
-def compose_marginal_diagnose(likelihood, param_order: list = None, transform: list = None):
+def compose_marginal_diagnose(likelihood, allowed_keys: set, param_order: list = None, transform: list = None):
     def diagnose(params: dict, adata: AnnData, formula: str,
                 chunk_size: int = int(1e4), batch_size=512):
-        return marginal_aic_bic(likelihood, params, adata, formula, 
+        return marginal_aic_bic(likelihood, params, adata, formula, allowed_keys,
                                 param_order, transform, chunk_size, batch_size)
     return diagnose
 
 
-def compose_gcopula_diagnose(likelihood, uniformizer, param_order: list = None, transform: list = None):
+def compose_gcopula_diagnose(likelihood, uniformizer, allowed_keys: set, 
+                             param_order: list = None, transform: list = None):
     def diagnose(params: dict, adata: AnnData, formula: str, copula_groups=None,
                  chunk_size: int = int(1e4), batch_size=512):
-        marginal_aic, marginal_bic = marginal_aic_bic(likelihood, params, adata, formula, 
+        marginal_aic, marginal_bic = marginal_aic_bic(likelihood, params, adata, formula, allowed_keys,
                                                     param_order, transform, chunk_size, batch_size)
-        copula_aic, copula_bic = gaussian_copula_aic_bic(uniformizer, params, adata, formula, copula_groups)
+        copula_aic, copula_bic = gaussian_copula_aic_bic(uniformizer, params, adata, formula, allowed_keys, copula_groups)
         return marginal_aic, marginal_bic, copula_aic, copula_bic
     return diagnose
 

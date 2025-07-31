@@ -9,6 +9,7 @@ from .zero_inflated_negbin import (
     zero_inflated_negbin_copula,
 )
 from .zero_inflated_poisson import zero_inflated_poisson_regression
+from .glm_factory import multiple_formula_regression_factory
 
 __all__ = [
     "AdataViewDataset",
@@ -25,4 +26,5 @@ __all__ = [
     "zero_inflated_negbin_copula",
     "zero_inflated_negbin_regression",
     "zero_inflated_poisson_regression",
+    "multiple_formula_regression_factory",
 ]

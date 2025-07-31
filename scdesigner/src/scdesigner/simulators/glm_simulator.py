@@ -4,46 +4,54 @@ from .. import samplers as smp
 from .. import diagnose
 from anndata import AnnData
 import pandas as pd
+from typing import Union
 
 
 def glm_simulator_generator(class_name, regressor, sampler, predictor, diagnose):
     def __init__(self, **kwargs):
-        self.formula = None
+        self.formula = None # formula should be a string or a dictionary of strings
         self.params = None
         self.marginal_aic = None
         self.marginal_bic = None
         self.copula_aic = None
         self.copula_bic = None
         self.hyperparams = kwargs
+        self.filtered_kwargs = {k: kwargs[k] for k in ["chunk_size", "batch_size"] if k in kwargs}
 
     if "Copula" not in class_name:
         # fitting and sampling methods for plain regressors
-        def fit(self, adata: AnnData, formula: str) -> dict:
+        def fit(self, adata: AnnData, formula: Union[str, dict]) -> dict:
             self.formula = formula
             self.params = regressor(adata, formula, **self.hyperparams)
-            self.marginal_aic, self.marginal_bic = diagnose(self.params, adata, formula, **self.hyperparams)
+            self.marginal_aic, self.marginal_bic = diagnose(
+                self.params, adata, formula, **self.filtered_kwargs
+            )
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
-            local_parameters = self.predict(obs)
+            local_parameters = self.predict(obs) # a dictionary of parameters
             return sampler(local_parameters, obs)
 
     else:
         # fitting and sampling for gaussian copula models
+
         def fit(
-            self, adata: AnnData, formula: str = "~ 1", copula_groups: str = None
+            self, adata: AnnData, formula: Union[str, dict] = "~ 1", copula_groups: str = None
         ) -> dict:
             self.formula = formula
-            self.coupla_groups = copula_groups
+            self.copula_groups = copula_groups
             self.params = regressor(adata, formula, copula_groups, **self.hyperparams)
-            self.marginal_aic, self.marginal_bic, self.copula_aic, self.copula_bic = diagnose(self.params, adata, formula, copula_groups, **self.hyperparams)
+            self.marginal_aic, self.marginal_bic, self.copula_aic, self.copula_bic = diagnose(
+                self.params, adata, formula, copula_groups, **self.filtered_kwargs
+            )
 
         def sample(self, obs: pd.DataFrame) -> AnnData:
-            groups = est.gaussian_copula_factory.group_indices(self.coupla_groups, obs)
+            groups = est.gaussian_copula_factory.group_indices(self.copula_groups, obs)
             local_parameters = self.predict(obs)
             return sampler(local_parameters, self.params["covariance"], groups, obs)
 
     def predict(self, obs: pd.DataFrame) -> dict:
         return predictor(self.params, obs, self.formula)
+        # The predictor function should handle different formula types: dict or string
 
     def __repr__(self):
         params_string = ", ".join(
@@ -80,7 +88,7 @@ NegBinRegressionSimulator = glm_simulator_generator(
 
 NegBinCopulaSimulator = glm_simulator_generator(
     "NegBinCopulaSimulator",
-    est.negbin_copula,
+    est.negbin_copula, 
     smp.negbin_copula_sample,
     prd.negbin_predict,
     diagnose.negbin_gcopula_diagnose,
@@ -109,7 +117,7 @@ BernoulliRegressionSimulator = glm_simulator_generator(
     prd.bernoulli_predict,
     diagnose.bernoulli_regression_diagnose,
 )
-
+ 
 BernoulliCopulaSimulator = glm_simulator_generator(
     "BernoulliCopulaSimulator",
     est.bernoulli_copula,
