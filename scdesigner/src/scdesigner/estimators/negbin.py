@@ -93,36 +93,6 @@ def format_negbin_parameters_with_loaders(
     
     return format_negbin_parameters(parameters, var_names, mean_coef_index, dispersion_coef_index)
 
-def standardize_negbin_formula(formula: Union[str, dict]) -> dict:
-    '''
-    Convert string formula to dict and validate type.
-    If formula is a string, it is the formula for the mean parameter.
-    If formula is a dictionary, it is a dictionary of formulas for the mean and dispersion parameters. 
-    If a dictionary is provided, it should have "mean" key, and if "dispersion" key is not provided, it is set to "~ 1".
-    '''
-    
-    formula = {'mean': formula, 'dispersion': '~ 1'} if isinstance(formula, str) else formula
-    if not isinstance(formula, dict):
-        raise ValueError("formula must be a string or a dictionary")
-    
-    # Define allowed keys and set defaults
-    allowed_keys = {'mean', 'dispersion'}
-    formula_keys = set(formula.keys())
-    
-    # Check for required keys and warn about extras
-    if not formula_keys & allowed_keys:
-        raise ValueError("formula must have at least one of the following keys: mean, dispersion")
-    
-    if extra_keys := formula_keys - allowed_keys:
-        warnings.warn(
-            f"Invalid formulas in dictionary for negative binomial regression: {extra_keys}",
-            UserWarning,
-        )
-    
-    # Set defaults for missing keys
-    formula.update({k: '~ 1' for k in allowed_keys - formula_keys})
-    return formula
-
 def negbin_regression(
     adata: AnnData, formula: Union[str, dict], chunk_size: int = int(1e4), batch_size=512, **kwargs
 ) -> dict:

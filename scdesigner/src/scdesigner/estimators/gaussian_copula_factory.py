@@ -91,15 +91,6 @@ def copula_covariance(parameters: dict, loaders: dict[str, DataLoader], uniformi
             sums[g] += z.sum(axis=0)
             Ng[g] += len(ix[0])
 
-    # for x, y, memberships in loader:
-    #     u = uniformizer(parameters, x.cpu().numpy(), y.cpu().numpy())
-    #     for g in groups:
-    #         ix = np.where(np.array(memberships) == g)
-    #         z = norm().ppf(u[ix])
-    #         second_moments[g] += z.T @ z
-    #         sums[g] += z.sum(axis=0)
-    #         Ng[g] += len(ix[0])
-
     result = {}
     for g in groups:
         mean = sums[g] / Ng[g]
@@ -116,9 +107,9 @@ def copula_covariance(parameters: dict, loaders: dict[str, DataLoader], uniformi
 
 
 def group_indices(grouping_var: str, obs: pd.DataFrame) -> dict:
-    '''
+    """
     Returns a dictionary of group indices for each group in the grouping variable.
-    '''
+    """
     if grouping_var is None:
         grouping_var = "_copula_group"
         if "copula_group" not in obs.columns:
@@ -159,5 +150,3 @@ def strip_dataloader(dataloader, pop=False):
         collate_fn=stack_collate(pop=pop, groups=False),
     )
     
-# def strip_dataloaders(dataloaders: dict[str, DataLoader], pop=False):
-#     return {k: strip_dataloader(v, pop=pop) for k, v in dataloaders.items()}

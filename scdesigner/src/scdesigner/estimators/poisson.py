@@ -85,9 +85,6 @@ def poisson_uniformizer(parameters, x, y, epsilon=1e-3, random_seed=42):
     u2 = np.where(y > 0, poisson(mu).cdf(y - 1), 0)
     v = np.random.uniform(size=y.shape)
     return np.clip(v * u1 + (1 - v) * u2, epsilon, 1 - epsilon)
-    # nb_distn = poisson(mu)
-    # alpha = np.random.uniform(size=y.shape)
-    # return gcf.clip(alpha * nb_distn.cdf(y) + (1 - alpha) * nb_distn.cdf(1 + y))
 
 def format_poisson_parameters_with_loaders(parameters: dict, var_names: list, dls: dict) -> dict:
     beta_coef_index = dls["beta"].dataset.x_names

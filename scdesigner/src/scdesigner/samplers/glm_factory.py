@@ -26,9 +26,6 @@ def gaussian_copula_pseudo_obs(N, G, sigma, groups):
         )
         normal_distn = norm(0, np.diag(sigma[group] ** 0.5))
         u[ix] = normal_distn.cdf(z)
-        # Use marginal standard deviations for each gene 
-        # marginal_stds = np.sqrt(np.diag(sigma[group]))
-        # u[ix] = norm(0, marginal_stds).cdf(z)
     return u
 
 

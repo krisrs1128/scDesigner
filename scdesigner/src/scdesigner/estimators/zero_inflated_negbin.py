@@ -185,12 +185,6 @@ def zero_inflated_negbin_uniformizer(parameters, X_dict, y, epsilon=1e-3, random
     u2 = np.where(y > 0, pi + (1 - pi) * nb_distn.cdf(y-1), 0)
     v = np.random.uniform(size=y.shape)
     return np.clip(v * u1 + (1 - v) * u2, epsilon, 1 - epsilon)
-    # nb_distn = nbinom(n=r, p=r / (r + mu))
-    # alpha = np.random.uniform(size=y.shape)
-
-    # cdf1 = pi + (1 - pi) * nb_distn.cdf(y)
-    # cdf2 = pi + (1 - pi) * nb_distn.cdf(1 + y)
-    # return gcf.clip(alpha * cdf1 + (1 - alpha) * cdf2)
 
 
 zero_inflated_negbin_copula = gcf.gaussian_copula_factory(

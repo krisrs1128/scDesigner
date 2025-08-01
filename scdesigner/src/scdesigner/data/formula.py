@@ -34,7 +34,6 @@ def formula_loader(
 
     return dataloader
 
-# Attempt1: return a dictionary of data loaders for each formula
 def multiple_formula_loader(
     adata: AnnData, formulas: dict, chunk_size=int(1e4), batch_size: int = None
 ):
@@ -42,49 +41,6 @@ def multiple_formula_loader(
     for key in formulas.keys():
         dataloaders[key] = formula_loader(adata, formulas[key], chunk_size, batch_size)
     return dataloaders
-
-# class JoinedDataset(td.Dataset):
-#     """
-#     Wrap a list of datasets that share the same Y with different formulas for X.
-#     For each index, concatenate the Xs and return the corresponding Y.
-#     """
-#     def __init__(self, datasets: list[td.Dataset]):
-#         self.datasets = datasets
-#         self.len = len(datasets[0])
-#         for d in datasets[1:]:
-#             assert len(d) == self.len, "All datasets must have the same length"
-    
-#         # merge covariate names
-#         self.x_names = list(itertools.chain.from_iterable(
-#             getattr(d, "x_names", [f'x_{i}' for i in range(d[0][0].shape[-1])]) 
-#             for d in datasets
-#         ))
-        
-#     def __getitem__(self, idx):
-#         xs = []
-#         y_ref = None
-#         for d in self.datasets:
-#             x_i, y_i = d[idx]
-#             xs.append(x_i)
-#             if y_ref is None:
-#                 y_ref = y_i
-#             else:
-#                 # Check Y is identical
-#                 if not torch.equal(y_ref, y_i):
-#                     raise ValueError(f"Y mismatch at index {idx}")
-#         x_joined = torch.cat(xs, dim=-1)
-#         return x_joined, y_ref
-
-#     def __len__(self):
-#         return self.len
-    
-# def joined_dataloaders(dataloaders: dict, batch_size=None, **kwargs):
-#     datasets = [dl.dataset for dl in dataloaders.values()]
-#     joined_dataset = JoinedDataset(datasets)
-#     return DataLoader(joined_dataset, 
-#                       batch_size=batch_size or dataloaders[0].batch_size, 
-#                       shuffle=False, 
-#                       **kwargs)
 
 class FormulaViewDataset(td.Dataset):
     def __init__(self, view, formula=None, chunk_size=int(1e4), device=None):
@@ -160,9 +116,9 @@ def check_device():
     )
 
 def standardize_formula(formula: Union[str, dict], allowed_keys = None):
+    # The first element of allowed_keys should be the name of default parameter
     if allowed_keys is None:
         raise ValueError("Internal error: allowed_keys must be specified")
-    # The first element of allowed_keys should be the name of default parameter
     formula = {list(allowed_keys)[0]: formula} if isinstance(formula, str) else formula
     
     formula_keys = set(formula.keys())
@@ -176,6 +132,5 @@ def standardize_formula(formula: Union[str, dict], allowed_keys = None):
             UserWarning,
         )
     
-    # Set defaults for missing keys
     formula.update({k: '~ 1' for k in allowed_keys - formula_keys})
     return formula
