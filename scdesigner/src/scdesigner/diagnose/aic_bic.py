@@ -49,7 +49,6 @@ def gaussian_copula_aic_bic(uniformizer, params: dict, adata: AnnData,
     if copula_groups is not None:
         memberships = adata.obs[copula_groups]
     else:
-        covariance = {"shared_group": covariance}
         copula_groups = "shared_group"
         memberships = np.array(["shared_group"] * y.shape[0])
         
