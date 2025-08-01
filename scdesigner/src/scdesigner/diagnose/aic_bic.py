@@ -76,7 +76,7 @@ def gaussian_copula_aic_bic(uniformizer, params: dict, adata: AnnData,
 
 
 def compose_marginal_diagnose(likelihood, allowed_keys: set, param_order: list = None, transform: list = None):
-    def diagnose(params: dict, adata: AnnData, formula: str,
+    def diagnose(params: dict, adata: AnnData, formula: Union[str, dict],
                 chunk_size: int = int(1e4), batch_size=512):
         return marginal_aic_bic(likelihood, params, adata, formula, allowed_keys,
                                 param_order, transform, chunk_size, batch_size)
@@ -112,4 +112,9 @@ def likelihood_unwrapper(params: dict, param_order: list = None, transform: list
     return torch.cat(l, dim=0)
 
 def uniformizer_unwrapper(params):
-    return {key: params[key].values for key in params}
+    params = params = {key: params[key].values if key!='covariance' else params[key] for key in params}
+    if not isinstance(params['covariance'], dict):
+        params['covariance'] = {'shared_group': params['covariance']}
+    else:
+        params['covariance'] = {key: params['covariance'][key].values for key in params['covariance']}
+    return params
