@@ -48,6 +48,12 @@ def formula_group_loader(
 
     return dataloader
 
+def multiple_formula_group_loader(adata: AnnData, formulas: dict, grouping_variable=None,
+                                  chunk_size=int(1e4), batch_size: int = None):
+    dataloaders = {}
+    for key in formulas.keys():
+        dataloaders[key] = formula_group_loader(adata, formulas[key], grouping_variable, chunk_size, batch_size)
+    return dataloaders 
 
 class FormulaGroupViewDataset(td.Dataset):
     def __init__(

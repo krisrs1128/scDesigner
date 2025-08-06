@@ -5,7 +5,7 @@ import numpy as np
 
 
 def negbin_regression_sample_array(local_parameters: dict) -> np.array:
-    r, mu = local_parameters["dispersion"], local_parameters["mean"]
+    r, mu = local_parameters["dispersion"], local_parameters["mean"] # dataframes of shape (n, g)
     return nbinom(n=r, p=r / (r + mu)).rvs()
 
 
