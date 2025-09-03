@@ -1,10 +1,10 @@
-from anndata import AnnData
-from scipy.stats import norm, multivariate_normal
-from formulaic import model_matrix
-from typing import Union
 from .. import data
-from .. import estimators as est
+from anndata import AnnData
+from formulaic import model_matrix
+from scipy.stats import norm, multivariate_normal
+from typing import Union
 import numpy as np
+import pandas as pd
 import torch, scipy
 
 
@@ -45,7 +45,7 @@ def gaussian_copula_aic_bic(uniformizer, params: dict, adata: AnnData,
     if isinstance(y, scipy.sparse._csc.csc_matrix):
         y = y.todense()
     formula = data.standardize_formula(formula, allowed_keys)
-    X = {key: model_matrix(formula[key], adata.obs) for key in formula}
+    X = {key: model_matrix(formula[key], pd.DataFrame(adata.obs)) for key in formula}
     if copula_groups is not None:
         memberships = adata.obs[copula_groups]
     else:
