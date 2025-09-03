@@ -7,6 +7,6 @@ def poisson_predict(parameters: dict, obs: pd.DataFrame, formula: Union[str, dic
     if isinstance(formula, dict):
         formula = formula['beta']
     x = format_matrix(obs, formula)
-    mu = np.exp(x @ parameters["beta"])
+    mu = np.exp(x @ parameters["coef_beta"])
     return {"mean": mu}
 
