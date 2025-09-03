@@ -1,4 +1,4 @@
-from ..data import formula_group_loader, stack_collate, multiple_formula_group_loader
+from ..data import stack_collate, multiple_formula_group_loader
 from .. import data
 from anndata import AnnData
 from collections.abc import Callable

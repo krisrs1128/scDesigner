@@ -4,7 +4,6 @@ from .. import data
 from .. import format
 from anndata import AnnData
 from scipy.stats import poisson
-from typing import Union
 import numpy as np
 import pandas as pd
 import torch
