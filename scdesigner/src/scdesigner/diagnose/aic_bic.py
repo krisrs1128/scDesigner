@@ -113,7 +113,7 @@ def likelihood_unwrapper(params: dict, param_order: list = None, transform: list
 def uniformizer_unwrapper(params):
     params = params = {key: params[key].values if key!='covariance' else params[key] for key in params}
     if not isinstance(params['covariance'], dict):
-        params['covariance'] = {'shared_group': params['covariance']}
+        params['covariance'] = {'shared_group': params['covariance'].values}
     else:
         params['covariance'] = {key: params['covariance'][key].values for key in params['covariance']}
     return params
