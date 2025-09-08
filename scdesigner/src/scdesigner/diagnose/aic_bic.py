@@ -1,9 +1,8 @@
-from anndata import AnnData
-from scipy.stats import norm, multivariate_normal
-from formulaic import model_matrix
-from typing import Union
 from .. import data
-from .. import estimators as est
+from anndata import AnnData
+from formulaic import model_matrix
+from scipy.stats import norm, multivariate_normal
+from typing import Union
 import numpy as np
 import pandas as pd
 import torch, scipy

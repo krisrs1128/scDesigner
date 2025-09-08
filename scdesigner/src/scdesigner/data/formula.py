@@ -7,7 +7,7 @@ import pandas as pd
 import scipy.sparse
 import torch
 import torch.utils.data as td
-import itertools, warnings
+import warnings
 
 def formula_loader(
     adata: AnnData, formula=None, chunk_size=int(1e4), batch_size: int = None

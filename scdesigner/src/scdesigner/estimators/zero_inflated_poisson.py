@@ -2,7 +2,6 @@ from anndata import AnnData
 from .. import format
 from .. import data
 from . import glm_factory as factory
-from typing import Union
 import pandas as pd
 import torch
 

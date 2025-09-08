@@ -1,4 +1,3 @@
-import warnings
 from . import gaussian_copula_factory as gcf
 from . import glm_factory as factory
 from .. import format
