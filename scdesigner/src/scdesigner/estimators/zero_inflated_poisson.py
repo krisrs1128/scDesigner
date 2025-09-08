@@ -76,7 +76,7 @@ def format_zero_inflated_poisson_parameters(
 def zero_inflated_poisson_regression(
     adata: AnnData, formula: str, chunk_size: int = int(1e4), batch_size=512, **kwargs
 ) -> dict:
-    formula = data.standardize_formula(formula, allowed_keys={'beta', 'pi'})
+    formula = data.standardize_formula(formula, allowed_keys=['beta', 'pi'])
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )

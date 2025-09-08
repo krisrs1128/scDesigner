@@ -119,9 +119,10 @@ def standardize_formula(formula: Union[str, dict], allowed_keys = None):
     # The first element of allowed_keys should be the name of default parameter
     if allowed_keys is None:
         raise ValueError("Internal error: allowed_keys must be specified")
-    formula = {list(allowed_keys)[0]: formula} if isinstance(formula, str) else formula
-    
+    formula = {allowed_keys[0]: formula} if isinstance(formula, str) else formula
+
     formula_keys = set(formula.keys())
+    allowed_keys = set(allowed_keys)
 
     if not formula_keys & allowed_keys:
         raise ValueError(f"formula must have at least one of the following keys: {allowed_keys}")

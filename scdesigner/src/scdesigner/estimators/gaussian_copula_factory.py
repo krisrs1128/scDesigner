@@ -33,7 +33,7 @@ def gaussian_copula_array_factory(marginal_model: Callable, uniformizer: Callabl
 
 def gaussian_copula_factory(copula_array_fun: Callable, 
                             parameter_formatter: Callable, 
-                            param_name: set = None):
+                            param_name: list = None):
     def copula_fun(
         adata: AnnData,
         formula: Union[str, dict] = "~ 1",

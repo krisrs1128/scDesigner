@@ -155,7 +155,7 @@ def standardize_zero_inflated_negbin_formula(formula: Union[str, dict]) -> dict:
 def zero_inflated_negbin_regression(
     adata: AnnData, formula: Union[str, dict], chunk_size: int = int(1e4), batch_size=512, **kwargs
 ) -> dict:
-    formula = data.standardize_formula(formula, allowed_keys={'mean', 'dispersion', 'zero_inflation'})
+    formula = data.standardize_formula(formula, allowed_keys=['mean', 'dispersion', 'zero_inflation'])
     
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
@@ -192,5 +192,5 @@ zero_inflated_negbin_copula = gcf.gaussian_copula_factory(
         zero_inflated_negbin_regression_array, zero_inflated_negbin_uniformizer
     ),
     format_zero_inflated_negbin_parameters_with_loaders,
-    param_name={"mean", "dispersion", "zero_inflation"},
+    param_name=['mean', 'dispersion', 'zero_inflation'],
 )

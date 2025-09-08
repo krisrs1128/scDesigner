@@ -5,6 +5,7 @@ from typing import Union
 from .. import data
 from .. import estimators as est
 import numpy as np
+import pandas as pd
 import torch, scipy
 
 
@@ -45,7 +46,7 @@ def gaussian_copula_aic_bic(uniformizer, params: dict, adata: AnnData,
     if isinstance(y, scipy.sparse._csc.csc_matrix):
         y = y.todense()
     formula = data.standardize_formula(formula, allowed_keys)
-    X = {key: model_matrix(formula[key], adata.obs) for key in formula}
+    X = {key: model_matrix(formula[key], pd.DataFrame(adata.obs)) for key in formula}
     if copula_groups is not None:
         memberships = adata.obs[copula_groups]
     else:
@@ -113,7 +114,7 @@ def likelihood_unwrapper(params: dict, param_order: list = None, transform: list
 def uniformizer_unwrapper(params):
     params = params = {key: params[key].values if key!='covariance' else params[key] for key in params}
     if not isinstance(params['covariance'], dict):
-        params['covariance'] = {'shared_group': params['covariance']}
+        params['covariance'] = {'shared_group': params['covariance'].values}
     else:
         params['covariance'] = {key: params['covariance'][key].values for key in params['covariance']}
     return params

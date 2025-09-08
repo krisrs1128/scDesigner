@@ -96,7 +96,7 @@ def format_negbin_parameters_with_loaders(
 def negbin_regression(
     adata: AnnData, formula: Union[str, dict], chunk_size: int = int(1e4), batch_size=512, **kwargs
 ) -> dict:
-    formula = data.standardize_formula(formula, allowed_keys={'mean', 'dispersion'})
+    formula = data.standardize_formula(formula, allowed_keys=['mean', 'dispersion'])
     
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
@@ -127,5 +127,5 @@ negbin_copula_array = gcf.gaussian_copula_array_factory(
 
 negbin_copula = gcf.gaussian_copula_factory(
     negbin_copula_array, format_negbin_parameters_with_loaders, 
-    param_name={'mean', 'dispersion'}
+    param_name=['mean', 'dispersion']
 )

@@ -47,7 +47,7 @@ bernoulli_regression_array = factory.multiple_formula_regression_factory(
 def bernoulli_regression(
     adata: AnnData, formula: Union[str, dict], chunk_size: int = int(1e4), batch_size=512, **kwargs
 ) -> dict:
-    formula = data.standardize_formula(formula, allowed_keys={'mean'})
+    formula = data.standardize_formula(formula, allowed_keys=['mean'])
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
@@ -81,5 +81,5 @@ def format_bernoulli_parameters_with_loaders(parameters: dict, var_names: list, 
 bernoulli_copula = gcf.gaussian_copula_factory(
     gcf.gaussian_copula_array_factory(bernoulli_regression_array, bernoulli_uniformizer),
     format_bernoulli_parameters_with_loaders,
-    param_name={'mean'}
+    param_name=['mean']
 )

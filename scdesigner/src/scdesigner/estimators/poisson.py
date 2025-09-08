@@ -62,7 +62,7 @@ def poisson_regression(
     batch_size: int = 512,
     **kwargs
 ) -> dict:
-    formula = data.standardize_formula(formula, allowed_keys={'beta'})
+    formula = data.standardize_formula(formula, allowed_keys=['beta'])
     loaders = data.multiple_formula_loader(
         adata, formula, chunk_size=chunk_size, batch_size=batch_size
     )
@@ -99,5 +99,5 @@ poisson_copula_array = gcf.gaussian_copula_array_factory(
 ) 
 
 poisson_copula = gcf.gaussian_copula_factory(
-    poisson_copula_array, format_poisson_parameters_with_loaders, {"beta"}
+    poisson_copula_array, format_poisson_parameters_with_loaders, ['beta']
 )
