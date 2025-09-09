@@ -41,10 +41,10 @@ negbin_gcopula_diagnose = compose_gcopula_diagnose(est.negbin.negbin_regression_
                                                    est.negbin.negbin_uniformizer,
                                                    allowed_keys=['mean', 'dispersion'])
 poisson_regression_diagnose = compose_marginal_diagnose(est.poisson.poisson_regression_likelihood,
-                                                        allowed_keys=['beta'])
+                                                        allowed_keys=['mean'])
 poisson_gcopula_diagnose = compose_gcopula_diagnose(est.poisson.poisson_regression_likelihood,
                                                     est.poisson.poisson_uniformizer,
-                                                    allowed_keys=['beta'])
+                                                    allowed_keys=['mean'])
 bernoulli_regression_diagnose = compose_marginal_diagnose(est.bernoulli.bernoulli_regression_likelihood,
                                                           allowed_keys=['mean'])
 bernoulli_gcopula_diagnose = compose_gcopula_diagnose(est.bernoulli.bernoulli_regression_likelihood,
@@ -56,4 +56,4 @@ zinb_gcopula_diagnose = compose_gcopula_diagnose(est.zero_inflated_negbin.zero_i
                                                  est.zero_inflated_negbin.zero_inflated_negbin_uniformizer,
                                                  allowed_keys=['mean', 'dispersion', 'zero_inflation'])
 zip_regression_diagnose = compose_marginal_diagnose(est.zero_inflated_poisson.zero_inflated_poisson_regression_likelihood,
-                                                    allowed_keys=['beta', 'pi'])
+                                                    allowed_keys=['mean', 'zero_inflation'])

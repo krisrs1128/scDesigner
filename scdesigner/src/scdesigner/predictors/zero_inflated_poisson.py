@@ -8,8 +8,8 @@ def zero_inflated_poisson_predict(parameters: dict, obs: pd.DataFrame, formula: 
     if isinstance(formula, str):
         formula = {'beta': formula, 'pi': '~ 1'}
     mu, pi = (
-        np.exp(format_matrix(obs, formula['beta']) @ parameters["coef_beta"]),
-        sigmoid(format_matrix(obs, formula['pi']) @ parameters["coef_pi"]),
+        np.exp(format_matrix(obs, formula['mean']) @ parameters["coef_mean"]),
+        sigmoid(format_matrix(obs, formula['zero_inflation']) @ parameters["coef_zero_inflation"]),
     )
     return {"mean": mu, "zero_inflation": pi}
 
