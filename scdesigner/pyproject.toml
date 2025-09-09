@@ -12,6 +12,16 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "formulaic",
+    "numpy",
+    "pandas",
+    "rich",
+    "scanpy",
+    "scipy",
+    "torch",
+    "tqdm"
+]
 
 [project.urls]
 Homepage = "https://github.com/krisrs1128/scDesigner/"
