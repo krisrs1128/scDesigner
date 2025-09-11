@@ -128,3 +128,27 @@ negbin_copula = gcf.gaussian_copula_factory(
     negbin_copula_array, format_negbin_parameters_with_loaders, 
     param_name=['mean', 'dispersion']
 )
+
+###############################################################################
+## Fast copula versions for negative binomial regression
+###############################################################################
+
+def fast_negbin_copula_array_factory(top_k: int):
+    """
+    top_k: int
+        Number of top genes to model with full covariance
+    """
+    return gcf.fast_gaussian_copula_array_factory(
+        negbin_regression_array, negbin_uniformizer, top_k
+    )
+
+def fast_negbin_copula_factory(top_k: int):
+    """
+    top_k: int
+        Number of top genes to model with full covariance
+    """
+    fast_copula_array = fast_negbin_copula_array_factory(top_k)
+    return gcf.gaussian_copula_factory(
+        fast_copula_array, format_negbin_parameters_with_loaders, 
+        param_name=['mean', 'dispersion']
+    )

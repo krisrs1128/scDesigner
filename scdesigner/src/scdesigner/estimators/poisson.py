@@ -99,3 +99,27 @@ poisson_copula_array = gcf.gaussian_copula_array_factory(
 poisson_copula = gcf.gaussian_copula_factory(
     poisson_copula_array, format_poisson_parameters_with_loaders, ['mean']
 )
+
+###############################################################################
+## Fast copula versions for poisson regression
+###############################################################################
+
+def fast_poisson_copula_array_factory(top_k: int):
+    """
+    top_k: int
+        Number of top genes to model with full covariance
+    """
+    return gcf.fast_gaussian_copula_array_factory(
+        poisson_regression_array, poisson_uniformizer, top_k
+    )
+
+def fast_poisson_copula_factory(top_k: int):
+    """
+    top_k: int
+        Number of top genes to model with full covariance
+    """
+    fast_copula_array = fast_poisson_copula_array_factory(top_k)
+    return gcf.gaussian_copula_factory(
+        fast_copula_array, format_poisson_parameters_with_loaders, 
+        param_name=['mean']
+    )
