@@ -76,8 +76,7 @@ def poisson_regression(
 ###############################################################################
 
 
-def poisson_uniformizer(parameters, x, y, epsilon=1e-3, random_seed=42):
-    np.random.seed(random_seed)
+def poisson_uniformizer(parameters, x, y, epsilon=1e-3):
     mu = np.exp(x['mean'] @ parameters["coef_mean"])
     u1 = poisson(mu).cdf(y)
     u2 = np.where(y > 0, poisson(mu).cdf(y - 1), 0)

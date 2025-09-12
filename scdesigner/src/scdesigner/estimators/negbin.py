@@ -110,8 +110,7 @@ def negbin_regression(
 ###############################################################################
 
 
-def negbin_uniformizer(parameters, X_dict, y, epsilon=1e-3, random_seed=42):
-    np.random.seed(random_seed)
+def negbin_uniformizer(parameters, X_dict, y, epsilon=1e-3):
     r = np.exp(X_dict["dispersion"] @ parameters["coef_dispersion"])
     mu = np.exp(X_dict["mean"] @ parameters["coef_mean"])
     u1 = nbinom(n=r, p=r / (r + mu)).cdf(y)
