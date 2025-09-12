@@ -149,3 +149,11 @@ ZeroInflatedPoissonRegressionSimulator = glm_simulator_generator(
     prd.zero_inflated_poisson_predict,
     diagnose.zip_regression_diagnose,
 )
+
+GaussianRegressionSimulator = glm_simulator_generator(
+    "GaussianRegressionSimulator",
+    est.gaussian_regression,
+    smp.gaussian_regression_sample,
+    prd.gaussian_predict,
+    diagnose.gaussian_regression_diagnose
+)
