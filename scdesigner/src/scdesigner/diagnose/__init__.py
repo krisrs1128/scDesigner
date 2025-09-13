@@ -60,3 +60,6 @@ zip_regression_diagnose = compose_marginal_diagnose(est.zero_inflated_poisson.ze
                                                     allowed_keys=['mean', 'zero_inflation'])
 gaussian_regression_diagnose = compose_marginal_diagnose(est.gaussian.gaussian_regression_likelihood,
                                                          allowed_keys=['mean', 'sdev'])
+gaussian_gcopula_diagnose = compose_gcopula_diagnose(est.gaussian.gaussian_regression_likelihood, 
+                                                     est.gaussian.gaussian_uniformizer,
+                                                     allowed_keys=['mean', 'sdev'])

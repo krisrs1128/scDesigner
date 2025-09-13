@@ -157,3 +157,11 @@ GaussianRegressionSimulator = glm_simulator_generator(
     prd.gaussian_predict,
     diagnose.gaussian_regression_diagnose
 )
+
+GaussianCopulaSimulator = glm_simulator_generator(
+    "GaussianCopulaSimulator",
+    est.gaussian_copula,
+    smp.gaussian_copula_sample,
+    prd.gaussian_predict,
+    diagnose.gaussian_gcopula_diagnose
+)
