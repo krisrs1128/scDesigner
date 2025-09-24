@@ -1,4 +1,5 @@
-from typing import Dict, Callable
+from typing import Dict, Callable, Tuple
+import torch
 from anndata import AnnData
 from .loader import adata_loader
 
@@ -9,7 +10,7 @@ class Copula:
         self.n_outcomes = None
         self.parameters = None
 
-    def setup_data(self, adata: AnnData, marginal_formula: Dict[str, str], batch_size: int = 32, **kwargs):
+    def setup_data(self, adata: AnnData, marginal_formula: Dict[str, str], batch_size: int = 1024, **kwargs):
         self.adata = adata
         self.formula = self.formula | marginal_formula
         self.loader = adata_loader(adata, self.formula, batch_size=batch_size, **kwargs)
@@ -20,6 +21,9 @@ class Copula:
         raise NotImplementedError
 
     def pseudo_obs(self, x_dict: Dict):
+        raise NotImplementedError
+
+    def likelihood(self, uniformizer: Callable, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
         raise NotImplementedError
 
     def num_params(self, **kwargs):

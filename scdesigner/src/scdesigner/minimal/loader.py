@@ -1,3 +1,4 @@
+from .kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from anndata import AnnData
 from formulaic import model_matrix
 from torch.utils.data import Dataset, DataLoader
@@ -83,13 +84,14 @@ class AnnDataDataset(Dataset):
 def adata_loader(adata: AnnData,
                  formula: Dict[str, str],
                  chunk_size: int = None,
-                 batch_size: int = 32,
+                 batch_size: int = 1024,
                  shuffle: bool = False,
                  num_workers: int = 0,
                  **kwargs) -> DataLoader:
     """
     Create a DataLoader from AnnData that returns batches of (X, obs).
     """
+    data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
     if chunk_size is None:
         if getattr(adata, 'isbacked', False):
             chunk_size = 5000
@@ -103,7 +105,7 @@ def adata_loader(adata: AnnData,
         shuffle=shuffle,
         num_workers=num_workers,
         collate_fn=dict_collate_fn,
-        **kwargs
+        **data_kwargs
     )
 
 def obs_loader(obs: pd.DataFrame, marginal_formula, **kwargs):

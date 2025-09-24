@@ -18,12 +18,11 @@ class Marginal:
         self.predictor_names = None
         self.parameters = None
 
-    def setup_data(self, adata: AnnData, batch_size: int = 32, **kwargs):
+    def setup_data(self, adata: AnnData, batch_size: int = 1024, **kwargs):
         """Set up the dataloader for the AnnData object."""
         # keep a reference to the AnnData for later use (e.g., var_names)
         self.adata = adata
-        data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
-        self.loader = adata_loader(adata, self.formula, **data_kwargs)
+        self.loader = adata_loader(adata, self.formula, batch_size=batch_size, **kwargs)
         X_batch, obs_batch = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
