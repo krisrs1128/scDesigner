@@ -1,5 +1,6 @@
-from anndata import AnnData
+from .kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from .loader import adata_loader
+from anndata import AnnData
 from typing import Union, Dict, Optional, Tuple
 import pandas as pd
 import pytorch_lightning as pl
@@ -21,7 +22,8 @@ class Marginal:
         """Set up the dataloader for the AnnData object."""
         # keep a reference to the AnnData for later use (e.g., var_names)
         self.adata = adata
-        self.loader = adata_loader(adata, self.formula, batch_size=batch_size, **kwargs)
+        data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
+        self.loader = adata_loader(adata, self.formula, **data_kwargs)
         X_batch, obs_batch = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
@@ -30,12 +32,13 @@ class Marginal:
     def fit(self, **kwargs):
         """Fit the marginal predictor"""
         if self.predict is None:
-            self.setup_optimizer()
-        trainer = pl.Trainer(**kwargs)
+            self.setup_optimizer(**kwargs)
+        trainer_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['trainer'])
+        trainer = pl.Trainer(**trainer_kwargs)
         trainer.fit(self.predict, train_dataloaders=self.loader)
         self.parameters = self.format_parameters()
 
-    def setup_optimizer(self):
+    def setup_optimizer(self, **kwargs):
         raise NotImplementedError
 
     def likelihood(self, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
@@ -133,5 +136,6 @@ class GLMPredictor(pl.LightningModule):
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
-    def configure_optimizers(self):
-        return self.optimizer_class(self.parameters(), **self.optimizer_kwargs)
+    def configure_optimizers(self, **kwargs):
+        optimizer_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])
+        return self.optimizer_class(self.parameters(), **optimizer_kwargs)

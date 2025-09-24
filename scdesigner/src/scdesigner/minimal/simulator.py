@@ -4,7 +4,6 @@ from .loader import obs_loader
 from anndata import AnnData
 import torch
 
-
 class scdesigner:
     """Simulation wrapper"""
 
@@ -14,16 +13,19 @@ class scdesigner:
         self.template = None
         self.parameters = None
 
-    def fit(self, adata: AnnData, **kwargs):
+    def fit(
+        self,
+        adata: AnnData,
+        **kwargs):
         """Fit the simulator"""
         self.template = adata
+        self.marginal.setup_data(adata, **kwargs)
+        self.marginal.setup_optimizer(**kwargs)
+        self.marginal.fit(**kwargs)
 
-        self.marginal.setup_data(adata, batch_size=int(256))
-        self.marginal.setup_optimizer(lr=0.01)
-        self.marginal.fit(max_epochs=1)
-
-        self.copula.setup_data(adata, self.marginal.formula)
-        self.copula.fit(self.marginal.uniformize)
+        # copula simulator
+        self.copula.setup_data(adata, self.marginal.formula, **kwargs)
+        self.copula.fit(self.marginal.uniformize, **kwargs)
         self.parameters = {
             "marginal": self.marginal.parameters,
             "copula": self.copula.parameters
