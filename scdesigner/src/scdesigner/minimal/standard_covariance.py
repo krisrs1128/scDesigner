@@ -1,5 +1,5 @@
-from copula import Copula
-from formula import standardize_formula
+from .copula import Copula
+from .formula import standardize_formula
 from anndata import AnnData
 from typing import Dict, Union
 import torch

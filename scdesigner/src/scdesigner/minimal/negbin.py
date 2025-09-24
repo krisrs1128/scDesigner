@@ -1,11 +1,12 @@
-from formula import standardize_formula
-from marginal import GLMPredictor, Marginal
+from .formula import standardize_formula
+from .marginal import GLMPredictor, Marginal
+from .loader import _to_numpy
 from typing import Union, Dict, Optional
 import torch
 import numpy as np
 from scipy.stats import nbinom
 
-class NegBinModel(Marginal):
+class NegBin(Marginal):
     """Negative-binomial marginal estimator"""
     def __init__(self, formula: Union[Dict, str]):
         formula = standardize_formula(formula, allowed_keys=['mean', 'dispersion'])
@@ -63,16 +64,10 @@ class NegBinModel(Marginal):
         u = np.clip(v * u1 + (1.0 - v) * u2, epsilon, 1.0 - epsilon)
         return torch.from_numpy(u).float()
 
-    def _local_params(self, x, y):
+    def _local_params(self, x, y=None):
         params = self.predict(x)
         mu = params.get('mean')
         r = params.get('dispersion')
+        if y is None:
+            return _to_numpy(mu, r)
         return _to_numpy(mu, r, y)
-
-###############################################################################
-## Misc. Helper functions
-###############################################################################
-
-def _to_numpy(*tensors):
-    """Convenience helper: detach, move to CPU, and convert tensors to numpy arrays."""
-    return tuple(t.detach().cpu().numpy() for t in tensors)

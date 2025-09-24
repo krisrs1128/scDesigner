@@ -2,6 +2,7 @@ from anndata import AnnData
 from formulaic import model_matrix
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict
+import numpy as np
 import pandas as pd
 import torch
 
@@ -27,10 +28,10 @@ class AnnDataDataset(Dataset):
         # Internal cache for the currently loaded chunk
         self._chunk: AnnData | None = None
         self._chunk_start = 0
-    
+
     def __len__(self):
         return len(self.adata)
-    
+
     def __getitem__(self, idx):
         """Returns (X, obs) for the given index.
 
@@ -46,7 +47,7 @@ class AnnDataDataset(Dataset):
         X = adata_slice.X
         if hasattr(X, 'toarray'):
             X = X.toarray()
-        
+
         # Get obs data
         obs_dict = {}
         for key in self.formula.keys():
@@ -105,6 +106,14 @@ def adata_loader(adata: AnnData,
         **kwargs
     )
 
+def obs_loader(obs: pd.DataFrame, marginal_formula, **kwargs):
+        adata = AnnData(X=np.zeros((len(obs), 1)), obs=obs)
+        return adata_loader(
+            adata,
+            marginal_formula,
+            **kwargs
+        )
+
 ################################################################################
 ## Helper functions
 ################################################################################
@@ -115,7 +124,7 @@ def dict_collate_fn(batch):
     """
     X_batch = torch.stack([item[0] for item in batch])
     obs_batch = [item[1] for item in batch]
-    
+
     obs_dict = {}
     for key in obs_batch[0].keys():
         obs_dict[key] = torch.stack([obs[key] for obs in obs_batch])
@@ -145,3 +154,11 @@ def code_levels(obs, categories):
         if str(obs[k].dtype) == "category":
             obs[k] = obs[k].astype(pd.CategoricalDtype(categories[k]))
     return obs
+
+###############################################################################
+## Misc. Helper functions
+###############################################################################
+
+def _to_numpy(*tensors):
+    """Convenience helper: detach, move to CPU, and convert tensors to numpy arrays."""
+    return tuple(t.detach().cpu().numpy() for t in tensors)

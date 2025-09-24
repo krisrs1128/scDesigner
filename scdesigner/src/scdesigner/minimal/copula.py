@@ -1,6 +1,6 @@
 from typing import Dict, Callable
 from anndata import AnnData
-from loader import adata_loader
+from .loader import adata_loader
 
 class Copula:
     def __init__(self, formula: str, **kwargs):

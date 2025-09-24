@@ -1,5 +1,5 @@
 from anndata import AnnData
-from loader import adata_loader
+from .loader import adata_loader
 from typing import Union, Dict, Optional, Tuple
 import pandas as pd
 import pytorch_lightning as pl
@@ -16,7 +16,7 @@ class Marginal:
         self.predict = None
         self.predictor_names = None
         self.parameters = None
-        
+
     def setup_data(self, adata: AnnData, batch_size: int = 32, **kwargs):
         """Set up the dataloader for the AnnData object."""
         # keep a reference to the AnnData for later use (e.g., var_names)
@@ -26,7 +26,7 @@ class Marginal:
         self.n_outcomes = X_batch.shape[1]
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
         self.predictor_names = self.loader.dataset.predictor_names
-        
+
     def fit(self, **kwargs):
         """Fit the marginal predictor"""
         if self.predict is None:
@@ -34,19 +34,19 @@ class Marginal:
         trainer = pl.Trainer(**kwargs)
         trainer.fit(self.predict, train_dataloaders=self.loader)
         self.parameters = self.format_parameters()
-    
+
     def setup_optimizer(self):
         raise NotImplementedError
-    
+
     def likelihood(self, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
         """Compute the (negative) log-likelihood or loss for a batch.
         """
         raise NotImplementedError
-    
+
     def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor]):
         """Invert pseudoobservations."""
         raise NotImplementedError
-    
+
     def uniformize(self, y: torch.Tensor, x: Dict[str, torch.Tensor]):
         """Uniformize using learned CDF.
         """
@@ -76,7 +76,7 @@ class Marginal:
         if self.predict is None:
             return 0
         return sum(p.numel() for p in self.predict.parameters() if p.requires_grad)
-   
+
 
 class GLMPredictor(pl.LightningModule):
     """GLM-style predictor with arbitrary named parameters.
