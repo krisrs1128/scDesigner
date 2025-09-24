@@ -1,8 +1,10 @@
 from .copula import Copula
+from .loader import obs_loader, adata_loader
 from .marginal import Marginal
-from .loader import obs_loader
 from anndata import AnnData
+from tqdm import tqdm
 import torch
+import numpy as np
 
 class scdesigner:
     """Simulation wrapper"""
@@ -75,3 +77,18 @@ class scdesigner:
             samples.append(self.marginal.invert(u, x_dict))
         samples = torch.cat(samples).detach().cpu().numpy()
         return AnnData(X = samples, obs=obs)
+
+    def complexity(self, adata: AnnData = None, **kwargs):
+        if adata is None:
+            adata = self.template
+
+        N, ll = 0, 0
+        loader = adata_loader(adata, self.marginal.formula | self.copula.formula, **kwargs)
+        for batch in tqdm(loader, desc="Computing log-likelihood..."):
+            ll += self.copula.likelihood(self.marginal.uniformize, batch).sum()
+            N += len(batch[0])
+
+        return {
+            "aic": -2 * ll + 2 * self.copula.num_params(),
+            "bic": -2 * ll + np.log(N) * self.copula.num_params()
+        }
