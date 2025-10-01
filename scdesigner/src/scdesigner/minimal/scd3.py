@@ -6,7 +6,7 @@ from tqdm import tqdm
 import torch
 import numpy as np
 
-class scdesigner:
+class SCD3Simulator:
     """Simulation wrapper"""
 
     def __init__(self, marginal: Marginal, copula: Copula):
