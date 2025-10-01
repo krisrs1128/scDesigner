@@ -55,7 +55,7 @@ class StandardCovariance(Copula):
             covariances[g] = second_moments[g] / Ng[g] - np.outer(mean, mean)
 
         if len(self.groups) == 1:
-            covariances = covariances.values()[0]
+            covariances = list(covariances.values())[0]
         self.parameters = self.format_parameters(covariances)
 
     def format_parameters(self, covariances: Union[Dict, np.array]):
