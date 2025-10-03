@@ -173,8 +173,7 @@ def zero_inflated_negbin_regression(
 ###############################################################################
 
 
-def zero_inflated_negbin_uniformizer(parameters, X_dict, y, epsilon=1e-3, random_seed=42):
-    np.random.seed(random_seed)
+def zero_inflated_negbin_uniformizer(parameters, X_dict, y, epsilon=1e-3):
     r, mu, pi = (
         np.exp(X_dict["dispersion"] @ parameters["coef_dispersion"]),
         np.exp(X_dict["mean"] @ parameters["coef_mean"]),

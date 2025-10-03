@@ -11,23 +11,24 @@ from .aic_bic import compose_marginal_diagnose, compose_gcopula_diagnose
 from .. import estimators as est
 
 __all__ = [
-    "plot_umap",
-    "plot_pca",
-    "plot_hist",
+    "bernoulli_gcopula_diagnose",
+    "bernoulli_regression_diagnose",
     "compare_means",
-    "compare_variances",
+    "compare_pca",
     "compare_standard_deviation",
     "compare_umap",
-    "compare_pca",
-    "negbin_regression_diagnose",
+    "compare_variances",
+    "gaussian_regression_diagnose",
     "negbin_gcopula_diagnose",
-    "poisson_regression_diagnose",
+    "negbin_regression_diagnose",
+    "plot_hist",
+    "plot_pca",
+    "plot_umap",
     "poisson_gcopula_diagnose",
-    "bernoulli_regression_diagnose",
-    "bernoulli_gcopula_diagnose",
-    "zinb_regression_diagnose",
+    "poisson_regression_diagnose",
     "zinb_gcopula_diagnose",
-    "zip_regression_diagnose",
+    "zinb_regression_diagnose",
+    "zip_regression_diagnose"
 ]
 
 
@@ -57,3 +58,8 @@ zinb_gcopula_diagnose = compose_gcopula_diagnose(est.zero_inflated_negbin.zero_i
                                                  allowed_keys=['mean', 'dispersion', 'zero_inflation'])
 zip_regression_diagnose = compose_marginal_diagnose(est.zero_inflated_poisson.zero_inflated_poisson_regression_likelihood,
                                                     allowed_keys=['mean', 'zero_inflation'])
+gaussian_regression_diagnose = compose_marginal_diagnose(est.gaussian.gaussian_regression_likelihood,
+                                                         allowed_keys=['mean', 'sdev'])
+gaussian_gcopula_diagnose = compose_gcopula_diagnose(est.gaussian.gaussian_regression_likelihood, 
+                                                     est.gaussian.gaussian_uniformizer,
+                                                     allowed_keys=['mean', 'sdev'])
