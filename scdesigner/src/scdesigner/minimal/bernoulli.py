@@ -20,12 +20,12 @@ class ZeroInflatedNegBin(Marginal):
         if self.loader is None:
             raise RuntimeError("self.loader is not set (call setup_data first)")
 
-        link_funs = {"mean": torch.sigmoid}
+        link_fns = {"mean": torch.sigmoid}
         nll = lambda batch: -self.likelihood(batch).sum()
         self.predict = GLMPredictor(
             n_outcomes=self.n_outcomes,
             feature_dims=self.feature_dims,
-            link_fns=link_funs,
+            link_fns=link_fns,
             loss_fn=nll,
             optimizer_class=optimizer_class,
             optimizer_kwargs=optimizer_kwargs
