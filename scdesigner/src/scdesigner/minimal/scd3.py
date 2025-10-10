@@ -1,12 +1,13 @@
 from .copula import Copula
 from .loader import obs_loader, adata_loader
 from .marginal import Marginal
+from .simulator import Simulator
 from anndata import AnnData
 from tqdm import tqdm
 import torch
 import numpy as np
 
-class SCD3Simulator:
+class SCD3Simulator(Simulator):
     """Simulation wrapper"""
 
     def __init__(self, marginal: Marginal, copula: Copula):
