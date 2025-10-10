@@ -10,9 +10,9 @@ class Simulator:
         self.parameters = None
 
     @abstractmethod
-    def fit(self, **kwargs) -> None:
+    def fit(self, anndata: AnnData, **kwargs) -> None:
         """Fit the simulator"""
-        pass
+        self.template = anndata
 
     @abstractmethod
     def predict(self, obs: DataFrame=None, **kwargs) -> Dict:
