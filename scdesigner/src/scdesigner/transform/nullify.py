@@ -18,8 +18,7 @@ def nullify(params: dict, id: str, mask: Union[np.array, None] = None) -> dict:
     null_params = nullify(params, "beta", mask)
     """
     if mask is None:
-        mask = np.ones(params[id].shape)
-
+        mask = np.ones(params[id].shape, dtype=bool)
     result = deepcopy(params)
     result[id][mask] = 0
     return result
