@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 import torch
 from .copula import FastCovarianceStructure
+from typing import Optional
+import warnings
 
 
 class StandardCovariance(Copula):
@@ -35,86 +37,37 @@ class StandardCovariance(Copula):
             raise ValueError("Only categorical groups are currently supported in copula covariance estimation.")
 
     def fit(self, uniformizer: Callable, **kwargs):
-        
+        """
+        Fit the copula covariance model. 
+        If top_k is provided, compute the covariance matrix for the top-k most prevalent genes and self.parameters will be a dictionary of FastCovarianceStructure objects.
+        Otherwise, compute the covariance matrix for the full genes and self.parameters will be a dictionary of np.ndarray objects.
+
+        Args:
+            uniformizer (Callable): Function to convert to uniform distribution
+            **kwargs: Additional keyword arguments, may include top_k
+
+        Raises:
+            ValueError: If top_k is not an integer
+            ValueError: If top_k is not positive
+            ValueError: If top_k exceeds the number of outcomes
+
+        """
         top_k = kwargs.get("top_k", None)
         if top_k is not None:
-            if top_k > self.n_outcomes or top_k < 0 or not isinstance(top_k, int):
-                raise ValueError("top_k must be an integer between 0 and the number of outcomes")
-            # Calculate total gene expression
+            if not isinstance(top_k, int):
+                raise ValueError("top_k must be an integer")
+            if top_k <= 0:
+                raise ValueError("top_k must be positive")
+            if top_k > self.n_outcomes:
+                raise ValueError(f"top_k ({top_k}) cannot exceed number of outcomes ({self.n_outcomes})")
             gene_total_expression = self.adata.X.sum(axis=0)
             top_k_indices = np.argsort(gene_total_expression)[-top_k:]
             remaining_indices = np.argsort(gene_total_expression)[:-top_k]
-            
-            top_k_sums = {g: np.zeros(top_k) for g in self.groups}
-            top_k_second_moments = {g: np.eye(top_k) for g in self.groups}
-            
-            remaining_sums = {g: np.zeros(self.n_outcomes - top_k) for g in self.groups}
-            remaining_second_moments = {g: np.eye(self.n_outcomes - top_k) for g in self.groups}
-            Ng = {g: 0 for g in self.groups}
-
-            for y, x_dict in tqdm(self.loader, desc="Estimating copula covariance"):
-                memberships = x_dict.get("group").numpy()
-                u = uniformizer(y, x_dict)
-                
-                for g in self.groups:
-                    ix = np.where(memberships[:, self.group_col[g]] == 1)
-                    if len(ix[0]) == 0:
-                        continue
-                    z = norm().ppf(u[ix])
-                    top_k_z = z[:, top_k_indices]
-                    top_k_second_moments[g] += top_k_z.T @ top_k_z
-                    top_k_sums[g] += top_k_z.sum(axis=0)
-                    
-                    remaining_z = z[:, remaining_indices]
-                    remaining_second_moments[g] += (remaining_z ** 2).sum(axis=0)
-                    remaining_sums[g] += remaining_z.sum(axis=0)
-                    
-                    Ng[g] += len(ix[0])
-                    
-            covariances = {}
-            for g in self.groups:
-                if Ng[g] == 0:
-                    continue
-                mean_top_k = top_k_sums[g] / Ng[g]
-                cov_top_k = top_k_second_moments[g] / Ng[g] - np.outer(mean_top_k, mean_top_k)
-                mean_remaining = remaining_sums[g] / Ng[g]
-                var_remaining = remaining_second_moments[g] / Ng[g] - mean_remaining ** 2
-                covariances[g] = FastCovarianceStructure(
-                    top_k_cov=cov_top_k,
-                    remaining_var=var_remaining,
-                    top_k_indices=top_k_indices,
-                    remaining_indices=remaining_indices,
-                    gene_total_expression=gene_total_expression
-                )
-                    
-            if len(self.groups) == 1:
-                covariances = list(covariances.values())[0]
-            self.parameters = self.format_parameters(covariances)
+            self.parameters = self._compute_block_covariance(uniformizer, top_k_indices, 
+                                                             remaining_indices, top_k)
         else:
-            sums = {g: np.zeros(self.n_outcomes) for g in self.groups}
-            second_moments = {g: np.eye(self.n_outcomes) for g in self.groups}
-            Ng = {g: 0 for g in self.groups}
-
-            for y, x_dict in tqdm(self.loader, desc="Estimating copula covariance"):
-                memberships = x_dict.get("group").numpy()
-                u = uniformizer(y, x_dict)
-
-                for g in self.groups:
-                    ix = np.where(memberships[:, self.group_col[g]] == 1)
-                    z = norm().ppf(u[ix])
-                    second_moments[g] += z.T @ z
-                    sums[g] += z.sum(axis=0)
-                    Ng[g] += len(ix[0])
-
-            covariances = {}
-            for g in self.groups:
-                mean = sums[g] / Ng[g]
-                covariances[g] = second_moments[g] / Ng[g] - np.outer(mean, mean)
-
-            if len(self.groups) == 1:
-                covariances = list(covariances.values())[0]
-            self.parameters = self.format_parameters(covariances)
-
+            self.parameters = self._compute_full_covariance(uniformizer)
+            
     def format_parameters(self, covariances: Union[Dict, np.array]):
         var_names = self.adata.var_names
         def to_df(mat):
@@ -193,3 +146,148 @@ class StandardCovariance(Copula):
         return top_k
     
     
+
+    def _accumulate_top_k_stats(self, uniformizer:Callable, top_k_idx, rem_idx, top_k) \
+        -> Tuple[Dict[Union[str, int], np.ndarray], 
+                 Dict[Union[str, int], np.ndarray], 
+                 Dict[Union[str, int], np.ndarray], 
+                 Dict[Union[str, int], np.ndarray], 
+                 Dict[Union[str, int], int]]:
+        """Accumulate sufficient statistics for top-k covariance estimation.
+
+        Args:
+            uniformizer (Callable): Function to convert to uniform distribution
+            top_k_idx (np.ndarray): Indices of the top-k genes
+            rem_idx (np.ndarray): Indices of the remaining genes
+            top_k (int): Number of top-k genes
+
+        Returns:
+            top_k_sums (dict): Sums of the top-k genes for each group
+            top_k_second_moments (dict): Second moments of the top-k genes for each group
+            rem_sums (dict): Sums of the remaining genes for each group
+            rem_second_moments (dict): Second moments of the remaining genes for each group
+            Ng (dict): Number of observations for each group
+        """
+        top_k_sums = {g: np.zeros(top_k) for g in self.groups}
+        top_k_second_moments = {g: np.eye(top_k) for g in self.groups}
+        rem_sums = {g: np.zeros(self.n_outcomes - top_k) for g in self.groups}
+        rem_second_moments = {g: np.zeros(self.n_outcomes - top_k) for g in self.groups}
+        Ng = {g: 0 for g in self.groups}
+
+        for y, x_dict in tqdm(self.loader, desc="Estimating top-k copula covariance"):
+            memberships = x_dict.get("group").numpy()
+            u = uniformizer(y, x_dict)
+            z = norm.ppf(u)
+
+            for g in self.groups:
+                mask = memberships[:, self.group_col[g]] == 1
+                if not np.any(mask):
+                    continue
+
+                z_g = z[mask]
+                n_g = mask.sum()
+
+                top_k_z, rem_z = z_g[:, top_k_idx], z_g[:, rem_idx]
+                
+                top_k_sums[g] += top_k_z.sum(axis=0)
+                top_k_second_moments[g] += top_k_z.T @ top_k_z
+                
+                rem_sums[g] += rem_z.sum(axis=0)
+                rem_second_moments[g] += (rem_z ** 2).sum(axis=0)
+                
+                Ng[g] += n_g
+
+        return top_k_sums, top_k_second_moments, rem_sums, rem_second_moments, Ng
+    
+    def _accumulate_full_stats(self, uniformizer:Callable) \
+        -> Tuple[Dict[Union[str, int], np.ndarray], 
+                 Dict[Union[str, int], np.ndarray], 
+                 Dict[Union[str, int], int]]:
+        """Accumulate sufficient statistics for full covariance estimation.
+
+        Args:
+            uniformizer (Callable): Function to convert to uniform distribution
+
+        Returns:
+            sums (dict): Sums of the genes for each group
+            second_moments (dict): Second moments of the genes for each group
+            Ng (dict): Number of observations for each group
+        """
+        sums = {g: np.zeros(self.n_outcomes) for g in self.groups}
+        second_moments = {g: np.eye(self.n_outcomes) for g in self.groups}
+        Ng = {g: 0 for g in self.groups}
+
+        for y, x_dict in tqdm(self.loader, desc="Estimating copula covariance"):
+            memberships = x_dict.get("group").numpy()
+            u = uniformizer(y, x_dict)
+            z = norm.ppf(u)
+
+            for g in self.groups:
+                mask = memberships[:, self.group_col[g]] == 1
+                
+                if not np.any(mask):
+                    continue
+
+                z_g = z[mask]
+                n_g = mask.sum()
+
+                second_moments[g] += z_g.T @ z_g
+                sums[g] += z_g.sum(axis=0)
+                
+                Ng[g] += n_g
+
+        return sums, second_moments, Ng
+    
+    def _compute_block_covariance(self, uniformizer:Callable, 
+                                  top_k_idx: np.ndarray, rem_idx: np.ndarray, top_k: int) \
+        -> Dict[Union[str, int], FastCovarianceStructure]:
+        """Compute the covariance matrix for the top-k and remaining genes.
+
+        Args:
+            top_k_sums (dict): Sums of the top-k genes for each group
+            top_k_second_moments (dict): Second moments of the top-k genes for each group
+            remaining_sums (dict): Sums of the remaining genes for each group
+            remaining_second_moments (dict): Second moments of the remaining genes for each group
+            Ng (dict): Number of observations for each group
+
+        Returns:
+            covariance (dict): Covariance matrix for each group
+        """
+        top_k_sums, top_k_second_moments, remaining_sums, remaining_second_moments, Ng \
+            = self._accumulate_top_k_stats(uniformizer, top_k_idx, rem_idx, top_k)
+        covariance = {}
+        for g in self.groups:
+            if Ng[g] == 0:
+                warnings.warn(f"Group {g} has no observations, skipping")
+                continue
+            mean_top_k = top_k_sums[g] / Ng[g]
+            cov_top_k = top_k_second_moments[g] / Ng[g] - np.outer(mean_top_k, mean_top_k)
+            mean_remaining = remaining_sums[g] / Ng[g]
+            var_remaining = remaining_second_moments[g] / Ng[g] - mean_remaining ** 2
+            covariance[g] = FastCovarianceStructure(
+                top_k_cov=cov_top_k,
+                remaining_var=var_remaining,
+                top_k_indices=top_k_idx,
+                remaining_indices=rem_idx,
+            )
+        return covariance
+
+    def _compute_full_covariance(self, uniformizer:Callable) -> Dict[Union[str, int], np.ndarray]:
+        """Compute the covariance matrix for the full genes.
+
+        Args:
+            uniformizer (Callable): Function to convert to uniform distribution
+
+        Returns:
+            covariance (dict): Covariance matrix for each group
+        """
+        sums, second_moments, Ng = self._accumulate_full_stats(uniformizer)
+        covariance = {}
+        for g in self.groups:
+            if Ng[g] == 0:
+                warnings.warn(f"Group {g} has no observations, skipping")
+                continue
+            mean = sums[g] / Ng[g]
+            covariance[g] = second_moments[g] / Ng[g] - np.outer(mean, mean)
+        return covariance
+            

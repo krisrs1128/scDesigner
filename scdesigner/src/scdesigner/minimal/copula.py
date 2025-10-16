@@ -52,8 +52,6 @@ class FastCovarianceStructure:
         Indices of the top-k genes in the original gene ordering
     remaining_indices : np.ndarray
         Indices of the remaining genes in the original gene ordering
-    gene_total_expression : np.ndarray
-        Total expression levels used for gene selection, shape (total_genes,)
     """
     
     def __init__(self, top_k_cov, remaining_var, top_k_indices, remaining_indices, gene_total_expression):
@@ -61,14 +59,16 @@ class FastCovarianceStructure:
         self.remaining_var = remaining_var
         self.top_k_indices = top_k_indices
         self.remaining_indices = remaining_indices
-        self.gene_total_expression = gene_total_expression
         self.top_k = len(top_k_indices)
-        self.total_genes = len(top_k_indices) + len(remaining_indices)
+        self.total_genes = self.top_k + len(remaining_indices)
         
     def __repr__(self):
         return (f"FastCovarianceStructure(top_k={self.top_k}, "
                 f"remaining_genes={len(self.remaining_indices)}, "
                 f"total_genes={self.total_genes})")
+    @property
+    def shape(self):
+        return (self.total_genes, self.total_genes)
     
     def to_full_matrix(self):
         """
