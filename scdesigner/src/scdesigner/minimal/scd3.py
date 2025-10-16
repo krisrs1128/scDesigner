@@ -6,6 +6,7 @@ from anndata import AnnData
 from tqdm import tqdm
 import torch
 import numpy as np
+from abc import ABC, abstractmethod
 
 class SCD3Simulator(Simulator):
     """Simulation wrapper"""

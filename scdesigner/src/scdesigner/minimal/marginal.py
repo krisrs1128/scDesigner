@@ -6,9 +6,10 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+from abc import ABC, abstractmethod
 
 
-class Marginal:
+class Marginal(ABC):
     def __init__(self, formula: Union[Dict, str]):
         self.formula = formula
         self.feature_dims = None
@@ -36,24 +37,7 @@ class Marginal:
         trainer = pl.Trainer(**trainer_kwargs)
         trainer.fit(self.predict, train_dataloaders=self.loader)
         self.parameters = self.format_parameters()
-
-    def setup_optimizer(self, **kwargs):
-        raise NotImplementedError
-
-    def likelihood(self, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
-        """Compute the (negative) log-likelihood or loss for a batch.
-        """
-        raise NotImplementedError
-
-    def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor]):
-        """Invert pseudoobservations."""
-        raise NotImplementedError
-
-    def uniformize(self, y: torch.Tensor, x: Dict[str, torch.Tensor]):
-        """Uniformize using learned CDF.
-        """
-        raise NotImplementedError
-
+        
     def format_parameters(self):
         """Convert fitted coefficient tensors into pandas DataFrames.
 
@@ -72,12 +56,33 @@ class Marginal:
             row_names = list(self.predictor_names[param])
             dfs[param] = pd.DataFrame(coef_np, index=row_names, columns=var_names)
         return dfs
-
+    
     def num_params(self):
         """Return the number of parameters."""
         if self.predict is None:
             return 0
         return sum(p.numel() for p in self.predict.parameters() if p.requires_grad)
+
+    @abstractmethod
+    def setup_optimizer(self, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
+    def likelihood(self, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
+        """Compute the (negative) log-likelihood or loss for a batch.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor]):
+        """Invert pseudoobservations."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def uniformize(self, y: torch.Tensor, x: Dict[str, torch.Tensor]):
+        """Uniformize using learned CDF.
+        """
+        raise NotImplementedError
 
 
 class GLMPredictor(pl.LightningModule):
