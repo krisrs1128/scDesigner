@@ -4,6 +4,8 @@ from anndata import AnnData
 from .loader import adata_loader
 from abc import ABC, abstractmethod
 import numpy as np
+import pandas as pd
+from typing import Optional, Sequence
 class Copula(ABC):
     def __init__(self, formula: str, **kwargs):
         self.formula = formula
@@ -34,38 +36,67 @@ class Copula(ABC):
     def num_params(self, **kwargs):
         raise NotImplementedError
 
-    @abstractmethod
-    def format_parameters(self):
-        raise NotImplementedError
+    # @abstractmethod
+    # def format_parameters(self):
+    #     raise NotImplementedError
     
-class FastCovarianceStructure:
+class CovarianceStructure:
     """
     Data structure to efficiently store and access covariance information for fast copula sampling.
     
     Attributes:
     -----------
-    top_k_cov : np.ndarray
-        Full covariance matrix for top-k most prevalent genes, shape (top_k, top_k)
-    remaining_var : np.ndarray  
-        Diagonal variances for remaining genes, shape (remaining_genes,)
-    top_k_indices : np.ndarray
-        Indices of the top-k genes in the original gene ordering
+    cov : np.ndarray
+        Full covariance matrix for modeled genes, shape (n_modeled_genes, n_modeled_genes)
+    modeled_names : pd.Index
+        Names of the modeled genes
+    modeled_indices : np.ndarray
+        Indices of the modeled genes in the original gene ordering
+    remaining_var : np.ndarray
+        Diagonal variances for remaining genes, shape (n_remaining_genes,)
     remaining_indices : np.ndarray
-        Indices of the remaining genes in the original gene ordering
+        Indices of the remaining genes in the original gene ordering. If None, all remaining genes are assumed to be the last n_remaining_genes genes.
+    remaining_names : np.ndarray
+        Names of the remaining genes
     """
     
-    def __init__(self, top_k_cov, remaining_var, top_k_indices, remaining_indices, gene_total_expression):
-        self.top_k_cov = top_k_cov
-        self.remaining_var = remaining_var
-        self.top_k_indices = top_k_indices
+    def __init__(self, cov: np.ndarray, 
+                 modeled_names: pd.Index, 
+                 modeled_indices: Optional[np.ndarray] = None,
+                 remaining_var: Optional[np.ndarray] = None, 
+                 remaining_indices: Optional[np.ndarray] = None, 
+                 remaining_names: Optional[pd.Index] = None):
+        
+        self.cov = pd.DataFrame(cov, index=modeled_names, columns=modeled_names)
+        
+        if remaining_var is not None:
+            self.remaining_var = pd.Series(remaining_var, index=remaining_names)
+        else: 
+            self.remaining_var = None
+        
         self.remaining_indices = remaining_indices
-        self.top_k = len(top_k_indices)
-        self.total_genes = self.top_k + len(remaining_indices)
+        self.num_modeled_genes = len(modeled_names)
+        self.num_remaining_genes = len(remaining_indices) if remaining_indices is not None else 0
+        self.total_genes = self.num_modeled_genes + self.num_remaining_genes
         
     def __repr__(self):
-        return (f"FastCovarianceStructure(top_k={self.top_k}, "
-                f"remaining_genes={len(self.remaining_indices)}, "
-                f"total_genes={self.total_genes})")
+        if self.remaining_var is None:
+            return self.cov.__repr__()
+        else:
+            return f"CovarianceStructure(modeled_genes={self.num_modeled_genes}, \
+                total_genes={self.total_genes})"
+    
+        
+    def _repr_html_(self):
+        """Jupyter Notebook display"""
+        if self.remaining_var is None:
+            return self.cov._repr_html_()  # 直接显示漂亮的 DataFrame
+        else:
+            html = f"<b>CovarianceStructure:</b> {self.num_modeled_genes} modeled genes, {self.total_genes} total<br>"
+            html += "<h4>Modeled Covariance Matrix</h4>" + self.cov._repr_html_()
+            html += "<h4>Remaining Gene Variances</h4>" + self.remaining_var.to_frame("variance").T._repr_html_()
+            return html
+    
     @property
     def shape(self):
         return (self.total_genes, self.total_genes)
@@ -81,10 +112,10 @@ class FastCovarianceStructure:
         full_cov = np.zeros((self.total_genes, self.total_genes))
         
         # Fill in top-k block
-        ix_top = np.ix_(self.top_k_indices, self.top_k_indices)
-        full_cov[ix_top] = self.top_k_cov
+        ix_modeled = np.ix_(self.modeled_indices, self.modeled_indices)
+        full_cov[ix_modeled] = self.cov.values
         
         # Fill in diagonal for remaining genes
-        full_cov[self.remaining_indices, self.remaining_indices] = self.remaining_var
+        full_cov[self.remaining_indices, self.remaining_indices] = self.remaining_var.values
         
         return full_cov 

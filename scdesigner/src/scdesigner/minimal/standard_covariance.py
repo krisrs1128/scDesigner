@@ -8,7 +8,7 @@ from typing import Dict, Union, Callable, Tuple
 import numpy as np
 import pandas as pd
 import torch
-from .copula import FastCovarianceStructure
+from .copula import CovarianceStructure
 from typing import Optional
 import warnings
 
@@ -21,6 +21,14 @@ class StandardCovariance(Copula):
 
 
     def setup_data(self, adata: AnnData, marginal_formula: Dict[str, str], **kwargs):
+        """Set up the data for the standard covariance model.
+
+        Args:
+            adata (AnnData): The AnnData object containing the data.
+            marginal_formula (Dict[str, str]): The formula for the marginal model.
+        Raises:
+            ValueError: If the groupings are not binary.
+        """
         data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
         super().setup_data(adata, marginal_formula, **data_kwargs)
         _, obs_batch = next(iter(self.loader))
@@ -60,15 +68,19 @@ class StandardCovariance(Copula):
                 raise ValueError("top_k must be positive")
             if top_k > self.n_outcomes:
                 raise ValueError(f"top_k ({top_k}) cannot exceed number of outcomes ({self.n_outcomes})")
-            gene_total_expression = self.adata.X.sum(axis=0)
-            top_k_indices = np.argsort(gene_total_expression)[-top_k:]
-            remaining_indices = np.argsort(gene_total_expression)[:-top_k]
-            self.parameters = self._compute_block_covariance(uniformizer, top_k_indices, 
+            gene_total_expression = np.array(self.adata.X.sum(axis=0)).flatten()
+            sorted_indices = np.argsort(gene_total_expression)
+            top_k_indices = sorted_indices[-top_k:]
+            remaining_indices = sorted_indices[:-top_k]
+            covariances = self._compute_block_covariance(uniformizer, top_k_indices, 
                                                              remaining_indices, top_k)
         else:
-            self.parameters = self._compute_full_covariance(uniformizer)
+            covariances = self._compute_full_covariance(uniformizer)
             
-    def format_parameters(self, covariances: Union[Dict, np.array]):
+        self.parameters = covariances
+             
+    # Remove this function?         
+    def _format_parameters(self, covariances: Union[Dict, np.array]):
         var_names = self.adata.var_names
         def to_df(mat):
             return pd.DataFrame(mat, index=var_names, columns=var_names)
@@ -240,7 +252,7 @@ class StandardCovariance(Copula):
     
     def _compute_block_covariance(self, uniformizer:Callable, 
                                   top_k_idx: np.ndarray, rem_idx: np.ndarray, top_k: int) \
-        -> Dict[Union[str, int], FastCovarianceStructure]:
+        -> Dict[Union[str, int], CovarianceStructure]:
         """Compute the covariance matrix for the top-k and remaining genes.
 
         Args:
@@ -264,15 +276,19 @@ class StandardCovariance(Copula):
             cov_top_k = top_k_second_moments[g] / Ng[g] - np.outer(mean_top_k, mean_top_k)
             mean_remaining = remaining_sums[g] / Ng[g]
             var_remaining = remaining_second_moments[g] / Ng[g] - mean_remaining ** 2
-            covariance[g] = FastCovarianceStructure(
-                top_k_cov=cov_top_k,
+            top_k_names = self.adata.var_names[top_k_idx]
+            remaining_names = self.adata.var_names[rem_idx]
+            covariance[g] = CovarianceStructure(
+                cov=cov_top_k,
+                modeled_names=top_k_names,
+                modeled_indices=top_k_idx,
                 remaining_var=var_remaining,
-                top_k_indices=top_k_idx,
                 remaining_indices=rem_idx,
+                remaining_names=remaining_names
             )
         return covariance
-
-    def _compute_full_covariance(self, uniformizer:Callable) -> Dict[Union[str, int], np.ndarray]:
+    
+    def _compute_full_covariance(self, uniformizer:Callable) -> Dict[Union[str, int], CovarianceStructure]:
         """Compute the covariance matrix for the full genes.
 
         Args:
@@ -288,6 +304,14 @@ class StandardCovariance(Copula):
                 warnings.warn(f"Group {g} has no observations, skipping")
                 continue
             mean = sums[g] / Ng[g]
-            covariance[g] = second_moments[g] / Ng[g] - np.outer(mean, mean)
+            cov = second_moments[g] / Ng[g] - np.outer(mean, mean)
+            covariance[g] = CovarianceStructure(
+                cov=cov,
+                modeled_names=self.adata.var_names,
+                modeled_indices=np.arange(self.n_outcomes),
+                remaining_var=None,
+                remaining_indices=None,
+                remaining_names=None
+            )
         return covariance
             
