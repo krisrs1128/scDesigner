@@ -14,6 +14,7 @@ import warnings
 
 
 class StandardCovariance(Copula):
+
     def __init__(self, formula: str = "~ 1"):
         formula = standardize_formula(formula, allowed_keys=['group'])
         super().__init__(formula)
@@ -35,20 +36,23 @@ class StandardCovariance(Copula):
         obs_batch_group = obs_batch.get("group")
 
         # fill in group indexing variables
-        self.groups = self.loader.dataset.predictor_names["group"]
+        if "group" in self.loader.dataset.predictor_names:
+            self.groups = self.loader.dataset.predictor_names["group"]
+        else:
+            # If no group key exists, create a single group
+            self.groups = ["single_group"]
         self.n_groups = len(self.groups)
         self.group_col = {g: i for i, g in enumerate(self.groups)}
 
-        # check that obs_batch is a binary grouping matrix
-        unique_vals = torch.unique(obs_batch_group)
-        if (not torch.all((unique_vals == 0) | (unique_vals == 1)).item()):
-            raise ValueError("Only categorical groups are currently supported in copula covariance estimation.")
+        # check that obs_batch is a binary grouping matrix (only if group exists)
+        if obs_batch_group is not None:
+            unique_vals = torch.unique(obs_batch_group)
+            if (not torch.all((unique_vals == 0) | (unique_vals == 1)).item()):
+                raise ValueError("Only categorical groups are currently supported in copula covariance estimation.")
 
     def fit(self, uniformizer: Callable, **kwargs):
         """
-        Fit the copula covariance model. 
-        If top_k is provided, compute the covariance matrix for the top-k most prevalent genes and self.parameters will be a dictionary of FastCovarianceStructure objects.
-        Otherwise, compute the covariance matrix for the full genes and self.parameters will be a dictionary of np.ndarray objects.
+        Fit the copula covariance model. The parameters will be a dictionary of CovarianceStructure objects.
 
         Args:
             uniformizer (Callable): Function to convert to uniform distribution
@@ -99,24 +103,29 @@ class StandardCovariance(Copula):
     def pseudo_obs(self, x_dict: Dict):
         # convert one-hot encoding memberships to a map
         #      {"group1": [indices of group 1], "group2": [indices of group 2]}
-        memberships = x_dict.get("group").numpy()
-        group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] for g in self.groups}
+        group_data = x_dict.get("group")
+        if group_data is not None:
+            memberships = group_data.numpy()
+            group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] \
+                for g in self.groups}
+        else:
+            # If no group data, treat all observations as single group
+            n_obs = next(iter(x_dict.values())).shape[0] if x_dict else 1
+            memberships = np.ones((n_obs, 1))  # All observations belong to single group
+            group_ix = {"single_group": np.arange(n_obs)}
 
         # initialize the result
         u = np.zeros((len(memberships), self.n_outcomes))
         parameters = self.parameters
         if type(parameters) is not dict:
-            parameters = {group: parameters}
+            raise ValueError("Parameters must be a dictionary")
 
         # loop over groups and sample each part in turn
-        for group, sigma in parameters.items():
-            z = np.random.multivariate_normal(
-                mean=np.zeros(self.n_outcomes),
-                cov=sigma,
-                size=len(group_ix[group])
-            )
-            normal_distn = norm(0, np.diag(sigma) ** 0.5)
-            u[group_ix[group]] = normal_distn.cdf(z)
+        for group, cov_struct in parameters.items():
+            if cov_struct.remaining_var is not None:
+                u[group_ix[group]] = self._fast_normal_pseduo_obs(len(group_ix[group]), cov_struct)
+            else:
+                u[group_ix[group]] = self._normal_pseduo_obs(len(group_ix[group]), cov_struct)
         return u
 
     def likelihood(self, uniformizer: Callable, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
@@ -128,21 +137,31 @@ class StandardCovariance(Copula):
         # same group manipulation as for pseudobs
         parameters = self.parameters
         if type(parameters) is not dict:
-            parameters = {group: parameters}
+            parameters = {self.groups[0]: parameters}
 
-        memberships = x_dict.get("group").numpy()
-        group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] for g in self.groups}
+        group_data = x_dict.get("group")
+        if group_data is not None:
+            memberships = group_data.numpy()
+            group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] for g in self.groups}
+        else:
+            # If no group data, treat all observations as single group
+            n_obs = len(z)
+            group_ix = {"single_group": np.arange(n_obs)}
         ll = np.zeros(len(z))
-        for group, sigma in parameters.items():
+        
+        for group, cov_struct in parameters.items():
             ix = group_ix[group]
             if len(ix) > 0:
-                copula_ll = multivariate_normal.logpdf(z[ix], np.zeros(sigma.shape[0]), sigma)
+                copula_ll = multivariate_normal.logpdf(z[ix],
+                                                       np.zeros(cov_struct.total_genes), 
+                                                       cov_struct.to_full_matrix()) # Potential performance cost
                 ll[ix] = copula_ll - norm.logpdf(z[ix]).sum(axis=1)
         return ll
 
     def num_params(self, **kwargs):
+
         S = self.parameters
-        per_group = [(np.sum(S[g].values != 0) - S[g].shape[0]) / 2 for g in self.groups]
+        per_group = [(np.sum(S[g].cov.values != 0) - S[g].num_modeled_genes) / 2 for g in self.groups]
         return sum(per_group)
     
     
@@ -187,7 +206,13 @@ class StandardCovariance(Copula):
         Ng = {g: 0 for g in self.groups}
 
         for y, x_dict in tqdm(self.loader, desc="Estimating top-k copula covariance"):
-            memberships = x_dict.get("group").numpy()
+            group_data = x_dict.get("group")
+            if group_data is not None:
+                memberships = group_data.numpy()
+            else:
+                # If no group data, treat all observations as single group
+                n_obs = len(y)
+                memberships = np.ones((n_obs, 1))
             u = uniformizer(y, x_dict)
             z = norm.ppf(u)
 
@@ -230,7 +255,13 @@ class StandardCovariance(Copula):
         Ng = {g: 0 for g in self.groups}
 
         for y, x_dict in tqdm(self.loader, desc="Estimating copula covariance"):
-            memberships = x_dict.get("group").numpy()
+            group_data = x_dict.get("group")
+            if group_data is not None:
+                memberships = group_data.numpy()
+            else:
+                # If no group data, treat all observations as single group
+                n_obs = len(y)
+                memberships = np.ones((n_obs, 1))
             u = uniformizer(y, x_dict)
             z = norm.ppf(u)
 
@@ -315,3 +346,56 @@ class StandardCovariance(Copula):
             )
         return covariance
             
+    def _fast_normal_pseduo_obs(self, n_samples: int, cov_struct: CovarianceStructure) -> np.ndarray:
+        """Sample pseudo-observations from the covariance structure.
+
+        Args:
+            n_samples (int): Number of samples to generate
+            cov_struct (CovarianceStructure): The covariance structure
+
+        Returns:
+            np.ndarray: Pseudo-observations with shape (n_samples, total_genes)
+        """
+        u = np.zeros((n_samples, cov_struct.total_genes))
+        
+        z_modeled = np.random.multivariate_normal(
+            mean=np.zeros(cov_struct.num_modeled_genes), 
+            cov=cov_struct.cov.values, 
+            size=n_samples
+        )
+        
+        z_remaining = np.random.normal(
+            loc=0, 
+            scale=cov_struct.remaining_var.values ** 0.5, 
+            size=(n_samples, cov_struct.num_remaining_genes)
+        )
+        
+        normal_distn_modeled = norm(0, np.diag(cov_struct.cov.values) ** 0.5)
+        u[:, cov_struct.modeled_indices] = normal_distn_modeled.cdf(z_modeled)
+        
+        normal_distn_remaining = norm(0, cov_struct.remaining_var.values ** 0.5)
+        u[:, cov_struct.remaining_indices] = normal_distn_remaining.cdf(z_remaining)
+        
+        return u
+    
+    def _normal_pseduo_obs(self, n_samples: int, cov_struct: CovarianceStructure) -> np.ndarray:
+        """Sample pseudo-observations from the covariance structure.
+
+        Args:
+            n_samples (int): Number of samples to generate
+            cov_struct (CovarianceStructure): The covariance structure
+
+        Returns:
+            np.ndarray: Pseudo-observations with shape (n_samples, total_genes)
+        """
+        u = np.zeros((n_samples, cov_struct.total_genes))
+        z = np.random.multivariate_normal(
+            mean=np.zeros(cov_struct.total_genes), 
+            cov=cov_struct.cov.values, 
+            size=n_samples
+        )
+        
+        normal_distn = norm(0, np.diag(cov_struct.cov.values) ** 0.5)
+        u = normal_distn.cdf(z)
+        
+        return u

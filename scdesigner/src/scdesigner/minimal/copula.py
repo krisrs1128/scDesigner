@@ -5,13 +5,13 @@ from .loader import adata_loader
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
-from typing import Optional, Sequence
+from typing import Optional
 class Copula(ABC):
     def __init__(self, formula: str, **kwargs):
         self.formula = formula
         self.loader = None
         self.n_outcomes = None
-        self.parameters = None
+        self.parameters = None # Should be a dictionary of CovarianceStructure objects
 
     def setup_data(self, adata: AnnData, marginal_formula: Dict[str, str], batch_size: int = 1024, **kwargs):
         self.adata = adata
@@ -69,6 +69,11 @@ class CovarianceStructure:
         
         self.cov = pd.DataFrame(cov, index=modeled_names, columns=modeled_names)
         
+        if modeled_indices is not None:
+            self.modeled_indices = modeled_indices
+        else:
+            self.modeled_indices = np.arange(len(modeled_names))
+        
         if remaining_var is not None:
             self.remaining_var = pd.Series(remaining_var, index=remaining_names)
         else: 
@@ -109,13 +114,16 @@ class CovarianceStructure:
         --------
         np.ndarray : Full covariance matrix with shape (total_genes, total_genes)
         """
-        full_cov = np.zeros((self.total_genes, self.total_genes))
-        
-        # Fill in top-k block
-        ix_modeled = np.ix_(self.modeled_indices, self.modeled_indices)
-        full_cov[ix_modeled] = self.cov.values
-        
-        # Fill in diagonal for remaining genes
-        full_cov[self.remaining_indices, self.remaining_indices] = self.remaining_var.values
+        if self.remaining_var is None:
+            return self.cov.values
+        else:
+            full_cov = np.zeros((self.total_genes, self.total_genes))
+            
+            # Fill in top-k block
+            ix_modeled = np.ix_(self.modeled_indices, self.modeled_indices)
+            full_cov[ix_modeled] = self.cov.values
+            
+            # Fill in diagonal for remaining genes
+            full_cov[self.remaining_indices, self.remaining_indices] = self.remaining_var.values
         
         return full_cov 

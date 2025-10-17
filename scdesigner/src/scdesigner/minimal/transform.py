@@ -3,6 +3,7 @@ import numpy as np
 import re
 import torch
 import copy
+from .copula import CovarianceStructure
 
 
 def nullify(sim, row_pattern: str, col_pattern: str, param: str):
@@ -55,7 +56,7 @@ def correlate(sim, factor: float, row_pattern: str, col_pattern: str, group: Uni
         np.fill_diagonal(mask, False)
         df.values[mask] = df.values[mask] * factor
 
-    cov = sim.parameters["copula"]
+    cov = sim.parameters["copula"].cov
     _apply_to_groups(cov, group, _apply_to_df)
     return sim
 
@@ -77,9 +78,11 @@ def replace_param(sim, path: Sequence[str], new_param):
         key = path[1]
         cov = sim.parameters["copula"]
         if isinstance(cov, dict):
-            cov[key] = new_param
+            cov[key] = CovarianceStructure(new_param)
         else:
-            sim.parameters["copula"] = new_param
+            sim.parameters["copula"] = CovarianceStructure(new_param, 
+                                                           modeled_names=sim.adata.var_names, 
+                                                           modeled_indices=np.arange(sim.n_outcomes))
 
     return sim
 
