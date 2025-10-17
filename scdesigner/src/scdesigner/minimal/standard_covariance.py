@@ -123,9 +123,9 @@ class StandardCovariance(Copula):
         # loop over groups and sample each part in turn
         for group, cov_struct in parameters.items():
             if cov_struct.remaining_var is not None:
-                u[group_ix[group]] = self._fast_normal_pseduo_obs(len(group_ix[group]), cov_struct)
+                u[group_ix[group]] = self._fast_normal_pseudo_obs(len(group_ix[group]), cov_struct)
             else:
-                u[group_ix[group]] = self._normal_pseduo_obs(len(group_ix[group]), cov_struct)
+                u[group_ix[group]] = self._normal_pseudo_obs(len(group_ix[group]), cov_struct)
         return u
 
     def likelihood(self, uniformizer: Callable, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
@@ -152,16 +152,25 @@ class StandardCovariance(Copula):
         for group, cov_struct in parameters.items():
             ix = group_ix[group]
             if len(ix) > 0:
-                copula_ll = multivariate_normal.logpdf(z[ix],
-                                                       np.zeros(cov_struct.total_genes), 
-                                                       cov_struct.to_full_matrix()) # Potential performance cost
-                ll[ix] = copula_ll - norm.logpdf(z[ix]).sum(axis=1)
+                z_modeled = z[ix][:, cov_struct.modeled_indices]
+                
+                ll_modeled = multivariate_normal.logpdf(z_modeled,
+                                                       np.zeros(cov_struct.num_modeled_genes), 
+                                                       cov_struct.cov.values)
+                if cov_struct.num_remaining_genes > 0:
+                    z_remaining = z[ix][:, cov_struct.remaining_indices]
+                    ll_remaining = norm.logpdf(z_remaining,
+                                            loc=0, 
+                                            scale = np.sqrt(cov_struct.remaining_var.values))
+                else:
+                    ll_remaining = 0
+                ll[ix] = ll_modeled + ll_remaining
         return ll
 
     def num_params(self, **kwargs):
 
         S = self.parameters
-        per_group = [(np.sum(S[g].cov.values != 0) - S[g].num_modeled_genes) / 2 for g in self.groups]
+        per_group = [((S[g].num_modeled_genes * (S[g].num_modeled_genes - 1)) / 2) for g in self.groups]
         return sum(per_group)
     
     
@@ -346,7 +355,7 @@ class StandardCovariance(Copula):
             )
         return covariance
             
-    def _fast_normal_pseduo_obs(self, n_samples: int, cov_struct: CovarianceStructure) -> np.ndarray:
+    def _fast_normal_pseudo_obs(self, n_samples: int, cov_struct: CovarianceStructure) -> np.ndarray:
         """Sample pseudo-observations from the covariance structure.
 
         Args:
@@ -378,7 +387,7 @@ class StandardCovariance(Copula):
         
         return u
     
-    def _normal_pseduo_obs(self, n_samples: int, cov_struct: CovarianceStructure) -> np.ndarray:
+    def _normal_pseudo_obs(self, n_samples: int, cov_struct: CovarianceStructure) -> np.ndarray:    
         """Sample pseudo-observations from the covariance structure.
 
         Args:
