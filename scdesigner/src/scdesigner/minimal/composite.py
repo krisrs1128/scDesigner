@@ -1,6 +1,6 @@
 from .loader import obs_loader
 from .scd3 import SCD3Simulator
-from .standard_covariance import StandardCovariance
+from .standard_copula import StandardCopula
 from anndata import AnnData
 from typing import Dict, Optional, List
 import numpy as np
@@ -10,7 +10,7 @@ class CompositeCopula(SCD3Simulator):
     def __init__(self, marginals: List,
                  copula_formula: Optional[str] = None) -> None:
         self.marginals = marginals
-        self.copula = StandardCovariance(copula_formula)
+        self.copula = StandardCopula(copula_formula)
         self.template = None
         self.parameters = None
         self.merged_formula = None

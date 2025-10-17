@@ -91,11 +91,10 @@ class CovarianceStructure:
             return f"CovarianceStructure(modeled_genes={self.num_modeled_genes}, \
                 total_genes={self.total_genes})"
     
-        
     def _repr_html_(self):
         """Jupyter Notebook display"""
         if self.remaining_var is None:
-            return self.cov._repr_html_()  # 直接显示漂亮的 DataFrame
+            return self.cov._repr_html_()
         else:
             html = f"<b>CovarianceStructure:</b> {self.num_modeled_genes} modeled genes, {self.total_genes} total<br>"
             html += "<h4>Modeled Covariance Matrix</h4>" + self.cov._repr_html_()
@@ -109,7 +108,6 @@ class CovarianceStructure:
     def to_full_matrix(self):
         """
         Convert to full covariance matrix for compatibility/debugging.
-        
         Returns:
         --------
         np.ndarray : Full covariance matrix with shape (total_genes, total_genes)

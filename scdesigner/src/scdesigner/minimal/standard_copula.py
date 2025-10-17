@@ -12,17 +12,21 @@ from .copula import CovarianceStructure
 from typing import Optional
 import warnings
 
-
-class StandardCovariance(Copula):
-
+class StandardCopula(Copula):
+    """Standard Gaussian Copula Model"""
     def __init__(self, formula: str = "~ 1"):
+        """Initialize the StandardCopula model.
+
+        Args:
+            formula (str, optional): _description_. Defaults to "~ 1".
+        """
         formula = standardize_formula(formula, allowed_keys=['group'])
         super().__init__(formula)
         self.groups = None
 
 
     def setup_data(self, adata: AnnData, marginal_formula: Dict[str, str], **kwargs):
-        """Set up the data for the standard covariance model.
+        """Set up the data for the standard covariance model. After setting up the data, x_dict will always have a "group" key.
 
         Args:
             adata (AnnData): The AnnData object containing the data.
@@ -36,11 +40,7 @@ class StandardCovariance(Copula):
         obs_batch_group = obs_batch.get("group")
 
         # fill in group indexing variables
-        if "group" in self.loader.dataset.predictor_names:
-            self.groups = self.loader.dataset.predictor_names["group"]
-        else:
-            # If no group key exists, create a single group
-            self.groups = ["single_group"]
+        self.groups = self.loader.dataset.predictor_names["group"]
         self.n_groups = len(self.groups)
         self.group_col = {g: i for i, g in enumerate(self.groups)}
 
@@ -82,37 +82,14 @@ class StandardCovariance(Copula):
             covariances = self._compute_full_covariance(uniformizer)
             
         self.parameters = covariances
-             
-    # Remove this function?         
-    def _format_parameters(self, covariances: Union[Dict, np.array]):
-        var_names = self.adata.var_names
-        def to_df(mat):
-            return pd.DataFrame(mat, index=var_names, columns=var_names)
-
-        if isinstance(covariances, dict):
-            formatted = {}
-            for k, v in covariances.items():
-                formatted[k] = to_df(v)
-            covariances = formatted
-            return covariances
-
-        if isinstance(covariances, (np.ndarray, list, tuple)):
-            covariances = to_df(covariances)
-        return covariances
 
     def pseudo_obs(self, x_dict: Dict):
         # convert one-hot encoding memberships to a map
         #      {"group1": [indices of group 1], "group2": [indices of group 2]}
+        # The initialization method ensures that x_dict will always have a "group" key.
         group_data = x_dict.get("group")
-        if group_data is not None:
-            memberships = group_data.numpy()
-            group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] \
-                for g in self.groups}
-        else:
-            # If no group data, treat all observations as single group
-            n_obs = next(iter(x_dict.values())).shape[0] if x_dict else 1
-            memberships = np.ones((n_obs, 1))  # All observations belong to single group
-            group_ix = {"single_group": np.arange(n_obs)}
+        memberships = group_data.numpy()
+        group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] for g in self.groups}
 
         # initialize the result
         u = np.zeros((len(memberships), self.n_outcomes))
@@ -140,13 +117,9 @@ class StandardCovariance(Copula):
             parameters = {self.groups[0]: parameters}
 
         group_data = x_dict.get("group")
-        if group_data is not None:
-            memberships = group_data.numpy()
-            group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] for g in self.groups}
-        else:
-            # If no group data, treat all observations as single group
-            n_obs = len(z)
-            group_ix = {"single_group": np.arange(n_obs)}
+        memberships = group_data.numpy()
+        group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] for g in self.groups}
+
         ll = np.zeros(len(z))
         
         for group, cov_struct in parameters.items():
@@ -168,7 +141,6 @@ class StandardCovariance(Copula):
         return ll
 
     def num_params(self, **kwargs):
-
         S = self.parameters
         per_group = [((S[g].num_modeled_genes * (S[g].num_modeled_genes - 1)) / 2) for g in self.groups]
         return sum(per_group)
@@ -209,19 +181,14 @@ class StandardCovariance(Copula):
             Ng (dict): Number of observations for each group
         """
         top_k_sums = {g: np.zeros(top_k) for g in self.groups}
-        top_k_second_moments = {g: np.eye(top_k) for g in self.groups}
+        top_k_second_moments = {g: np.zeros((top_k, top_k)) for g in self.groups}
         rem_sums = {g: np.zeros(self.n_outcomes - top_k) for g in self.groups}
         rem_second_moments = {g: np.zeros(self.n_outcomes - top_k) for g in self.groups}
         Ng = {g: 0 for g in self.groups}
 
         for y, x_dict in tqdm(self.loader, desc="Estimating top-k copula covariance"):
             group_data = x_dict.get("group")
-            if group_data is not None:
-                memberships = group_data.numpy()
-            else:
-                # If no group data, treat all observations as single group
-                n_obs = len(y)
-                memberships = np.ones((n_obs, 1))
+            memberships = group_data.numpy()
             u = uniformizer(y, x_dict)
             z = norm.ppf(u)
 
@@ -260,17 +227,13 @@ class StandardCovariance(Copula):
             Ng (dict): Number of observations for each group
         """
         sums = {g: np.zeros(self.n_outcomes) for g in self.groups}
-        second_moments = {g: np.eye(self.n_outcomes) for g in self.groups}
+        second_moments = {g: np.zeros((self.n_outcomes, self.n_outcomes)) for g in self.groups}
         Ng = {g: 0 for g in self.groups}
 
         for y, x_dict in tqdm(self.loader, desc="Estimating copula covariance"):
             group_data = x_dict.get("group")
-            if group_data is not None:
-                memberships = group_data.numpy()
-            else:
-                # If no group data, treat all observations as single group
-                n_obs = len(y)
-                memberships = np.ones((n_obs, 1))
+            memberships = group_data.numpy()
+            
             u = uniformizer(y, x_dict)
             z = norm.ppf(u)
 
