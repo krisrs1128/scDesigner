@@ -1,0 +1,68 @@
+---
+title: "basilisk"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{basilisk}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(scDesigner)
+library(basilisk)
+library(zellkonverter)
+env <- BasiliskEnvironment("env1", pkgname="scDesigner", packages=c("scdesigner==0.0.3", "python=3.11.0", "cloudpickle==3.1.1"))
+```
+
+```{r}
+sce <- readH5AD("examples/data/example_sce.h5ad")
+
+cl <- basiliskStart(env)
+basiliskRun(cl, \(sce) {
+    # loading libraries
+    library(zellkonverter)
+    library(reticulate)
+    scdesigner <- import("scdesigner.minimal")
+    cloudpickle <- import("cloudpickle")
+    builtins <- import_builtins()
+
+    # train model
+    adata <- SCE2AnnData(sce)
+    sim <- scdesigner$NegBinCopula('~ bs(pseudotime, df=5)', '~ 1', '~ -1 + cell_type')
+    sim$fit(adata, max_epochs=1L)
+
+    # saving the output
+    f <- builtins$open("sim_cloud.pkl", "wb")
+    cloudpickle$dump(sim, f)
+    f$close()
+}, sce = sce)
+basiliskStop(cl)
+```
+
+```{r}
+cl <- basiliskStart(env)
+parameters <- basiliskRun(cl, \() {
+    library(reticulate)
+    cloudpickle <- import("cloudpickle")
+    builtins <- import_builtins()
+
+    # Load previously trained model
+    f <- builtins$open("sim_cloud.pkl", "rb")
+    sim <- cloudpickle$load(f)
+    sim$parameters
+})
+
+heatmap(as.matrix(log1p(parameters$marginal$mean)))
+hist(unlist(parameters$marginal$dispersion), breaks = 20)
+```
+
+The basilisk environment gets saved here:
+
+/Users/krissankaran/Library/Caches/org.R-project.R/R/basilisk/1.21.5/scDesigner/0.0.0.9000/env4
