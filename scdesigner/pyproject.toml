@@ -1,6 +1,6 @@
 [project]
 name = "scdesigner"
-version = "0.0.1"
+version = "0.0.3"
 authors = [
   { name="Kris Sankaran", email="ksankaran@wisc.edu" },
 ]
@@ -13,7 +13,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "anndata",
     "formulaic",
+    "lightning",
     "numpy",
     "pandas",
     "rich",
@@ -28,7 +30,7 @@ Homepage = "https://github.com/krisrs1128/scDesigner/"
 Issues = "https://github.com/krisrs1128/scDesigner/Issues/"
 
 [build-system]
-requires = ["formulaic", "pandas", "numpy", "pamona", "scipy", "POT", "hatchling", "torch", "rich"]
+requires = ["anndata", "formulaic", "pandas", "numpy", "lightning", "scipy", "hatchling", "torch", "rich"]
 build-backend = "hatchling.build"
 
 [tool.hatch.metadata]
