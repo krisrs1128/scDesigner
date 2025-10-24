@@ -101,6 +101,31 @@ class CovarianceStructure:
             html += "<h4>Remaining Gene Variances</h4>" + self.remaining_var.to_frame("variance").T._repr_html_()
             return html
     
+    def decorrelate(self, row_pattern: str, col_pattern: str):
+        """Decorrelate the covariance matrix for the given row and column patterns.
+        """
+        from .transform import data_frame_mask
+        m1 = data_frame_mask(self.cov, ".", col_pattern)
+        m2 = data_frame_mask(self.cov, row_pattern, ".")
+        mask = (m1 | m2)
+        np.fill_diagonal(mask, False)
+        self.cov.values[mask] = 0
+        
+    def correlate(self, row_pattern: str, col_pattern: str, factor: float):
+        """Multiply selected off-diagonal entries by factor.
+
+        Args:
+            row_pattern (str): The regex pattern for the row names to match.
+            col_pattern (str): The regex pattern for the column names to match.
+            factor (float): The factor to multiply the off-diagonal entries by.
+        """
+        from .transform import data_frame_mask
+        m1 = data_frame_mask(self.cov, ".", col_pattern)
+        m2 = data_frame_mask(self.cov, row_pattern, ".")
+        mask = (m1 | m2)
+        np.fill_diagonal(mask, False)
+        self.cov.values[mask] = self.cov.values[mask] * factor
+    
     @property
     def shape(self):
         return (self.total_genes, self.total_genes)

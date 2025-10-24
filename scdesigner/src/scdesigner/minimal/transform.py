@@ -32,7 +32,8 @@ def amplify(sim, factor: float, row_pattern: str, col_pattern: str, param: str):
 
 
 def decorrelate(sim, row_pattern: str, col_pattern: str, group: Union[str, None] = None):
-    """Zero out selected off-diagonal entries of a covariance."""
+    """Zero out selected off-diagonal entries of a covariance.
+    """
     sim = copy.deepcopy(sim)
     def _apply_to_df(df):
         m1 = data_frame_mask(df, ".", col_pattern)
@@ -67,6 +68,13 @@ def replace_param(sim, path: Sequence[str], new_param):
     Use the path to the parameter starting from sim.parameters to identify the
     parameter to transform.  Examples: ['marginal','mean'] or
     ['copula','group_name']
+    
+    Args:
+        sim (Simulator): The simulator object.
+        path (Sequence[str]): The path to the parameter to transform.
+        new_param (np.ndarray): The new parameter to substitute. 
+        For replacing a covariance structure, new_param could be a numpy array of shape (n_genes, n_genes)
+        or a CovarianceStructure object defined by the user.
     """
     sim = copy.deepcopy(sim)
     if path[0] == "marginal":
@@ -75,15 +83,17 @@ def replace_param(sim, path: Sequence[str], new_param):
         _update_marginal_param(sim, param, mat)
 
     if path[0] == "copula":
-        key = path[1]
-        cov = sim.parameters["copula"]
-        if isinstance(cov, dict):
-            cov[key] = CovarianceStructure(new_param)
+        if isinstance(new_param, np.ndarray):
+            sim.parameters["copula"][path[1]] = CovarianceStructure(new_param,
+                                                                    modeled_names=sim.adata.var_names)
+        elif isinstance(new_param, pd.DataFrame):
+            sim.parameters["copula"][path[1]] = CovarianceStructure(new_param.values,
+                                                                    modeled_names=new_param.index,
+                                                                    modeled_indices=np.arange(len(new_param.index)))
+        elif isinstance(new_param, CovarianceStructure):
+            sim.parameters["copula"][path[1]] = new_param
         else:
-            sim.parameters["copula"] = CovarianceStructure(new_param, 
-                                                           modeled_names=sim.adata.var_names, 
-                                                           modeled_indices=np.arange(sim.n_outcomes))
-
+            raise ValueError(f"new_param must be a numpy array or a CovarianceStructure object, got {type(new_param)}")
     return sim
 
 

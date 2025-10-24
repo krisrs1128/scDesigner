@@ -145,7 +145,41 @@ class StandardCopula(Copula):
         per_group = [((S[g].num_modeled_genes * (S[g].num_modeled_genes - 1)) / 2) for g in self.groups]
         return sum(per_group)
     
-    
+    def decorrelate(self, row_pattern: str, col_pattern: str, group: Union[str, list, None] = None):
+        """Decorrelate the covariance matrix for the given row and column patterns.
+        
+        Args:
+            row_pattern (str): The regex pattern for the row names to match.
+            col_pattern (str): The regex pattern for the column names to match.
+            group (Union[str, list, None]): The group or groups to apply the transformation to. If None, the transformation is applied to all groups.
+        """
+        if group is None:
+            for g in self.groups:
+                self.parameters[g].decorrelate(row_pattern, col_pattern)
+        elif isinstance(group, str):
+            self.parameters[group].decorrelate(row_pattern, col_pattern)
+        else:
+            for g in group:
+                self.parameters[g].decorrelate(row_pattern, col_pattern)
+                
+    def correlate(self, factor: float, row_pattern: str, col_pattern: str, group: Union[str, list, None] = None):
+        """Multiply selected off-diagonal entries by factor.
+        
+        Args:
+            row_pattern (str): The regex pattern for the row names to match.
+            col_pattern (str): The regex pattern for the column names to match.
+            factor (float): The factor to multiply the off-diagonal entries by.
+            group (Union[str, list, None]): The group or groups to apply the transformation to. If None, the transformation is applied to all groups.
+        """
+        if group is None:
+            for g in self.groups:
+                self.parameters[g].correlate(row_pattern, col_pattern, factor)
+        elif isinstance(group, str):
+            self.parameters[group].correlate(row_pattern, col_pattern, factor)
+        else:
+            for g in group:
+                self.parameters[g].correlate(row_pattern, col_pattern, factor)
+            
     def _validate_parameters(self, **kwargs):
         top_k = kwargs.get("top_k", None)
         if top_k is not None:
