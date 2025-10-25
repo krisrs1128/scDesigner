@@ -1,5 +1,6 @@
 from typing import Union, Sequence
 import numpy as np
+import pandas as pd
 import re
 import torch
 import copy
@@ -34,32 +35,16 @@ def amplify(sim, factor: float, row_pattern: str, col_pattern: str, param: str):
 def decorrelate(sim, row_pattern: str, col_pattern: str, group: Union[str, None] = None):
     """Zero out selected off-diagonal entries of a covariance.
     """
-    sim = copy.deepcopy(sim)
-    def _apply_to_df(df):
-        m1 = data_frame_mask(df, ".", col_pattern)
-        m2 = data_frame_mask(df, row_pattern, ".")
-        mask = (m1 | m2)
-        np.fill_diagonal(mask, False)
-        df.values[mask] = 0
-
-    cov = sim.parameters["copula"]
-    _apply_to_groups(cov, group, _apply_to_df)
-    return sim
+    decorr_sim = copy.deepcopy(sim)
+    decorr_sim.copula.decorrelate(row_pattern, col_pattern, group)
+    return decorr_sim
 
 
 def correlate(sim, factor: float, row_pattern: str, col_pattern: str, group: Union[str, None] = None):
     """Multiply selected off-diagonal entries by factor."""
-    sim = copy.deepcopy(sim)
-    def _apply_to_df(df):
-        m1 = data_frame_mask(df, ".", col_pattern)
-        m2 = data_frame_mask(df, row_pattern, ".")
-        mask = (m1 | m2)
-        np.fill_diagonal(mask, False)
-        df.values[mask] = df.values[mask] * factor
-
-    cov = sim.parameters["copula"].cov
-    _apply_to_groups(cov, group, _apply_to_df)
-    return sim
+    corr_sim = copy.deepcopy(sim)
+    corr_sim.copula.correlate(factor, row_pattern, col_pattern, group)
+    return corr_sim
 
 
 def replace_param(sim, path: Sequence[str], new_param):
@@ -88,8 +73,7 @@ def replace_param(sim, path: Sequence[str], new_param):
                                                                     modeled_names=sim.adata.var_names)
         elif isinstance(new_param, pd.DataFrame):
             sim.parameters["copula"][path[1]] = CovarianceStructure(new_param.values,
-                                                                    modeled_names=new_param.index,
-                                                                    modeled_indices=np.arange(len(new_param.index)))
+                                                                    modeled_names=new_param.index)
         elif isinstance(new_param, CovarianceStructure):
             sim.parameters["copula"][path[1]] = new_param
         else:
