@@ -77,22 +77,31 @@ class Copula(ABC):
     
 class CovarianceStructure:
     """
-    Data structure to efficiently store and access covariance information for fast copula sampling.
+    Efficient storage for covariance matrices in copula-based gene expression modeling.
     
-    Attributes:
-    -----------
-    cov : np.ndarray
-        Full covariance matrix for modeled genes, shape (n_modeled_genes, n_modeled_genes)
-    modeled_names : pd.Index
-        Names of the modeled genes
+    This class provides memory-efficient storage for covariance information by storing
+    either a full covariance matrix or a block matrix with diagonal variances for
+    remaining genes. This enables fast copula estimation and sampling for large
+    gene expression datasets.
+    
+
+    
+    Attributes
+    ----------
+    cov : pd.DataFrame
+        Covariance matrix for modeled genes with gene names as index/columns
     modeled_indices : np.ndarray
-        Indices of the modeled genes in the original gene ordering
-    remaining_var : np.ndarray
-        Diagonal variances for remaining genes, shape (n_remaining_genes,)
-    remaining_indices : np.ndarray
-        Indices of the remaining genes in the original gene ordering. If None, all remaining genes are assumed to be the last n_remaining_genes genes.
-    remaining_names : np.ndarray
-        Names of the remaining genes
+        Indices of modeled genes in original ordering
+    remaining_var : pd.Series or None
+        Diagonal variances for remaining genes, None if full matrix stored
+    remaining_indices : np.ndarray or None
+        Indices of remaining genes in original ordering
+    num_modeled_genes : int
+        Number of modeled genes
+    num_remaining_genes : int
+        Number of remaining genes (0 if full matrix stored)
+    total_genes : int
+        Total number of genes
     """
     
     def __init__(self, cov: np.ndarray, 
@@ -101,7 +110,16 @@ class CovarianceStructure:
                  remaining_var: Optional[np.ndarray] = None, 
                  remaining_indices: Optional[np.ndarray] = None, 
                  remaining_names: Optional[pd.Index] = None):
-        
+        """initialize a CovarianceStructure object.
+
+        Args:
+            cov (np.ndarray): Covariance matrix for modeled genes, shape (n_modeled_genes, n_modeled_genes)
+            modeled_names (pd.Index): Gene names for the modeled genes
+            modeled_indices (Optional[np.ndarray], optional): Indices of modeled genes in original ordering. Defaults to sequential indices.
+            remaining_var (Optional[np.ndarray], optional): Diagonal variances for remaining genes, shape (n_remaining_genes,)
+            remaining_indices (Optional[np.ndarray], optional): Indices of remaining genes in original ordering
+            remaining_names (Optional[pd.Index], optional): Gene names for remaining genes
+        """
         self.cov = pd.DataFrame(cov, index=modeled_names, columns=modeled_names)
         
         if modeled_indices is not None:

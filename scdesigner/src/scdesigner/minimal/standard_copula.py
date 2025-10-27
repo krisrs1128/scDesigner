@@ -6,10 +6,8 @@ from scipy.stats import norm, multivariate_normal
 from tqdm import tqdm
 from typing import Dict, Union, Callable, Tuple
 import numpy as np
-import pandas as pd
 import torch
 from .copula import CovarianceStructure
-from typing import Optional
 import warnings
 
 class StandardCopula(Copula):
@@ -52,17 +50,19 @@ class StandardCopula(Copula):
 
     def fit(self, uniformizer: Callable, **kwargs):
         """
-        Fit the copula covariance model. The parameters will be a dictionary of CovarianceStructure objects.
-
+        Fit the copula covariance model.
+        
         Args:
-            uniformizer (Callable): Function to convert to uniform distribution
-            **kwargs: Additional keyword arguments, may include top_k
-
+            uniformizer (Callable): Function to convert data to uniform distribution
+            **kwargs: Additional arguments
+                top_k (int, optional): Use only top-k most expressed genes for covariance estimation.
+                                    If None, estimates full covariance for all genes.
+        
+        Returns:
+            None: Stores fitted parameters in self.parameters as dict of CovarianceStructure objects.
+        
         Raises:
-            ValueError: If top_k is not an integer
-            ValueError: If top_k is not positive
-            ValueError: If top_k exceeds the number of outcomes
-
+            ValueError: If top_k is not a positive integer or exceeds n_outcomes
         """
         top_k = kwargs.get("top_k", None)
         if top_k is not None:
@@ -94,8 +94,6 @@ class StandardCopula(Copula):
         # initialize the result
         u = np.zeros((len(memberships), self.n_outcomes))
         parameters = self.parameters
-        if type(parameters) is not dict:
-            raise ValueError("Parameters must be a dictionary")
 
         # loop over groups and sample each part in turn
         for group, cov_struct in parameters.items():
@@ -106,6 +104,19 @@ class StandardCopula(Copula):
         return u
 
     def likelihood(self, uniformizer: Callable, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
+        """
+        Compute likelihood of data given the copula model.
+        
+        Args:
+            uniformizer (Callable): Function to convert expression data to uniform distribution
+            batch (Tuple[torch.Tensor, Dict[str, torch.Tensor]]): Data batch containing:
+                - Y (torch.Tensor): Expression data of shape (n_cells, n_genes)
+                - X_dict (Dict[str, torch.Tensor]): Covariates dict with keys as parameter names
+                                                and values as tensors of shape (n_cells, n_covariates)
+        
+        Returns:
+            np.ndarray: Log-likelihood for each cell, shape (n_cells,)
+        """
         # uniformize the observations
         y, x_dict = batch
         u = uniformizer(y, x_dict)

@@ -47,7 +47,7 @@ def correlate(sim, factor: float, row_pattern: str, col_pattern: str, group: Uni
     return corr_sim
 
 
-def replace_param(sim, path: Sequence[str], new_param):
+def replace_param(sim, path: Sequence[str], new_param: Union[np.ndarray, pd.DataFrame, CovarianceStructure]):
     """Substitute a new parameter for an old one.
 
     Use the path to the parameter starting from sim.parameters to identify the
