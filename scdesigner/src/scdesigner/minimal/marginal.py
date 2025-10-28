@@ -37,7 +37,7 @@ class Marginal(ABC):
         trainer = pl.Trainer(**trainer_kwargs)
         trainer.fit(self.predict, train_dataloaders=self.loader)
         self.parameters = self.format_parameters()
-        
+
     def format_parameters(self):
         """Convert fitted coefficient tensors into pandas DataFrames.
 
@@ -56,7 +56,7 @@ class Marginal(ABC):
             row_names = list(self.predictor_names[param])
             dfs[param] = pd.DataFrame(coef_np, index=row_names, columns=var_names)
         return dfs
-    
+
     def num_params(self):
         """Return the number of parameters."""
         if self.predict is None:
@@ -140,6 +140,6 @@ class GLMPredictor(pl.LightningModule):
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
-    def configure_optimizers(self, **kwargs):
-        optimizer_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])
+    def configure_optimizers(self):
+        optimizer_kwargs = _filter_kwargs(self.optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])
         return self.optimizer_class(self.parameters(), **optimizer_kwargs)
