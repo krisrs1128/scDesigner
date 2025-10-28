@@ -1,0 +1,60 @@
+---
+title: "Pancreas Development"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Pancreas Development}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(scDesigner)
+library(SummarizedExperiment)
+library(tidyverse)
+library(zellkonverter)
+theme_set(theme_classic())
+```
+
+```{r}
+sce <- readH5AD("examples/data/example_sce.h5ad")
+sim <- NegBinCopula$new(mean_formula="~ bs(pseudotime, df=5, degree=3)", dispersion_formula="~ 1", copula_formula="~ -1 + cell_type")
+sim$fit(sce, max_epochs=50, lr=1)
+```
+
+We can extract and visualize the parameters.
+
+```{r}
+sim$parameters()$marginal$mean |>
+    as.matrix() |>
+    heatmap()
+
+sim$parameters()$copula[[1]] |>
+    as.matrix() |>
+    heatmap()
+```
+
+Here are some samples.
+
+```{r}
+result <- sim$sample()
+rownames(result) <- rownames(sce)
+
+plot_df <- bind_rows(
+    as_tibble(as.matrix(t(assay(sce)))) |> mutate(type = "real", pseudotime = sce$pseudotime),
+    as_tibble(as.matrix(t(assay(result)))) |> mutate(type = "sim", pseudotime = result$pseudotime)
+) |>
+    pivot_longer(cols = -c(type, pseudotime), names_to = "gene", values_to = "expression")
+
+plot_df |>
+    filter(gene %in% rownames(sce)[1:5]) |>
+    ggplot(aes(pseudotime, expression, color = type)) +
+    geom_point(alpha = 0.3) +
+    facet_wrap(~ gene, scales = "free_y")
+```
