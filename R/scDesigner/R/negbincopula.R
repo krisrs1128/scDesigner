@@ -1,4 +1,4 @@
-fit_helper <- function(sce, mean_formula, dispersion_formula, copula_formula, pickle_path, max_epochs, lr) {
+fit_helper <- function(sce, mean_formula, dispersion_formula, copula_formula, pickle_path, max_epochs, lr, batch_size) {
   library(zellkonverter)
   library(reticulate)
   scdesigner <- import("scdesigner.minimal")
@@ -6,7 +6,12 @@ fit_helper <- function(sce, mean_formula, dispersion_formula, copula_formula, pi
   builtins <- import_builtins()
   adata <- SCE2AnnData(sce)
   sim <- scdesigner$NegBinCopula(mean_formula, dispersion_formula, copula_formula)
-  sim$fit(adata, max_epochs = as.integer(max_epochs), lr=lr)
+  sim$fit(
+    adata,
+    max_epochs = as.integer(max_epochs),
+    lr=lr,
+    batch_size=as.integer(batch_size)
+  )
   f <- builtins$open(pickle_path, "wb")
   cloudpickle$dump(sim, f)
   f$close()
@@ -53,7 +58,7 @@ NegBinCopula <- R6::R6Class(
       self$pickle_path <- tempfile(fileext = ".pkl")
     },
 
-    fit = function(sce, max_epochs = 100L, lr=0.1) {
+    fit = function(sce, max_epochs = 100L, lr=0.1, batch_size=NULL) {
       self$basilisk_proc <- basiliskStart(env)
       basiliskRun(
         self$basilisk_proc,
@@ -64,7 +69,8 @@ NegBinCopula <- R6::R6Class(
         copula_formula = self$copula_formula,
         pickle_path = self$pickle_path,
         max_epochs = max_epochs,
-        lr = lr
+        lr = lr,
+        batch_size=batch_size
       )
       invisible(self)
     },

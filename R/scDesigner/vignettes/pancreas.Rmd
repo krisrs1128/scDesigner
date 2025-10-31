@@ -25,7 +25,7 @@ theme_set(theme_classic())
 ```{r}
 sce <- readH5AD("examples/data/example_sce.h5ad")
 sim <- NegBinCopula$new(mean_formula="~ bs(pseudotime, df=6, degree=3)", dispersion_formula="~ bs(pseudotime, df=5, degree = 1)", copula_formula="~ -1 + cell_type")
-sim$fit(sce, max_epochs=25, lr=0.1)
+sim$fit(sce, max_epochs=40, batch_size=512, lr=.5)
 ```
 
 We can extract and visualize the parameters.
@@ -34,10 +34,6 @@ We can extract and visualize the parameters.
 sim$parameters()$marginal$mean |>
     as.matrix() |>
     heatmap()
-
-# sim$parameters()$copula[[1]] |>
-#     as.matrix() |>
-#     heatmap()
 ```
 
 Here are some samples.

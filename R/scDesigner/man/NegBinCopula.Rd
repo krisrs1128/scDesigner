@@ -37,7 +37,7 @@ Negative Binomial Copula Simulator
 \if{latex}{\out{\hypertarget{method-NegBinCopula-fit}{}}}
 \subsection{Method \code{fit()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{NegBinCopula$fit(sce, max_epochs = 100L, lr = 0.1)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{NegBinCopula$fit(sce, max_epochs = 100L, lr = 0.1, batch_size = NULL)}\if{html}{\out{</div>}}
 }
 
 }
