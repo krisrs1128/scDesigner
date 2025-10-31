@@ -1,9 +1,8 @@
 from .kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
-from .loader import adata_loader
+from .loader import adata_loader, get_device
 from anndata import AnnData
 from typing import Union, Dict, Optional, Tuple
 import pandas as pd
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 from abc import ABC, abstractmethod
@@ -18,6 +17,7 @@ class Marginal(ABC):
         self.predict = None
         self.predictor_names = None
         self.parameters = None
+        self.device = get_device()
 
     def setup_data(self, adata: AnnData, batch_size: int = 1024, **kwargs):
         """Set up the dataloader for the AnnData object."""
@@ -29,15 +29,32 @@ class Marginal(ABC):
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
         self.predictor_names = self.loader.dataset.predictor_names
 
-    def fit(self, **kwargs):
-        """Fit the marginal predictor"""
+    def fit(self, max_epochs: int = 100, **kwargs):
+        """Fit the marginal predictor using vanilla PyTorch training loop."""
         if self.predict is None:
             self.setup_optimizer(**kwargs)
-        trainer_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['trainer'])
-        trainer = pl.Trainer(**trainer_kwargs)
-        trainer.fit(self.predict, train_dataloaders=self.loader)
+
+        for epoch in range(max_epochs):
+            epoch_loss, n_batches = 0.0, 0
+
+            for batch in self.loader:
+                y, x = batch
+                if y.device != self.device:
+                    y = y.to(self.device)
+                    x = {k: v.to(self.device) for k, v in x.items()}
+
+                self.predict.optimizer.zero_grad()
+                loss = self.predict.loss_fn((y, x))
+                loss.backward()
+                self.predict.optimizer.step()
+
+                epoch_loss += loss.item()
+                n_batches += 1
+
+            avg_loss = epoch_loss / n_batches
+            print(f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}", end='\r')
         self.parameters = self.format_parameters()
-        
+
     def format_parameters(self):
         """Convert fitted coefficient tensors into pandas DataFrames.
 
@@ -56,7 +73,7 @@ class Marginal(ABC):
             row_names = list(self.predictor_names[param])
             dfs[param] = pd.DataFrame(coef_np, index=row_names, columns=var_names)
         return dfs
-    
+
     def num_params(self):
         """Return the number of parameters."""
         if self.predict is None:
@@ -85,7 +102,7 @@ class Marginal(ABC):
         raise NotImplementedError
 
 
-class GLMPredictor(pl.LightningModule):
+class GLMPredictor(nn.Module):
     """GLM-style predictor with arbitrary named parameters.
 
     Args:
@@ -111,21 +128,22 @@ class GLMPredictor(pl.LightningModule):
         self.feature_dims = dict(feature_dims)
         self.param_names = list(self.feature_dims.keys())
 
-        # create default link functions and parameter matrices
         self.link_fns = link_fns or {k: torch.exp for k in self.param_names}
         self.coefs = nn.ParameterDict()
         for key, dim in self.feature_dims.items():
             self.coefs[key] = nn.Parameter(torch.zeros(dim, self.n_outcomes))
-
-        # optimization parameters
         self.reset_parameters()
+
         self.loss_fn = loss_fn
-        self.optimizer_class = optimizer_class
-        self.optimizer_kwargs = optimizer_kwargs
+        self.to(get_device())
+
+        optimizer_kwargs = optimizer_kwargs or {}
+        filtered_kwargs = _filter_kwargs(optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])
+        self.optimizer = optimizer_class(self.parameters(), **filtered_kwargs)
 
     def reset_parameters(self):
         for p in self.coefs.values():
-            nn.init.normal_(p, mean=0.0, std=1e-2)
+            nn.init.normal_(p, mean=0.0, std=1e-4)
 
     def forward(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         out = {}
@@ -134,12 +152,3 @@ class GLMPredictor(pl.LightningModule):
             link = self.link_fns.get(name, torch.exp)
             out[name] = link(x_beta)
         return out
-
-    def training_step(self, batch):
-        loss = self.loss_fn(batch)
-        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        return loss
-
-    def configure_optimizers(self, **kwargs):
-        optimizer_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])
-        return self.optimizer_class(self.parameters(), **optimizer_kwargs)

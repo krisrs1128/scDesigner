@@ -30,7 +30,7 @@ class NegBin(Marginal):
         )
 
     def likelihood(self, batch):
-        """Compute the negative log-likelihood"""
+        """Compute the log-likelihood"""
         y, x = batch
         params = self.predict(x)
         mu = params.get('mean')

@@ -51,16 +51,16 @@ class StandardCopula(Copula):
     def fit(self, uniformizer: Callable, **kwargs):
         """
         Fit the copula covariance model.
-        
+
         Args:
             uniformizer (Callable): Function to convert data to uniform distribution
             **kwargs: Additional arguments
                 top_k (int, optional): Use only top-k most expressed genes for covariance estimation.
                                     If None, estimates full covariance for all genes.
-        
+
         Returns:
             None: Stores fitted parameters in self.parameters as dict of CovarianceStructure objects.
-        
+
         Raises:
             ValueError: If top_k is not a positive integer or exceeds n_outcomes
         """
@@ -76,11 +76,11 @@ class StandardCopula(Copula):
             sorted_indices = np.argsort(gene_total_expression)
             top_k_indices = sorted_indices[-top_k:]
             remaining_indices = sorted_indices[:-top_k]
-            covariances = self._compute_block_covariance(uniformizer, top_k_indices, 
+            covariances = self._compute_block_covariance(uniformizer, top_k_indices,
                                                              remaining_indices, top_k)
         else:
             covariances = self._compute_full_covariance(uniformizer)
-            
+
         self.parameters = covariances
 
     def pseudo_obs(self, x_dict: Dict):
@@ -88,7 +88,7 @@ class StandardCopula(Copula):
         #      {"group1": [indices of group 1], "group2": [indices of group 2]}
         # The initialization method ensures that x_dict will always have a "group" key.
         group_data = x_dict.get("group")
-        memberships = group_data.numpy()
+        memberships = group_data.cpu().numpy()
         group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] for g in self.groups}
 
         # initialize the result
@@ -106,14 +106,14 @@ class StandardCopula(Copula):
     def likelihood(self, uniformizer: Callable, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
         """
         Compute likelihood of data given the copula model.
-        
+
         Args:
             uniformizer (Callable): Function to convert expression data to uniform distribution
             batch (Tuple[torch.Tensor, Dict[str, torch.Tensor]]): Data batch containing:
                 - Y (torch.Tensor): Expression data of shape (n_cells, n_genes)
                 - X_dict (Dict[str, torch.Tensor]): Covariates dict with keys as parameter names
                                                 and values as tensors of shape (n_cells, n_covariates)
-        
+
         Returns:
             np.ndarray: Log-likelihood for each cell, shape (n_cells,)
         """
@@ -132,19 +132,19 @@ class StandardCopula(Copula):
         group_ix = {g: np.where(memberships[:, self.group_col[g] == 1])[0] for g in self.groups}
 
         ll = np.zeros(len(z))
-        
+
         for group, cov_struct in parameters.items():
             ix = group_ix[group]
             if len(ix) > 0:
                 z_modeled = z[ix][:, cov_struct.modeled_indices]
-                
+
                 ll_modeled = multivariate_normal.logpdf(z_modeled,
-                                                       np.zeros(cov_struct.num_modeled_genes), 
+                                                       np.zeros(cov_struct.num_modeled_genes),
                                                        cov_struct.cov.values)
                 if cov_struct.num_remaining_genes > 0:
                     z_remaining = z[ix][:, cov_struct.remaining_indices]
                     ll_remaining = norm.logpdf(z_remaining,
-                                            loc=0, 
+                                            loc=0,
                                             scale = np.sqrt(cov_struct.remaining_var.values))
                 else:
                     ll_remaining = 0
@@ -155,7 +155,7 @@ class StandardCopula(Copula):
         S = self.parameters
         per_group = [((S[g].num_modeled_genes * (S[g].num_modeled_genes - 1)) / 2) for g in self.groups]
         return sum(per_group)
-            
+
     def _validate_parameters(self, **kwargs):
         top_k = kwargs.get("top_k", None)
         if top_k is not None:
@@ -166,14 +166,14 @@ class StandardCopula(Copula):
             if top_k > self.n_outcomes:
                 raise ValueError(f"top_k ({top_k}) cannot exceed number of outcomes ({self.n_outcomes})")
         return top_k
-    
-    
+
+
 
     def _accumulate_top_k_stats(self, uniformizer:Callable, top_k_idx, rem_idx, top_k) \
-        -> Tuple[Dict[Union[str, int], np.ndarray], 
-                 Dict[Union[str, int], np.ndarray], 
-                 Dict[Union[str, int], np.ndarray], 
-                 Dict[Union[str, int], np.ndarray], 
+        -> Tuple[Dict[Union[str, int], np.ndarray],
+                 Dict[Union[str, int], np.ndarray],
+                 Dict[Union[str, int], np.ndarray],
+                 Dict[Union[str, int], np.ndarray],
                  Dict[Union[str, int], int]]:
         """Accumulate sufficient statistics for top-k covariance estimation.
 
@@ -198,7 +198,7 @@ class StandardCopula(Copula):
 
         for y, x_dict in tqdm(self.loader, desc="Estimating top-k copula covariance"):
             group_data = x_dict.get("group")
-            memberships = group_data.numpy()
+            memberships = group_data.cpu().numpy()
             u = uniformizer(y, x_dict)
             z = norm.ppf(u)
 
@@ -211,20 +211,20 @@ class StandardCopula(Copula):
                 n_g = mask.sum()
 
                 top_k_z, rem_z = z_g[:, top_k_idx], z_g[:, rem_idx]
-                
+
                 top_k_sums[g] += top_k_z.sum(axis=0)
                 top_k_second_moments[g] += top_k_z.T @ top_k_z
-                
+
                 rem_sums[g] += rem_z.sum(axis=0)
                 rem_second_moments[g] += (rem_z ** 2).sum(axis=0)
-                
+
                 Ng[g] += n_g
 
         return top_k_sums, top_k_second_moments, rem_sums, rem_second_moments, Ng
-    
+
     def _accumulate_full_stats(self, uniformizer:Callable) \
-        -> Tuple[Dict[Union[str, int], np.ndarray], 
-                 Dict[Union[str, int], np.ndarray], 
+        -> Tuple[Dict[Union[str, int], np.ndarray],
+                 Dict[Union[str, int], np.ndarray],
                  Dict[Union[str, int], int]]:
         """Accumulate sufficient statistics for full covariance estimation.
 
@@ -242,14 +242,14 @@ class StandardCopula(Copula):
 
         for y, x_dict in tqdm(self.loader, desc="Estimating copula covariance"):
             group_data = x_dict.get("group")
-            memberships = group_data.numpy()
-            
+            memberships = group_data.cpu().numpy()
+
             u = uniformizer(y, x_dict)
             z = norm.ppf(u)
 
             for g in self.groups:
                 mask = memberships[:, self.group_col[g]] == 1
-                
+
                 if not np.any(mask):
                     continue
 
@@ -258,12 +258,12 @@ class StandardCopula(Copula):
 
                 second_moments[g] += z_g.T @ z_g
                 sums[g] += z_g.sum(axis=0)
-                
+
                 Ng[g] += n_g
 
         return sums, second_moments, Ng
-    
-    def _compute_block_covariance(self, uniformizer:Callable, 
+
+    def _compute_block_covariance(self, uniformizer:Callable,
                                   top_k_idx: np.ndarray, rem_idx: np.ndarray, top_k: int) \
         -> Dict[Union[str, int], CovarianceStructure]:
         """Compute the covariance matrix for the top-k and remaining genes.
@@ -300,7 +300,7 @@ class StandardCopula(Copula):
                 remaining_names=remaining_names
             )
         return covariance
-    
+
     def _compute_full_covariance(self, uniformizer:Callable) -> Dict[Union[str, int], CovarianceStructure]:
         """Compute the covariance matrix for the full genes.
 
@@ -327,7 +327,7 @@ class StandardCopula(Copula):
                 remaining_names=None
             )
         return covariance
-            
+
     def _fast_normal_pseudo_obs(self, n_samples: int, cov_struct: CovarianceStructure) -> np.ndarray:
         """Sample pseudo-observations from the covariance structure.
 
@@ -339,28 +339,28 @@ class StandardCopula(Copula):
             np.ndarray: Pseudo-observations with shape (n_samples, total_genes)
         """
         u = np.zeros((n_samples, cov_struct.total_genes))
-        
+
         z_modeled = np.random.multivariate_normal(
-            mean=np.zeros(cov_struct.num_modeled_genes), 
-            cov=cov_struct.cov.values, 
+            mean=np.zeros(cov_struct.num_modeled_genes),
+            cov=cov_struct.cov.values,
             size=n_samples
         )
-        
+
         z_remaining = np.random.normal(
-            loc=0, 
-            scale=cov_struct.remaining_var.values ** 0.5, 
+            loc=0,
+            scale=cov_struct.remaining_var.values ** 0.5,
             size=(n_samples, cov_struct.num_remaining_genes)
         )
-        
+
         normal_distn_modeled = norm(0, np.diag(cov_struct.cov.values) ** 0.5)
         u[:, cov_struct.modeled_indices] = normal_distn_modeled.cdf(z_modeled)
-        
+
         normal_distn_remaining = norm(0, cov_struct.remaining_var.values ** 0.5)
         u[:, cov_struct.remaining_indices] = normal_distn_remaining.cdf(z_remaining)
-        
+
         return u
-    
-    def _normal_pseudo_obs(self, n_samples: int, cov_struct: CovarianceStructure) -> np.ndarray:    
+
+    def _normal_pseudo_obs(self, n_samples: int, cov_struct: CovarianceStructure) -> np.ndarray:
         """Sample pseudo-observations from the covariance structure.
 
         Args:
@@ -372,12 +372,12 @@ class StandardCopula(Copula):
         """
         u = np.zeros((n_samples, cov_struct.total_genes))
         z = np.random.multivariate_normal(
-            mean=np.zeros(cov_struct.total_genes), 
-            cov=cov_struct.cov.values, 
+            mean=np.zeros(cov_struct.total_genes),
+            cov=cov_struct.cov.values,
             size=n_samples
         )
-        
+
         normal_distn = norm(0, np.diag(cov_struct.cov.values) ** 0.5)
         u = normal_distn.cdf(z)
-        
+
         return u

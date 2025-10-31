@@ -1,6 +1,6 @@
 [project]
 name = "scdesigner"
-version = "0.0.3"
+version = "0.0.5"
 authors = [
   { name="Kris Sankaran", email="ksankaran@wisc.edu" },
 ]
@@ -15,7 +15,6 @@ classifiers = [
 dependencies = [
     "anndata",
     "formulaic",
-    "lightning",
     "numpy",
     "pandas",
     "rich",

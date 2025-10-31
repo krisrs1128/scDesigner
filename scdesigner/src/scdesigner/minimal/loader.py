@@ -5,7 +5,31 @@ from torch.utils.data import Dataset, DataLoader
 from typing import Dict
 import numpy as np
 import pandas as pd
+import scipy.sparse
 import torch
+
+def get_device():
+    """Detect and return the best available device (MPS, CUDA, or CPU)."""
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    else:
+        return torch.device("cpu")
+
+
+class PreloadedDataset(Dataset):
+    """Dataset that assumes x and y are both fully in memory."""
+    def __init__(self, y_tensor, x_tensors, predictor_names):
+        self.y = y_tensor
+        self.x = x_tensors
+        self.predictor_names = predictor_names
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, idx):
+        return self.y[idx], {k: v[idx] for k, v in self.x.items()}
 
 class AnnDataDataset(Dataset):
     """Simple PyTorch Dataset for AnnData objects.
@@ -13,13 +37,13 @@ class AnnDataDataset(Dataset):
     Supports optional chunked loading for backed AnnData objects. When
     `chunk_size` is provided, the dataset will load contiguous slices
     of rows (of size `chunk_size`) into memory once and serve individual
-    rows from that cached chunk. This avoids calling `to_memory()` on
-    a per-row basis which is expensive for large backed files.
+    rows from that cached chunk. Chunks are moved to device for faster access.
     """
     def __init__(self, adata: AnnData, formula: Dict[str, str], chunk_size: int):
         self.adata = adata
         self.formula = formula
         self.chunk_size = chunk_size
+        self.device = get_device()
 
         # keeping track of covariate-related information
         self.obs_levels = categories(self.adata.obs)
@@ -28,6 +52,7 @@ class AnnDataDataset(Dataset):
 
         # Internal cache for the currently loaded chunk
         self._chunk: AnnData | None = None
+        self._chunk_X = None
         self._chunk_start = 0
 
     def __len__(self):
@@ -42,19 +67,12 @@ class AnnDataDataset(Dataset):
         """
         self._ensure_chunk_loaded(idx)
         local_idx = idx - self._chunk_start
-        adata_slice = self._chunk[local_idx]
 
-        # Get X data, accounting for potential sparse matrices
-        X = adata_slice.X
-        if hasattr(X, 'toarray'):
-            X = X.toarray()
-
-        # Get obs data
+        # Get obs data from GPU-cached matrices
         obs_dict = {}
         for key in self.formula.keys():
-            mat = self.obs_matrices.get(key)
-            obs_dict[key] = to_tensor(mat.values[local_idx: local_idx + 1])
-        return to_tensor(X), obs_dict
+            obs_dict[key] = self.obs_matrices[key][local_idx: local_idx + 1]
+        return self._chunk_X[local_idx], obs_dict
 
     def _ensure_chunk_loaded(self, idx: int) -> None:
         """Load the chunk that contains `idx` into the internal cache."""
@@ -69,36 +87,45 @@ class AnnDataDataset(Dataset):
             self._chunk = chunk
             self._chunk_start = start
 
-            # Compute model matrices for this chunk's `obs` so we don't need
-            # to keep the full obs data model matrices in memory.
+            # Move chunk to GPU
+            X = chunk.X
+            if hasattr(X, 'toarray'):
+                X = X.toarray()
+            self._chunk_X = torch.tensor(X, dtype=torch.float32).to(self.device)
+
+            # Compute model matrices for this chunk's `obs` and move to GPU
             obs_coded_chunk = code_levels(self._chunk.obs.copy(), self.obs_levels)
             self.obs_matrices = {}
+            predictor_names = {}
             for key, f in self.formula.items():
-                self.obs_matrices[key] = model_matrix(f, obs_coded_chunk)
+                mat = model_matrix(f, obs_coded_chunk)
+                predictor_names [key] = list(mat.columns)
+                self.obs_matrices[key] = torch.tensor(mat.values, dtype=torch.float32).to(self.device)
 
             # Capture predictor (column) names from the model matrices once.
             if self.predictor_names is None:
-                self.predictor_names = {k: list(v.columns) for k, v in self.obs_matrices.items()}
+                self.predictor_names = predictor_names
 
 
-def adata_loader(adata: AnnData,
-                 formula: Dict[str, str],
-                 chunk_size: int = None,
-                 batch_size: int = 1024,
-                 shuffle: bool = False,
-                 num_workers: int = 0,
-                 **kwargs) -> DataLoader:
-    """
-    Create a DataLoader from AnnData that returns batches of (X, obs).
-    """
+def adata_loader(
+    adata: AnnData,
+    formula: Dict[str, str],
+    chunk_size: int = None,
+    batch_size: int = 1024,
+    shuffle: bool = False,
+    num_workers: int = 0,
+    **kwargs
+) -> DataLoader:
+    """Create a DataLoader from AnnData that returns batches of (X, obs)."""
     data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
-    if chunk_size is None:
-        if getattr(adata, 'isbacked', False):
-            chunk_size = 5000
-        else:
-            chunk_size = len(adata)
+    device = get_device()
 
-    dataset = AnnDataDataset(adata, formula, chunk_size)
+    # separate chunked from non-chunked cases
+    if not getattr(adata, 'isbacked', False):
+        dataset = _preloaded_adata(adata, formula, device)
+    else:
+        dataset = AnnDataDataset(adata, formula, chunk_size or 5000)
+
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -109,12 +136,30 @@ def adata_loader(adata: AnnData,
     )
 
 def obs_loader(obs: pd.DataFrame, marginal_formula, **kwargs):
-        adata = AnnData(X=np.zeros((len(obs), 1)), obs=obs)
-        return adata_loader(
-            adata,
-            marginal_formula,
-            **kwargs
-        )
+    adata = AnnData(X=np.zeros((len(obs), 1)), obs=obs)
+    return adata_loader(
+        adata,
+        marginal_formula,
+        **kwargs
+    )
+
+################################################################################
+## Extraction of in-memory AnnData to PreloadedDataset
+################################################################################
+
+def _preloaded_adata(adata: AnnData, formula: Dict[str, str], device: torch.device) -> PreloadedDataset:
+    X = adata.X
+    if scipy.sparse.issparse(X):
+        X = X.toarray()
+    y = torch.tensor(X, dtype=torch.float32).to(device)
+
+    obs = code_levels(adata.obs.copy(), categories(adata.obs))
+    x = {
+        k: torch.tensor(model_matrix(f, obs).values, dtype=torch.float32).to(device)
+        for k, f in formula.items()
+    }
+    predictor_names = {k: list(model_matrix(f, obs).columns) for k, f in formula.items()}
+    return PreloadedDataset(y, x, predictor_names)
 
 ################################################################################
 ## Helper functions
