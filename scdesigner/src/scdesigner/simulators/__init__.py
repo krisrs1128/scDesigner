@@ -1,31 +1,14 @@
-from .composite_regressor import CompositeGLMSimulator
-from .glm_simulator import (
-    BernoulliCopulaSimulator,
-    BernoulliRegressionSimulator,
-    NegBinCopulaSimulator,
-    NegBinRegressionSimulator,
-    PoissonCopulaSimulator,
-    PoissonRegressionSimulator,
-    GaussianRegressionSimulator,
-    GaussianCopulaSimulator,
-    ZeroInflatedNegBinCopulaSimulator,
-    ZeroInflatedNegBinRegressionSimulator,
-    ZeroInflatedPoissonRegressionSimulator,
-)
-from .pnmf_regression import PNMFRegressionSimulator
+"""Simulator classes"""
+
+from .scd3 import NegBinCopula, ZeroInflatedNegBinCopula, BernoulliCopula, GaussianCopula
+from .composite import CompositeCopula
+from .positive_nonnegative_matrix_factorization import PositiveNMF
 
 __all__ = [
-    "BernoulliCopulaSimulator",
-    "BernoulliRegressionSimulator",
-    "CompositeGLMSimulator",
-    "GaussianRegressionSimulator",
-    "GaussianCopulaSimulator",
-    "NegBinCopulaSimulator",
-    "NegBinRegressionSimulator",
-    "PNMFRegressionSimulator",
-    "PoissonCopulaSimulator",
-    "PoissonRegressionSimulator",
-    "ZeroInflatedNegBinCopulaSimulator",
-    "ZeroInflatedNegBinRegressionSimulator",
-    "ZeroInflatedPoissonRegressionSimulator",
+    "NegBinCopula",
+    "ZeroInflatedNegBinCopula",
+    "BernoulliCopula",
+    "GaussianCopula",
+    "CompositeCopula",
+    "PositiveNMF",
 ]

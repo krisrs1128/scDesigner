@@ -1,11 +1,27 @@
-from .scd3_instances import (
+"""
+Backward compatibility module for scDesigner.
+
+DEPRECATED: This module is deprecated and will be removed in a future version.
+"""
+
+import warnings
+
+# Issue deprecation warning
+warnings.warn(
+    "Importing from 'scdesigner.minimal' is deprecated and will be removed in a future version. ",
+    DeprecationWarning,
+    stacklevel=2
+)
+
+# Re-export all user-facing classes for backward compatibility
+from ..simulators import (
     BernoulliCopula,
     GaussianCopula,
     NegBinCopula,
-    ZeroInflatedNegBinCopula
+    ZeroInflatedNegBinCopula,
+    CompositeCopula,
+    PositiveNMF,
 )
-from .composite import CompositeCopula
-from .positive_nonnegative_matrix_factorization import PositiveNMF
 
 __all__ = [
     "BernoulliCopula",
