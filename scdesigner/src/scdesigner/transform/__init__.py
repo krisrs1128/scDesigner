@@ -1,7 +1,9 @@
-from .nullify import nullify
-from .amplify import amplify
-from .substitute import substitute
-from .split import split_glm
-from .mask import data_frame_mask
+from .transform import nullify, amplify, decorrelate, correlate, replace_param
 
-__all__ = ["amplify", "nullify", "data_frame_mask", "substitute", "split_glm"]
+__all__ = [
+    "nullify",
+    "amplify",
+    "decorrelate",
+    "correlate",
+    "replace_param",
+]
