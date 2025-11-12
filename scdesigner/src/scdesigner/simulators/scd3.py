@@ -6,10 +6,8 @@ from anndata import AnnData
 from tqdm import tqdm
 import torch
 import numpy as np
-from ..distributions.negbin import NegBin
-from ..distributions.zero_inflated_negbin import ZeroInflatedNegBin
-from ..distributions.gaussian import Gaussian
-from ..copulas.standard_copula import StandardCopula
+from ..distributions import NegBin, ZeroInflatedNegBin, Gaussian, Poisson, ZeroInflatedPoisson
+from ..copulas import StandardCopula
 from typing import Optional
 from abc import ABC
 
@@ -137,12 +135,31 @@ class BernoulliCopula(SCD3Simulator):
         covariance = StandardCopula(copula_formula)
         super().__init__(marginal, covariance)
 
-
 class GaussianCopula(SCD3Simulator):
     def __init__(self,
                  mean_formula: Optional[str] = None,
                  sdev_formula: Optional[str] = None,
                  copula_formula: Optional[str] = None) -> None:
         marginal = Gaussian({"mean": mean_formula, "sdev": sdev_formula})
+        covariance = StandardCopula(copula_formula)
+        super().__init__(marginal, covariance)
+        
+class PoissonCopula(SCD3Simulator):
+    def __init__(self,
+                 mean_formula: Optional[str] = None,
+                 copula_formula: Optional[str] = None) -> None:
+        marginal = Poisson({"mean": mean_formula})
+        covariance = StandardCopula(copula_formula)
+        super().__init__(marginal, covariance)
+
+class ZeroInflatedPoissonCopula(SCD3Simulator):
+    def __init__(self,
+                 mean_formula: Optional[str] = None,
+                 zero_inflation_formula: Optional[str] = None,
+                 copula_formula: Optional[str] = None) -> None:
+        marginal = ZeroInflatedPoisson({
+            "mean": mean_formula,
+            "zero_inflation": zero_inflation_formula
+        })
         covariance = StandardCopula(copula_formula)
         super().__init__(marginal, covariance)
