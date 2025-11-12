@@ -1,5 +1,5 @@
 from ..base.copula import Copula
-from ..utils.formula import standardize_formula
+from ..data.formula import standardize_formula
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from anndata import AnnData
 from scipy.stats import norm, multivariate_normal

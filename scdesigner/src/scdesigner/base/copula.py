@@ -1,7 +1,7 @@
 from typing import Dict, Callable, Tuple
 import torch
 from anndata import AnnData
-from ..utils.loader import adata_loader
+from ..data.loader import adata_loader
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
@@ -159,7 +159,7 @@ class CovarianceStructure:
     def decorrelate(self, row_pattern: str, col_pattern: str):
         """Decorrelate the covariance matrix for the given row and column patterns.
         """
-        from ..utils.transform import data_frame_mask
+        from ..transform.transform import data_frame_mask
         m1 = data_frame_mask(self.cov, ".", col_pattern)
         m2 = data_frame_mask(self.cov, row_pattern, ".")
         mask = (m1 | m2)
@@ -174,7 +174,7 @@ class CovarianceStructure:
             col_pattern (str): The regex pattern for the column names to match.
             factor (float): The factor to multiply the off-diagonal entries by.
         """
-        from ..utils.transform import data_frame_mask
+        from ..transform.transform import data_frame_mask
         m1 = data_frame_mask(self.cov, ".", col_pattern)
         m2 = data_frame_mask(self.cov, row_pattern, ".")
         mask = (m1 | m2)

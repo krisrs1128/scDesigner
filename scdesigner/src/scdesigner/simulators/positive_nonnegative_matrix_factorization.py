@@ -1,5 +1,5 @@
-from ..utils.formula import standardize_formula
-from ..utils.loader import _to_numpy
+from ..data.formula import standardize_formula
+from ..data.loader import _to_numpy
 from ..base.simulator import Simulator
 from anndata import AnnData
 from formulaic import model_matrix

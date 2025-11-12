@@ -1,4 +1,4 @@
-from ..utils.loader import obs_loader
+from ..data.loader import obs_loader
 from .scd3 import SCD3Simulator
 from ..copulas.standard_copula import StandardCopula
 from anndata import AnnData

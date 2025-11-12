@@ -1,6 +1,6 @@
-from ..utils.formula import standardize_formula
+from ..data.formula import standardize_formula
 from ..base.marginal import GLMPredictor, Marginal
-from ..utils.loader import _to_numpy
+from ..data.loader import _to_numpy
 from typing import Union, Dict, Optional
 import torch
 import numpy as np

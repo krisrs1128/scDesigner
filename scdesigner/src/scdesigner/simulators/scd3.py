@@ -1,5 +1,5 @@
 from ..base.copula import Copula
-from ..utils.loader import obs_loader, adata_loader
+from ..data.loader import obs_loader, adata_loader
 from ..base.marginal import Marginal
 from ..base.simulator import Simulator
 from anndata import AnnData

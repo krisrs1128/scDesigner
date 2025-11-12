@@ -1,5 +1,5 @@
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
-from ..utils.loader import adata_loader, get_device
+from ..data.loader import adata_loader, get_device
 from anndata import AnnData
 from typing import Union, Dict, Optional, Tuple
 import pandas as pd
