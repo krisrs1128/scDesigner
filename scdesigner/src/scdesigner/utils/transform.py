@@ -4,7 +4,7 @@ import pandas as pd
 import re
 import torch
 import copy
-from .copula import CovarianceStructure
+from ..base.copula import CovarianceStructure
 
 
 def nullify(sim, row_pattern: str, col_pattern: str, param: str):

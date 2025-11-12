@@ -6,10 +6,10 @@ import torch
 import numpy as np
 from scipy.stats import nbinom, bernoulli
 
-class ZeroInflatedNegBin(Marginal):
-    """Zero-inflated negative-binomial marginal estimator"""
+class Bernoulli(Marginal):
+    """Bernoulli marginal estimator"""
     def __init__(self, formula: Union[Dict, str]):
-        formula = standardize_formula(formula, allowed_keys=['mean', 'dispersion', 'zero_inflation'])
+        formula = standardize_formula(formula, allowed_keys=['mean'])
         super().__init__(formula)
 
     def setup_optimizer(
