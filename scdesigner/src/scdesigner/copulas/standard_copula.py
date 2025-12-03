@@ -26,7 +26,7 @@ class StandardCopula(Copula):
         A formula describing how the copula depends on experimental or
         biological conditions. The formula is standardized to ensure that
         a ``"group"`` term is always present. By default ``"~ 1"``.
-        
+
     Attributes
     ----------
     loader : torch.utils.data.DataLoader
@@ -47,7 +47,7 @@ class StandardCopula(Copula):
         The list of groups in the formula.
     n_groups : int
         The number of groups in the formula.
-        
+
     Examples
     --------
     >>> import numpy as np
@@ -61,10 +61,9 @@ class StandardCopula(Copula):
     >>> copula = StandardCopula("group ~ 1")
     >>> copula.setup_data(adata, {"group": "~ 1"}, batch_size=256)
     >>> copula.groups  # groups inferred from the design matrix
-    ['group']
+    ['Intercept']
     >>> copula.n_outcomes  # number of modeled genes
     20
-    >>>
     >>> # Define a simple rank-based uniformizer used by fit() and likelihood()
     >>> def rank_uniformizer(y, x_dict):
     ...     y_np = y.cpu().numpy()
@@ -76,18 +75,15 @@ class StandardCopula(Copula):
     >>> copula.fit(rank_uniformizer, top_k=10)
     >>> isinstance(copula.parameters, dict)
     True
-    >>>
     >>> # Draw dependent uniform pseudo-observations for a batch of covariates
     >>> y_batch, x_batch = next(iter(copula.loader))
     >>> u = copula.pseudo_obs(x_batch)
     >>> u.shape[1] == copula.n_outcomes
     True
-    >>>
     >>> # Compute per-cell log-likelihoods for the same batch
     >>> ll = copula.likelihood(rank_uniformizer, (y_batch, x_batch))
     >>> ll.shape[0] == y_batch.shape[0]
     True
-    >>>
     >>> # Inspect the effective number of covariance parameters
     >>> n_params = copula.num_params()
     >>> isinstance(n_params, int) and n_params > 0
@@ -148,8 +144,10 @@ class StandardCopula(Copula):
         # check that obs_batch is a binary grouping matrix (only if group exists)
         if obs_batch_group is not None:
             unique_vals = torch.unique(obs_batch_group)
-            if (not torch.all((unique_vals == 0) | (unique_vals == 1)).item()):
-                raise ValueError("Only categorical groups are currently supported in copula covariance estimation.")
+            if not torch.all((unique_vals == 0) | (unique_vals == 1)).item():
+                raise ValueError(
+                    "Only categorical groups are currently supported in copula covariance estimation."
+                )
 
     def fit(self, uniformizer: Callable, **kwargs):
         """
@@ -337,7 +335,7 @@ class StandardCopula(Copula):
             ((S[g].num_modeled_genes * (S[g].num_modeled_genes - 1)) / 2)
             for g in self.groups
         ]
-        return sum(per_group)
+        return int(sum(per_group))
 
     def _validate_parameters(self, **kwargs):
         """
@@ -479,7 +477,11 @@ class StandardCopula(Copula):
         return sums, second_moments, Ng
 
     def _compute_block_covariance(
-        self, uniformizer: Callable, top_k_idx: np.ndarray, rem_idx: np.ndarray, top_k: int
+        self,
+        uniformizer: Callable,
+        top_k_idx: np.ndarray,
+        rem_idx: np.ndarray,
+        top_k: int,
     ) -> Dict[Union[str, int], CovarianceStructure]:
         """
         Compute block covariance structures for top‑``k`` and remaining genes.
@@ -519,9 +521,7 @@ class StandardCopula(Copula):
                 mean_top_k, mean_top_k
             )
             mean_remaining = remaining_sums[g] / Ng[g]
-            var_remaining = (
-                remaining_second_moments[g] / Ng[g] - mean_remaining**2
-            )
+            var_remaining = remaining_second_moments[g] / Ng[g] - mean_remaining**2
             top_k_names = self.adata.var_names[top_k_idx]
             remaining_names = self.adata.var_names[rem_idx]
             covariance[g] = CovarianceStructure(
