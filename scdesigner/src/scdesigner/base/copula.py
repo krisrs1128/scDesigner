@@ -62,8 +62,7 @@ class Copula(ABC):
     >>> model.setup_data(adata, {"group": "~ 1"})
     >>> model.fit()
     """
-    
-    def __init__(self, formula: str, **kwargs):
+    def __init__(self, formula: Union[str, dict], **kwargs):
         self.formula = formula
         self.loader = None
         self.n_outcomes = None
