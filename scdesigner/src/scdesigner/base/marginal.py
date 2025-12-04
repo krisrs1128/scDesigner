@@ -161,18 +161,27 @@ class Marginal(ABC):
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
         self.predictor_names = self.loader.dataset.predictor_names
 
-    def fit(self, max_epochs: int = 100, **kwargs):
+    def fit(self, max_epochs: int = 100, verbose: bool = True, **kwargs):
         """Fit the marginal predictor using vanilla PyTorch training loop.
 
         This method runs stochastic gradient optimization using the template
-        dataset defined by the set_up_data method. The specific optimizer used
+        dataset defined by the setup_data method. The specific optimizer used
         can be modified with the setup_optimizer method and defaults to Adam.
+
+        Note that, unlike `fit` in class `Simulator`, this method does not allow
+        the template dataset as input. This requires `.setup_data()` to be
+        called first. We want to give finer-grained control over the data
+        loading and optimization in this class relative to the specific
+        `Simulator` implementations, which are designed to be easy to run with
+        as few steps as possible.
 
         Parameters
         ----------
         max_epochs : int
             The maximum number of epochs. This is the number of times we feed
             through our cells in the dataset.
+        verbose : bool
+            Should we print intermediate training outputs?
 
         Returns
         -------
@@ -201,7 +210,8 @@ class Marginal(ABC):
                 n_batches += 1
 
             avg_loss = epoch_loss / n_batches
-            print(f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}", end='\r')
+            if verbose:
+                print(f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}", end='\r')
         self.parameters = self.format_parameters()
 
     def format_parameters(self):
@@ -241,7 +251,7 @@ class Marginal(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def likelihood(self, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]):
+    def likelihood(self, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
         """Compute the log-likelihood for a batch.
 
         The likelihood is used for maximum likelihood estimation. It is also
