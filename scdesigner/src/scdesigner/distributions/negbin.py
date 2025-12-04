@@ -7,7 +7,34 @@ import numpy as np
 from scipy.stats import nbinom
 
 class NegBin(Marginal):
-    """Negative-binomial marginal estimator"""
+    """Negative-binomial marginal estimator
+
+    This subclass behaves like `Marginal` but assumes each gene follows a
+    negative binomial distribution NB(mu_j(x), r_j(x)) parameterized via a mean
+    `mu_j(x)` and dispersion `r_j(x)` that depend on covariates `x` through the
+    provided `formula` object.
+
+    The allowed formula keys are 'mean' and 'dispersion', defaulting to
+    'mean' with a fixed dispersion if only a string formula is passed in.
+
+    Examples
+    --------
+    >>> from scdesigner.distributions import NegBin
+    >>> from scdesigner.datasets import pancreas
+    >>>
+    >>> sim = NegBin(formula={"mean": "~ bs(pseudotime, df=5)", "dispersion": "~ pseudotime"})
+    >>> sim.setup_data(pancreas)
+    >>> sim.fit(max_epochs=1)
+    >>>
+    >>> # evaluate p(y | x) and mu(x)
+    >>> y, x = next(iter(sim.loader))
+    >>> sim.likelihood((y, x))
+    >>> sim.predict(x)
+    >>>
+    >>> # convert to quantiles and back
+    >>> u = sim.uniformize(y, x)
+    >>> sim.invert(u, x)
+    """
     def __init__(self, formula: Union[Dict, str]):
         formula = standardize_formula(formula, allowed_keys=['mean', 'dispersion'])
         super().__init__(formula)

@@ -12,20 +12,28 @@ class Gaussian(Marginal):
     This subclass behaves like `Marginal` but assuming that each gene follows a
     normal N(mu[j](x), sigma[j]^2(x)) distribution. The parameters mu[j](x) and
     sigma[j]^2(x) depend on experimental or biological features x through the
-    formual object.
+    formula object.
 
     The allowed formula keys are 'mean' and 'sdev', defaulting to 'mean' with a
     fixed standard deviation if only a string formula is passed in.
 
     Examples
     --------
-    >>> import anndata
     >>> from scdesigner.distributions import Gaussian
     >>> from scdesigner.datasets import pancreas
     >>>
     >>> sim = Gaussian(formula={"mean": "~ bs(pseudotime, df=5)", "sdev": "~ pseudotime"})
     >>> sim.setup_data(pancreas)
     >>> sim.fit(max_epochs=1)
+    >>>
+    >>> # evaluate p(y | x) and mu(x)
+    >>> y, x = next(iter(sim.loader))
+    >>> sim.likelihood((y, x))
+    >>> sim.predict(x)
+    >>>
+    >>> # convert to quantiles and back
+    >>> u = sim.uniformize(y, x)
+    >>> sim.invert(u, x)
     """
     def __init__(self, formula: Union[Dict, str]):
         formula = standardize_formula(formula, allowed_keys=['mean', 'sdev'])
@@ -46,14 +54,16 @@ class Gaussian(Marginal):
         Parameters
         ----------
         optimizer_class : Optional[callable]
-           We optimize the negative log likelihood using the Adam optimzier by
-           default. Alternative torch.optim.* optimziers can be passed in
+           We optimize the negative log likelihood using the Adam optimizer by
+           default. Alternative torch.optim.* optimizer can be passed in
            through this argument.
-        **optimzier_kwargs :
+        **optimizer_kwargs :
             Arguments that are passed to the optimizer during estimation.
 
         Returns
-        ----------
+        -------
+            Does not return anything, but modifies the self.predict attribute to
+            refer to the new optimizer object.
         """
         if self.loader is None:
             raise RuntimeError("self.loader is not set (call setup_data first)")
@@ -70,7 +80,7 @@ class Gaussian(Marginal):
         )
 
     def likelihood(self, batch):
-        """Compute the negative log-likelihood"""
+        """Compute the log-likelihood"""
         y, x = batch
         params = self.predict(x)
         mu = params.get("mean")

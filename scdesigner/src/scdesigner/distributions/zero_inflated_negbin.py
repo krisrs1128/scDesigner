@@ -7,7 +7,35 @@ import numpy as np
 from scipy.stats import nbinom, bernoulli
 
 class ZeroInflatedNegBin(Marginal):
-    """Zero-inflated negative-binomial marginal estimator"""
+    """Zero-inflated negative-binomial marginal estimator
+
+    This subclass models a two-part mixture for counts. For each feature
+    j the observation follows a mixture: with probability `pi_j(x)` the value
+    is an extra zero (inflation), otherwise the count is drawn from a
+    negative-binomial distribution NB(mu_j(x), r_j(x)) parameterized here via
+    a mean `mu_j(x)` and dispersion `r_j(x)`. All parameters may depend on
+    covariates `x` through the `formula` argument.
+
+    The allowed formula keys are 'mean', 'dispersion', and 'zero_inflation'.
+
+    Examples
+    --------
+    >>> from scdesigner.distributions import ZeroInflatedNegBin
+    >>> from scdesigner.datasets import pancreas
+    >>>
+    >>> sim = ZeroInflatedNegBin(formula={"mean": "~ pseudotime", "dispersion": "~ 1", "zero_inflation": "~ pseudotime"})
+    >>> sim.setup_data(pancreas)
+    >>> sim.fit(max_epochs=1)
+    >>>
+    >>> # evaluate p(y | x) and model parameters
+    >>> y, x = next(iter(sim.loader))
+    >>> sim.likelihood((y, x))
+    >>> sim.predict(x)
+    >>>
+    >>> # convert to quantiles and back
+    >>> u = sim.uniformize(y, x)
+    >>> sim.invert(u, x)
+    """
     def __init__(self, formula: Union[Dict, str]):
         formula = standardize_formula(formula, allowed_keys=['mean', 'dispersion', 'zero_inflation'])
         super().__init__(formula)

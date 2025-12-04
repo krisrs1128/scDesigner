@@ -4,10 +4,37 @@ from ..data.loader import _to_numpy
 from typing import Union, Dict, Optional
 import torch
 import numpy as np
-from scipy.stats import nbinom, bernoulli
+from scipy.stats import bernoulli
 
 class Bernoulli(Marginal):
-    """Bernoulli marginal estimator"""
+    """Bernoulli marginal estimator
+
+    This subclass behaves like `Marginal` but assumes each feature follows a
+    Bernoulli distribution with success probability `theta_j(x)` that depends
+    on covariates `x` through the `formula` argument.
+
+    The allowed formula keys are 'mean' (interpreted as the logit of the
+    success probability when used with a GLM link). If a string formula is
+    provided, it is taken to specify the `mean` model.
+
+    Examples
+    --------
+    >>> from scdesigner.distributions import Bernoulli
+    >>> from scdesigner.datasets import pancreas
+    >>>
+    >>> sim = Bernoulli(formula="~ pseudotime")
+    >>> sim.setup_data(pancreas)
+    >>> sim.fit(max_epochs=1)
+    >>>
+    >>> # evaluate p(y | x) and theta(x)
+    >>> y, x = next(iter(sim.loader))
+    >>> sim.likelihood((y, x))
+    >>> sim.predict(x)
+    >>>
+    >>> # convert to quantiles and back
+    >>> u = sim.uniformize(y, x)
+    >>> sim.invert(u, x)
+    """
     def __init__(self, formula: Union[Dict, str]):
         formula = standardize_formula(formula, allowed_keys=['mean'])
         super().__init__(formula)

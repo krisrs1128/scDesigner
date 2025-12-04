@@ -7,7 +7,36 @@ import numpy as np
 from scipy.stats import poisson, bernoulli
 
 class ZeroInflatedPoisson(Marginal):
-    """Zero-Inflated Poisson marginal estimator"""
+    """Zero-Inflated Poisson marginal estimator
+
+    This subclass models counts with an explicit zero-inflation component.
+    For each feature j the observation follows a mixture: with probability
+    `pi_j(x)` the value is an extra zero, otherwise the count is drawn from
+    a Poisson distribution with mean `mu_j(x)`. Both `mu_j(x)` and the
+    inflation probability `pi_j(x)` may depend on covariates `x` through the
+    `formula` argument.
+
+    The allowed formula keys are 'mean' and 'zero_inflation'. If a string
+    formula is supplied it is taken to specify the `mean` by default.
+
+    Examples
+    --------
+    >>> from scdesigner.distributions import ZeroInflatedPoisson
+    >>> from scdesigner.datasets import pancreas
+    >>>
+    >>> sim = ZeroInflatedPoisson(formula={"mean": "~ pseudotime", "zero_inflation": "~ pseudotime"})
+    >>> sim.setup_data(pancreas)
+    >>> sim.fit(max_epochs=1)
+    >>>
+    >>> # evaluate p(y | x) and model parameters
+    >>> y, x = next(iter(sim.loader))
+    >>> sim.likelihood((y, x))
+    >>> sim.predict(x)
+    >>>
+    >>> # convert to quantiles and back
+    >>> u = sim.uniformize(y, x)
+    >>> sim.invert(u, x)
+    """
     def __init__(self, formula: Union[Dict, str]):
         formula = standardize_formula(formula, allowed_keys=['mean', 'zero_inflation'])
         super().__init__(formula)

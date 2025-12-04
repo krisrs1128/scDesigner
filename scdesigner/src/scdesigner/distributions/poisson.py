@@ -7,7 +7,33 @@ import numpy as np
 from scipy.stats import poisson
 
 class Poisson(Marginal):
-    """Poisson marginal estimator"""
+    """Poisson marginal estimator
+
+    This subclass behaves like `Marginal` but assumes each gene follows a
+    Poisson distribution with mean `mu_j(x)` that depends on covariates `x`
+    via the provided `formula` object.
+
+    The allowed formula keys are 'mean', defaulting to a single `mean` term
+    if a string formula is supplied.
+
+    Examples
+    --------
+    >>> from scdesigner.distributions import Poisson
+    >>> from scdesigner.datasets import pancreas
+    >>>
+    >>> sim = Poisson(formula="~ bs(pseudotime, df=5)")
+    >>> sim.setup_data(pancreas)
+    >>> sim.fit(max_epochs=1)
+    >>>
+    >>> # evaluate p(y | x) and mu(x)
+    >>> y, x = next(iter(sim.loader))
+    >>> sim.likelihood((y, x))
+    >>> sim.predict(x)
+    >>>
+    >>> # convert to quantiles and back
+    >>> u = sim.uniformize(y, x)
+    >>> sim.invert(u, x)
+    """
     def __init__(self, formula: Union[Dict, str]):
         formula = standardize_formula(formula, allowed_keys=['mean'])
         super().__init__(formula)
