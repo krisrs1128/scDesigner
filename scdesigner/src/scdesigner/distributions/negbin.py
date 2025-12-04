@@ -1,13 +1,40 @@
 from ..data.formula import standardize_formula
 from ..base.marginal import GLMPredictor, Marginal
 from ..data.loader import _to_numpy
-from typing import Union, Dict, Optional
+from typing import Union, Dict, Optional, Tuple
 import torch
 import numpy as np
 from scipy.stats import nbinom
 
 class NegBin(Marginal):
-    """Negative-binomial marginal estimator"""
+    """Negative-binomial marginal estimator
+
+    This subclass behaves like `Marginal` but assumes each gene follows a
+    negative binomial distribution NB(mu_j(x), r_j(x)) parameterized via a mean
+    `mu_j(x)` and dispersion `r_j(x)` that depend on covariates `x` through the
+    provided `formula` object.
+
+    The allowed formula keys are 'mean' and 'dispersion', defaulting to
+    'mean' with a fixed dispersion if only a string formula is passed in.
+
+    Examples
+    --------
+    >>> from scdesigner.distributions import NegBin
+    >>> from scdesigner.datasets import pancreas
+    >>>
+    >>> sim = NegBin(formula={"mean": "~ bs(pseudotime, df=5)", "dispersion": "~ pseudotime"})
+    >>> sim.setup_data(pancreas)
+    >>> sim.fit(max_epochs=1, verbose=False)
+    >>>
+    >>> # evaluate p(y | x) and mu(x)
+    >>> y, x = next(iter(sim.loader))
+    >>> l = sim.likelihood((y, x))
+    >>> y_hat = sim.predict(x)
+    >>>
+    >>> # convert to quantiles and back
+    >>> u = sim.uniformize(y, x)
+    >>> x_star = sim.invert(u, x)
+    """
     def __init__(self, formula: Union[Dict, str]):
         formula = standardize_formula(formula, allowed_keys=['mean', 'dispersion'])
         super().__init__(formula)
@@ -29,7 +56,7 @@ class NegBin(Marginal):
             optimizer_kwargs=optimizer_kwargs
         )
 
-    def likelihood(self, batch):
+    def likelihood(self, batch) -> torch.Tensor:
         """Compute the log-likelihood"""
         y, x = batch
         params = self.predict(x)
@@ -44,14 +71,14 @@ class NegBin(Marginal):
             - (r + y) * torch.log(r + mu)
         )
 
-    def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor]):
+    def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Invert pseudoobservations."""
         mu, r, u = self._local_params(x, u)
         p = r / (r + mu)
         y = nbinom(n=r, p=p).ppf(u)
         return torch.from_numpy(y).float()
 
-    def uniformize(self, y: torch.Tensor, x: Dict[str, torch.Tensor], epsilon=1e-6):
+    def uniformize(self, y: torch.Tensor, x: Dict[str, torch.Tensor], epsilon=1e-6) -> torch.Tensor:
         """Return uniformized pseudo-observations for counts y given covariates x."""
         # cdf values using scipy's parameterization
         mu, r, y = self._local_params(x, y)
@@ -64,7 +91,7 @@ class NegBin(Marginal):
         u = np.clip(v * u1 + (1.0 - v) * u2, epsilon, 1.0 - epsilon)
         return torch.from_numpy(u).float()
 
-    def _local_params(self, x, y=None):
+    def _local_params(self, x, y=None) -> Tuple:
         params = self.predict(x)
         mu = params.get('mean')
         r = params.get('dispersion')
