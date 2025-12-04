@@ -47,8 +47,7 @@ class Copula(ABC):
 
         Examples
         --------
-        >>> import scanpy as sc
-        >>> adata = sc.datasets.pbmc3k()[:, :300]
+        >>> from scdesigner.datasets import pancreas
         >>>
         >>> class DummyCopula(Copula):
         ...     def fit(self):
@@ -61,7 +60,7 @@ class Copula(ABC):
         ...         return np.random.uniform(size=(x_dict["group"].shape[0], self.n_outcomes))
         ...
         >>> model = DummyCopula({"group": "~ 1"})
-        >>> model.setup_data(adata, {"group": "~ 1"})
+        >>> model.setup_data(pancreas, {"group": "~ 1"})
         >>> model.fit()
         """
         self.formula = formula
