@@ -7,7 +7,26 @@ import numpy as np
 from scipy.stats import norm
 
 class Gaussian(Marginal):
-    """Gaussian marginal estimator"""
+    """Gaussian marginal estimator
+
+    This subclass behaves like `Marginal` but assuming that each gene follows a
+    normal N(mu[j](x), sigma[j]^2(x)) distribution. The parameters mu[j](x) and
+    sigma[j]^2(x) depend on experimental or biological features x through the
+    formual object.
+
+    The allowed formula keys are 'mean' and 'sdev', defaulting to 'mean' with a
+    fixed standard deviation if only a string formula is passed in.
+
+    Examples
+    --------
+    >>> import anndata
+    >>> from scdesigner.distributions import Gaussian
+    >>> from scdesigner.datasets import pancreas
+    >>>
+    >>> sim = Gaussian(formula={"mean": "~ bs(pseudotime, df=5)", "sdev": "~ pseudotime"})
+    >>> sim.setup_data(pancreas)
+    >>> sim.fit(max_epochs=1)
+    """
     def __init__(self, formula: Union[Dict, str]):
         formula = standardize_formula(formula, allowed_keys=['mean', 'sdev'])
         super().__init__(formula)
@@ -17,6 +36,25 @@ class Gaussian(Marginal):
             optimizer_class: Optional[callable] = torch.optim.Adam,
             **optimizer_kwargs,
     ):
+        """
+        Gaussian Model Optimizer
+
+        By default optimization is done using Adam. This can be customized using
+        the `optimizer_class` argument. The link function for the mean is an
+        identity link.
+
+        Parameters
+        ----------
+        optimizer_class : Optional[callable]
+           We optimize the negative log likelihood using the Adam optimzier by
+           default. Alternative torch.optim.* optimziers can be passed in
+           through this argument.
+        **optimzier_kwargs :
+            Arguments that are passed to the optimizer during estimation.
+
+        Returns
+        ----------
+        """
         if self.loader is None:
             raise RuntimeError("self.loader is not set (call setup_data first)")
 
