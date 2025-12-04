@@ -21,7 +21,8 @@ class Bernoulli(Marginal):
             raise RuntimeError("self.loader is not set (call setup_data first)")
 
         link_fns = {"mean": torch.sigmoid}
-        nll = lambda batch: -self.likelihood(batch).sum()
+        def nll(batch):
+            return -self.likelihood(batch).sum()
         self.predict = GLMPredictor(
             n_outcomes=self.n_outcomes,
             feature_dims=self.feature_dims,

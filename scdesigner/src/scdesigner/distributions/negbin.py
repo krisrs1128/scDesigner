@@ -20,7 +20,8 @@ class NegBin(Marginal):
         if self.loader is None:
             raise RuntimeError("self.loader is not set (call setup_data first)")
 
-        nll = lambda batch: -self.likelihood(batch).sum()
+        def nll(batch):
+            return -self.likelihood(batch).sum()
         self.predict = GLMPredictor(
             n_outcomes=self.n_outcomes,
             feature_dims=self.feature_dims,

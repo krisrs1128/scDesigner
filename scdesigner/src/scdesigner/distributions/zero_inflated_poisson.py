@@ -24,7 +24,8 @@ class ZeroInflatedPoisson(Marginal):
             "mean": torch.exp,
             "zero_inflation": torch.sigmoid,
         }
-        nll = lambda batch: -self.likelihood(batch).sum()
+        def nll(batch):
+            return -self.likelihood(batch).sum()
         self.predict = GLMPredictor(
             n_outcomes=self.n_outcomes,
             feature_dims=self.feature_dims,
