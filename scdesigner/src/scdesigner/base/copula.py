@@ -9,60 +9,60 @@ from typing import Optional, Union
 
 
 class Copula(ABC):
-    def __init__(self, formula: str, **kwargs):
-        """Abstract Copula Class
-
-        The scDesign3 model is built from two components: a collection of marginal
-        models, and a copula to tie them together. This class implements an abstract
-        version of the copula. Within this class, we may define different subclasses
-        that implement various types of regularization or dependencies on
-        experimental and biological conditions. Despite these differences, the
-        overall class must always provide utilities for fitting and sampling
-        dependent uniform variables.
-
-        Parameters
-        ----------
-        formula : str
-            A string describing the dependence of the copula on experimental or
-            biological conditions. We support predictors for categorical variables
-            like cell type; this corresponds to estimating a different covariance
-            for each category.
-
-        Attributes
-        ----------
-        loader : torch.utils.data.DataLoader
-            A data loader object is used to estimate the covariance one batch at a
-            time. This allows estimation of the covariance structure in a streaming
-            way, without having to load all data into memory.
-        n_outcomes : int
-            The number of features modeled by this marginal model. For example,
-            this corresponds to the number of genes being simulated.
-        parameters : Dict[str, CovarianceStructure]
-            A dictionary of CovarianceStructure objects. Each key corresponds to a
-            different category specified in the original formula. The covariance
-            structure stores the relationships among genes. It can be a standard
-            covariance matrix, but may also use more memory-efficient approximations
-            like when using CovarianceStructure with a constraint on
-            num_modeled_genes.
-
-        Examples
-        --------
-        >>> from scdesigner.datasets import pancreas
-        >>>
-        >>> class DummyCopula(Copula):
-        ...     def fit(self):
-        ...         pass
-        ...     def likelihood(self):
-        ...         pass
-        ...     def num_params(self):
-        ...         return 0
-        ...     def pseudo_obs(self, x_dict):
-        ...         return np.random.uniform(size=(x_dict["group"].shape[0], self.n_outcomes))
-        ...
-        >>> model = DummyCopula({"group": "~ 1"})
-        >>> model.setup_data(pancreas, {"group": "~ 1"})
-        >>> model.fit()
-        """
+    """Abstract Copula Class
+    
+    The scDesign3 model is built from two components: a collection of marginal
+    models, and a copula to tie them together. This class implements an abstract
+    version of the copula. Within this class, we may define different subclasses
+    that implement various types of regularization or dependencies on
+    experimental and biological conditions. Despite these differences, the
+    overall class must always provide utilities for fitting and sampling
+    dependent uniform variables.
+    
+    Parameters
+    ----------
+    formula : str
+        A string describing the dependence of the copula on experimental or
+        biological conditions. We support predictors for categorical variables
+        like cell type; this corresponds to estimating a different covariance
+        for each category.
+    Attributes
+    ----------
+    loader : torch.utils.data.DataLoader
+        A data loader object is used to estimate the covariance one batch at a
+        time. This allows estimation of the covariance structure in a streaming
+        way, without having to load all data into memory.
+    n_outcomes : int
+        The number of features modeled by this marginal model. For example,
+        this corresponds to the number of genes being simulated.
+    parameters : Dict[str, CovarianceStructure]
+        A dictionary of CovarianceStructure objects. Each key corresponds to a
+        different category specified in the original formula. The covariance
+        structure stores the relationships among genes. It can be a standard
+        covariance matrix, but may also use more memory-efficient approximations
+        like when using CovarianceStructure with a constraint on
+        num_modeled_genes.
+        
+    Examples
+    --------
+    >>> import scanpy as sc
+    >>> adata = sc.datasets.pbmc3k()[:, :300]
+    >>>
+    >>> class DummyCopula(Copula):
+    ...     def fit(self):
+    ...         pass
+    ...     def likelihood(self):
+    ...         pass
+    ...     def num_params(self):
+    ...         return 0
+    ...     def pseudo_obs(self, x_dict):
+    ...         return np.random.uniform(size=(x_dict["group"].shape[0], self.n_outcomes))
+    ...
+    >>> model = DummyCopula({"group": "~ 1"})
+    >>> model.setup_data(adata, {"group": "~ 1"})
+    >>> model.fit()
+    """
+    def __init__(self, formula: Union[str, dict], **kwargs):
         self.formula = formula
         self.loader = None
         self.n_outcomes = None
@@ -96,7 +96,7 @@ class Copula(ABC):
             adata input object.
         """
         self.adata = adata
-        self.formula = self.formula | marginal_formula
+        self.formula = self.formula | marginal_formula # 
         self.loader = adata_loader(adata, self.formula, batch_size=batch_size, **kwargs)
         X_batch, _ = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
@@ -119,7 +119,7 @@ class Copula(ABC):
         group : Union[str, list, None], optional
             The group or groups to apply the transformation to. If None, the
             transformation is applied to all groups.
-
+            
         Returns
         -------
         None

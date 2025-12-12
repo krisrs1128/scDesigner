@@ -68,7 +68,8 @@ class Gaussian(Marginal):
         if self.loader is None:
             raise RuntimeError("self.loader is not set (call setup_data first)")
 
-        nll = lambda batch: -self.likelihood(batch).sum()
+        def nll(batch):
+            return -self.likelihood(batch).sum()
         link_fns = {"mean": lambda x: x}
         self.predict = GLMPredictor(
             n_outcomes=self.n_outcomes,
