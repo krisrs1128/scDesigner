@@ -1,3 +1,17 @@
+"""Data loading utilities for scDesigner models.
+
+The core entry point is :func:`adata_loader`, which builds a PyTorch
+:class:`~torch.utils.data.DataLoader` that yields mini-batches of:
+
+- **X**: expression/count matrix rows (cells × genes), returned as a float tensor
+- **obs**: a dict mapping formula keys to design-matrix tensors produced from
+  ``adata.obs`` via :func:`formulaic.model_matrix`
+
+This module supports both in-memory and backed :class:`~anndata.AnnData`
+objects. For backed AnnData, a chunk cache is used to avoid loading all rows
+into memory at once.
+"""
+
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from anndata import AnnData
 from formulaic import model_matrix
@@ -9,7 +23,8 @@ import scipy.sparse
 import torch
 
 def get_device():
-    """Detect and return the best available device (MPS, CUDA, or CPU)."""
+    """Detect and return the best available device (MPS, CUDA, or CPU).
+    """
     if torch.backends.mps.is_available():
         return torch.device("mps")
     elif torch.cuda.is_available():
@@ -19,8 +34,27 @@ def get_device():
 
 
 class PreloadedDataset(Dataset):
-    """Dataset that assumes x and y are both fully in memory."""
-    def __init__(self, y_tensor, x_tensors, predictor_names):
+    """Dataset wrapper where both response and predictors are preloaded.
+
+    This dataset is used for in-memory AnnData objects where we can materialize:
+
+    - ``y``: the full expression matrix on the target device
+    - ``x``: a dict of design matrices (one per formula key) on the same device
+
+    Parameters
+    ----------
+    y_tensor : torch.Tensor
+        Expression tensor of shape (n_obs, n_features).
+    x_tensors : dict[str, torch.Tensor]
+        Mapping from formula key to design matrix tensor of shape (n_obs, p_k).
+    predictor_names : dict[str, list[str]]
+        Mapping from formula key to the names of the design matrix columns.
+    """
+    def __init__(
+        self, 
+        y_tensor: torch.Tensor, 
+        x_tensors: Dict[str, torch.Tensor], 
+        predictor_names):
         self.y = y_tensor
         self.x = x_tensors
         self.predictor_names = predictor_names
@@ -32,12 +66,29 @@ class PreloadedDataset(Dataset):
         return self.y[idx], {k: v[idx] for k, v in self.x.items()}
 
 class AnnDataDataset(Dataset):
-    """Simple PyTorch Dataset for AnnData objects.
+    """PyTorch dataset over an AnnData object, with optional chunk caching.
 
-    Supports optional chunked loading for backed AnnData objects. When
-    `chunk_size` is provided, the dataset will load contiguous slices
-    of rows (of size `chunk_size`) into memory once and serve individual
-    rows from that cached chunk. Chunks are moved to device for faster access.
+    This dataset exposes AnnData rows as samples and returns a tuple
+    ``(X_row, obs_dict)`` where ``obs_dict`` contains (one-row) design matrices
+    computed from ``adata.obs`` according to the provided ``formula`` mapping.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Input dataset.
+    formula : dict[str, str]
+        Mapping from key to a formula string used to build a design matrix from
+        ``adata.obs`` via :func:`formulaic.model_matrix`.
+    chunk_size : int
+        Number of contiguous rows to cache at once (used when chunking is enabled).
+
+    Attributes
+    ----------
+    predictor_names : dict[str, list[str]] or None
+        Names of the design-matrix columns per formula key. Populated after the
+        first chunk is loaded.
+    device : torch.device
+        Device used for caching tensors.
     """
     def __init__(self, adata: AnnData, formula: Dict[str, str], chunk_size: int):
         self.adata = adata
@@ -116,7 +167,41 @@ def adata_loader(
     num_workers: int = 0,
     **kwargs
 ) -> DataLoader:
-    """Create a DataLoader from AnnData that returns batches of (X, obs)."""
+    """Create a :class:`~torch.utils.data.DataLoader` over an AnnData dataset.
+
+    The resulting loader yields tuples ``(X_batch, obs_batch)`` where:
+
+    - ``X_batch`` is a float tensor of shape (batch_size, n_genes)
+    - ``obs_batch`` is a dict mapping each key in ``formula`` to a float tensor
+      of shape (batch_size, n_covariates) for that key's design matrix
+
+    For backed AnnData objects, the underlying dataset uses chunk caching to
+    limit memory usage.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Input AnnData object.
+    formula : dict[str, str]
+        Mapping from key to a formula string consumed by
+        :func:`formulaic.model_matrix` (applied to ``adata.obs``).
+    chunk_size : int, optional
+        Chunk size used only for backed AnnData. If omitted, defaults to 5000.
+    batch_size : int, optional
+        Mini-batch size returned by the loader.
+    shuffle : bool, optional
+        Whether to shuffle observations each epoch.
+    num_workers : int, optional
+        Number of DataLoader workers.
+    **kwargs
+        Additional keyword arguments filtered via ``DEFAULT_ALLOWED_KWARGS["data"]``
+        and forwarded to :class:`~torch.utils.data.DataLoader`.
+
+    Returns
+    -------
+    torch.utils.data.DataLoader
+        DataLoader over the dataset.
+    """
     data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
     device = get_device()
 
@@ -136,6 +221,26 @@ def adata_loader(
     )
 
 def obs_loader(obs: pd.DataFrame, marginal_formula, **kwargs):
+    """Create a loader that yields design matrices for an observation table.
+
+    This is a convenience wrapper for prediction-time batching: it creates a
+    dummy AnnData with a placeholder ``X`` and uses :func:`adata_loader` to
+    construct batches of covariates derived from ``obs``.
+
+    Parameters
+    ----------
+    obs : pandas.DataFrame
+        Observation metadata used to build design matrices.
+    marginal_formula : dict[str, str]
+        Formula mapping used for :func:`formulaic.model_matrix`.
+    **kwargs
+        Forwarded to :func:`adata_loader` (e.g. ``batch_size``, device options).
+
+    Returns
+    -------
+    torch.utils.data.DataLoader
+        Loader yielding ``(X_batch, obs_batch)`` where ``X_batch`` is dummy.
+    """
     adata = AnnData(X=np.zeros((len(obs), 1)), obs=obs)
     return adata_loader(
         adata,
@@ -148,6 +253,12 @@ def obs_loader(obs: pd.DataFrame, marginal_formula, **kwargs):
 ################################################################################
 
 def _preloaded_adata(adata: AnnData, formula: Dict[str, str], device: torch.device) -> PreloadedDataset:
+    """Materialize an in-memory AnnData into a :class:`PreloadedDataset`.
+
+    This helper converts sparse matrices to dense, encodes categorical levels
+    to ensure consistent model-matrix columns, builds the per-key design
+    matrices, and moves everything to ``device``.
+    """
     X = adata.X
     if scipy.sparse.issparse(X):
         X = X.toarray()
@@ -178,6 +289,8 @@ def dict_collate_fn(batch):
     return X_batch, obs_dict
 
 def to_tensor(X):
+    """Convert ``X`` to a float tensor with conservative squeezing.
+    """
     # If the tensor is 2D with second dim == 1, squeeze only the first
     # dim when appropriate (e.g. converting a single-row X to 1D samples)
     t = torch.tensor(X, dtype=torch.float32)
@@ -188,6 +301,7 @@ def to_tensor(X):
     return t.squeeze()
 
 def categories(obs):
+    """Collect levels for categorical/object columns in an observation table."""
     levels = {}
     for k in obs.columns:
         obs_type = str(obs[k].dtype)
@@ -197,6 +311,10 @@ def categories(obs):
 
 
 def code_levels(obs, categories):
+    """Cast categorical columns to a fixed set of categories.
+
+    This ensures stable design-matrix columns across different chunks/batches.
+    """
     for k in obs.columns:
         if str(obs[k].dtype) == "category":
             obs[k] = obs[k].astype(pd.CategoricalDtype(categories[k]))
