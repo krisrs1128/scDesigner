@@ -1,0 +1,29 @@
+---
+title: Preparing documentation data
+---
+
+## Dataset 1
+
+Sources:
+- https://songdongyuan1994.github.io/scDesign3/docs/articles/scDesign3-introduction-vignette.html
+- https://scvelo.readthedocs.io/en/stable/vignettes/Pancreas.html#Endocrine-Pancreas
+- https://figshare.com/ndownloader/files/40581992
+
+```{r}
+library(zellkonverter)
+dataset <- readRDS("data/PANCREAS_sce.rds")
+writeH5AD(dataset, "data/bastidas_ponce_etal.h5ad")
+```
+
+## Dataset 2
+
+Sources:
+- https://songdongyuan1994.github.io/ClusterDE/articles/ClusterDE-PBMC.html
+- https://figshare.com/ndownloader/files/41486283
+
+```{r}
+library(Seurat)
+dataset <- readRDS("data/pbmc.rds")
+dataset <- as.SingleCellExperiment(dataset)
+writeH5AD(dataset, "data/pbmc3k_10x.h5ad")
+```
