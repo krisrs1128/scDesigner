@@ -27,3 +27,34 @@ dataset <- readRDS("data/pbmc.rds")
 dataset <- as.SingleCellExperiment(dataset)
 writeH5AD(dataset, "data/pbmc3k_10x.h5ad")
 ```
+
+## Dataset 7
+
+```{r}
+library(SingleCellExperiment)
+library(zellkonverter)
+library(ExperimentHub)
+
+eh <- ExperimentHub()
+atac_data <- eh[["EH4546"]]
+sce <- SingleCellExperiment(assays = list(counts = atac_data))
+writeH5AD(sce, "atac_data.h5ad")
+```
+
+### Dataset 8
+
+Download directly from:
+
+https://github.com/GreenleafLab/MPAL-Single-Cell-2019?tab=readme-ov-file
+
+## Dataset 9
+
+```{r}
+library(Seurat)
+library(SeuratData)
+
+InstallData(ds = "thp1.eccite")
+eccite <- LoadData(ds = "thp1.eccite")
+eccite <- as.SingleCellExperiment(eccite)
+writeH5AD(eccite, "eccite.h5ad")
+```
