@@ -43,7 +43,8 @@ class AnnDataDataset(Dataset):
         self.adata = adata
         self.formula = formula
         self.chunk_size = chunk_size
-        self.device = get_device()
+        #self.device = get_device()
+        self.device = "cpu"
 
         # keeping track of covariate-related information
         self.obs_levels = categories(self.adata.obs)
@@ -118,7 +119,8 @@ def adata_loader(
 ) -> DataLoader:
     """Create a DataLoader from AnnData that returns batches of (X, obs)."""
     data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
-    device = get_device()
+    #device = get_device()
+    device = "cpu"
 
     # separate chunked from non-chunked cases
     if not getattr(adata, 'isbacked', False):
