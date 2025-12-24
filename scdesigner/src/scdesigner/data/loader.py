@@ -2,15 +2,17 @@ from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from anndata import AnnData
 from formulaic import model_matrix
 from torch.utils.data import Dataset, DataLoader
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 import scipy.sparse
 import torch
 
-def get_device():
+def get_device(device=None):
     """Detect and return the best available device (MPS, CUDA, or CPU)."""
-    if torch.backends.mps.is_available():
+    if device is not None:
+        return torch.device(device)
+    elif torch.backends.mps.is_available():
         return torch.device("mps")
     elif torch.cuda.is_available():
         return torch.device("cuda")
@@ -39,12 +41,12 @@ class AnnDataDataset(Dataset):
     of rows (of size `chunk_size`) into memory once and serve individual
     rows from that cached chunk. Chunks are moved to device for faster access.
     """
-    def __init__(self, adata: AnnData, formula: Dict[str, str], chunk_size: int):
+    def __init__(self, adata: AnnData, formula: Dict[str, str], chunk_size: int,
+                 device: Optional[torch.device] = None):
         self.adata = adata
         self.formula = formula
         self.chunk_size = chunk_size
-        #self.device = get_device()
-        self.device = "cpu"
+        self.device = get_device(device)
 
         # keeping track of covariate-related information
         self.obs_levels = categories(self.adata.obs)
@@ -115,18 +117,18 @@ def adata_loader(
     batch_size: int = 1024,
     shuffle: bool = False,
     num_workers: int = 0,
+    device=None,
     **kwargs
 ) -> DataLoader:
     """Create a DataLoader from AnnData that returns batches of (X, obs)."""
     data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
-    #device = get_device()
-    device = "cpu"
+    device = get_device(device)
 
     # separate chunked from non-chunked cases
     if not getattr(adata, 'isbacked', False):
         dataset = _preloaded_adata(adata, formula, device)
     else:
-        dataset = AnnDataDataset(adata, formula, chunk_size or 5000)
+        dataset = AnnDataDataset(adata, formula, chunk_size or 5000, device)
 
     return DataLoader(
         dataset,
