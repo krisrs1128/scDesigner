@@ -151,27 +151,87 @@ def fit_poisson_initial(X, counts, tol=1e-3, max_iter=100):
         mean = torch.exp(X @ beta)
         working_response = X @ beta + (counts - mean) / mean
 
-        # Fit with Poisson weights (mean)
         beta = solve_weighted_least_squares(X, mean, working_response)
         if torch.max(torch.abs(beta - beta_old)) < tol:
             break
 
     return beta
 
-# ==============================================================================
-# Global Initialization (Full Pass)
-# ==============================================================================
 
-def initialize_parameters_full_pass(loader, device, n_genes, p_mean, p_disp):
+def accumulate_poisson_statistics(loader, device, beta, n_genes, p_mean, clamp=10):
     """
-    Compute global parameter initialization using two passes over the data.
+    Accumulate weighted normal equations for Poisson IRLS across batches.
+
+    Args:
+        loader: DataLoader yielding (y_batch, x_dict)
+        device: torch.device
+        beta: Current coefficients (p_mean × n_genes)
+        n_genes: Number of genes
+        p_mean: Number of mean predictors
+        clamp: Maximum absolute value for linear predictor
+
+    Returns:
+        weighted_XX: Accumulated X'WX (n_genes × p_mean × p_mean)
+        weighted_Xy: Accumulated X'Wz (p_mean × n_genes)
+    """
+    weighted_XX = torch.zeros((n_genes, p_mean, p_mean), device=device)
+    weighted_Xy = torch.zeros((p_mean, n_genes), device=device)
+
+    for y_batch, x_dict in loader:
+        y_batch = y_batch.to(device)
+        X = x_dict['mean'].to(device)
+
+        linear_pred = torch.clamp(X @ beta, min=-clamp, max=clamp)
+        mean = torch.exp(linear_pred)
+        working_response = linear_pred + (y_batch - mean) / mean
+
+        X_outer = torch.einsum("ni,nj->nij", X, X)
+        weighted_XX += torch.einsum("nm,nij->mij", mean, X_outer)
+        weighted_Xy += torch.einsum("ni,nm->im", X, mean * working_response)
+
+    return weighted_XX, weighted_Xy
+
+
+def accumulate_dispersion_statistics(loader, device, beta, clamp=10):
+    """
+    Accumulate Pearson statistics for method of moments dispersion estimation.
+
+    Args:
+        loader: DataLoader yielding (y_batch, x_dict)
+        device: torch.device
+        beta: Mean coefficients (p_mean × n_genes)
+        clamp: Maximum absolute value for linear predictor
+
+    Returns:
+        sum_mean: Total predicted mean (n_genes,)
+        sum_pearson: Total Pearson chi-squared (n_genes,)
+        n_total: Total number of observations
+    """
+    sum_mean = torch.zeros(beta.shape[1], device=device)
+    sum_pearson = torch.zeros(beta.shape[1], device=device)
+    n_total = 0
+
+    for y_batch, x_dict in loader:
+        y_batch = y_batch.to(device)
+        X = x_dict['mean'].to(device)
+        linear_pred = torch.clamp(X @ beta, min=-clamp, max=clamp)
+        mean_batch = torch.exp(linear_pred)
+
+        sum_mean += mean_batch.sum(dim=0)
+        sum_pearson += ((y_batch - mean_batch)**2 / mean_batch).sum(dim=0)
+        n_total += y_batch.shape[0]
+
+    return sum_mean, sum_pearson, n_total
+
+
+def initialize_parameters(loader, device, n_genes, p_mean, p_disp,
+                                   max_iter=10, tol=1e-3, clamp=10):
+    """
+    Initialize parameters using batched Poisson IRLS followed by MoM dispersion.
 
     Logic:
-        1. Pass 1: Accumulate total counts to find the global mean per gene.
-           Initialize Beta intercept as log(global_mean).
-        2. Pass 2: Calculate Pearson residuals using global means to estimate
-           dispersion (theta) via Method of Moments.
-           Initialize Gamma intercept as log(theta).
+        1. Iteratively fit Poisson GLM by accumulating X'WX and X'WZ across batches
+        2. Use fitted Poisson means to estimate dispersion via Method of Moments
 
     Args:
         loader: DataLoader yielding (y_batch, x_dict)
@@ -179,44 +239,40 @@ def initialize_parameters_full_pass(loader, device, n_genes, p_mean, p_disp):
         n_genes: Number of response columns (genes)
         p_mean: Number of predictors in the mean model
         p_disp: Number of predictors in the dispersion model
+        max_iter: Maximum Poisson IRLS iterations
+        tol: Convergence tolerance for beta coefficients
 
     Returns:
         beta_init: (p_mean × n_genes) tensor
         gamma_init: (p_disp × n_genes) tensor
     """
-    # --- Pass 1: Global Mean ---
-    sum_y = torch.zeros(n_genes, device=device)
-    n_total = 0
+    beta = torch.zeros((p_mean, n_genes), device=device)
+    for _ in range(max_iter):
+        weighted_XX, weighted_Xy = accumulate_poisson_statistics(
+            loader, device, beta, n_genes, p_mean, clamp
+        )
 
-    for y_batch, _ in loader:
-        y_batch = y_batch.to(device)
-        sum_y += y_batch.sum(dim=0)
-        n_total += y_batch.shape[0]
+        eye = torch.eye(p_mean, device=device).unsqueeze(0)
+        weighted_XX_reg = weighted_XX + 1e-6 * eye
+        beta_new = torch.linalg.solve(
+            weighted_XX_reg, weighted_Xy.T.unsqueeze(-1)
+        ).squeeze(-1).T
 
-    global_mean = sum_y / n_total
-    beta_init = torch.zeros((p_mean, n_genes), device=device)
-    beta_init[0, :] = torch.log(torch.clamp(global_mean, min=1e-2))
+        if torch.max(torch.abs(beta_new - beta)) < tol:
+            beta = beta_new
+            break
+        beta = beta_new
 
-    # --- Pass 2: Global Dispersion (MoM) ---
-    # θ̂ = (Σμ) / max(Σ(Y-μ)²/μ - (n-p), 0.1)
-    sum_mu = torch.zeros(n_genes, device=device)
-    sum_pearson = torch.zeros(n_genes, device=device)
+    sum_mean, sum_pearson, n_total = accumulate_dispersion_statistics(
+        loader, device, beta, clamp
+    )
 
-    for y_batch, x_dict in loader:
-        y_batch = y_batch.to(device)
-        X = x_dict['mean'].to(device)
-        mu_batch = torch.exp(X @ beta_init)
+    degrees_freedom = n_total - p_mean
+    dispersion = sum_mean / torch.clamp(sum_pearson - degrees_freedom, min=0.1)
 
-        sum_mu += mu_batch.sum(dim=0)
-        sum_pearson += ((y_batch - mu_batch)**2 / mu_batch).sum(dim=0)
-
-    # Degrees of freedom correction
-    df = n_total - p_mean
-    disp_init = sum_mu / torch.clamp(sum_pearson - df, min=0.1)
-
-    gamma_init = torch.zeros((p_disp, n_genes), device=device)
-    gamma_init[0, :] = torch.log(torch.clamp(disp_init, min=0.1))
-    return beta_init, gamma_init
+    gamma = torch.zeros((p_disp, n_genes), device=device)
+    gamma[0, :] = torch.log(torch.clamp(dispersion, min=0.1))
+    return beta, gamma
 
 
 # ==============================================================================

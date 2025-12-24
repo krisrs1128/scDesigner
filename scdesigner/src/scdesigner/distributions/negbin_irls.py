@@ -1,6 +1,6 @@
 import torch
 from .negbin import NegBin
-from .negbin_irls_funs import initialize_parameters_full_pass, step_stochastic_irls
+from .negbin_irls_funs import initialize_parameters, step_stochastic_irls
 
 class NegBinIRLS(NegBin):
     """
@@ -8,10 +8,11 @@ class NegBinIRLS(NegBin):
     active response tracking and log-likelihood convergence.
     """
     def fit(self, max_epochs=10, tol=1e-4, eta=0.6, verbose=True, **kwargs):
-            if self.predict is None: self.setup_optimizer(**kwargs) #
+            if self.predict is None:
+                 self.setup_optimizer(**kwargs)
 
             # 1. Initialization using poisson fit
-            beta_init, gamma_init = initialize_parameters_full_pass(
+            beta_init, gamma_init = initialize_parameters(
                 self.loader, self.device, self.n_outcomes,
                 self.feature_dims['mean'], self.feature_dims['dispersion']
             )

@@ -348,7 +348,7 @@ class GLMPredictor(nn.Module):
         feature_dims: Dict[str, int],
         link_fns: Dict[str, callable] = None,
         loss_fn: Optional[callable] = None,
-        optimizer_class: Optional[callable] = torch.optim.Adam,
+        optimizer_class: Optional[callable] = torch.optim.AdamW,
         optimizer_kwargs: Optional[Dict] = None,
     ):
         super().__init__()

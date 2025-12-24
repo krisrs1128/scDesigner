@@ -41,7 +41,7 @@ class NegBin(Marginal):
 
     def setup_optimizer(
             self,
-            optimizer_class: Optional[callable] = torch.optim.Adam,
+            optimizer_class: Optional[callable] = torch.optim.AdamW,
             **optimizer_kwargs,
     ):
         if self.loader is None:
@@ -99,3 +99,7 @@ class NegBin(Marginal):
         if y is None:
             return _to_numpy(mu, r)
         return _to_numpy(mu, r, y)
+
+    def fit(self, max_epochs: int = 100, verbose: bool = True, **kwargs):
+        self.setup_optimizer(**kwargs)
+        return Marginal.fit(self, **kwargs)
