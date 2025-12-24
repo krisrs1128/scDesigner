@@ -118,7 +118,7 @@ class Marginal(ABC):
     >>> model = DummyModel("~ cell_type")
     >>> model.fit()
     """
-    def __init__(self, formula: Union[Dict, str]):
+    def __init__(self, formula: Union[Dict, str], device: Optional[torch.device]=None):
         self.formula = formula
         self.feature_dims = None
         self.loader = None
@@ -126,8 +126,7 @@ class Marginal(ABC):
         self.predict = None
         self.predictor_names = None
         self.parameters = None
-        #self.device = get_device()
-        self.device = "cpu"
+        self.device = get_device(device)
 
     def setup_data(self, adata: AnnData, batch_size: int = 1024, **kwargs):
         """Set up the dataloader for the AnnData object.
@@ -350,6 +349,7 @@ class GLMPredictor(nn.Module):
         loss_fn: Optional[callable] = None,
         optimizer_class: Optional[callable] = torch.optim.AdamW,
         optimizer_kwargs: Optional[Dict] = None,
+        device: Optional[torch.device] = None,
     ):
         super().__init__()
         self.n_outcomes = int(n_outcomes)
@@ -363,7 +363,7 @@ class GLMPredictor(nn.Module):
         self.reset_parameters()
 
         self.loss_fn = loss_fn
-        #self.to(get_device())
+        self.to(get_device(device))
 
         optimizer_kwargs = optimizer_kwargs or {}
         filtered_kwargs = _filter_kwargs(optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])

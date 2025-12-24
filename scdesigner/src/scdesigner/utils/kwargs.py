@@ -11,7 +11,7 @@ DEFAULT_ALLOWED_KWARGS = {
         'log_every_n_steps', 'accumulate_grad_batches'
     },
     'data': {
-        'chunk_size', 'batch_size', 'shuffle', 'num_workers'
+        'chunk_size', 'batch_size', 'shuffle', 'num_workers', 'device'
     },
     'optimizer': {
         'lr', 'learning_rate', 'momentum', 'weight_decay', 'eps', 'betas',
