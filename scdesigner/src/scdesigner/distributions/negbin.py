@@ -204,8 +204,8 @@ class NegBinInit(Marginal):
 
         # initialize using a poisson fit
         beta_init, gamma_init = initialize_parameters(
-            self.loader, self.device, self.n_outcomes,
-            self.feature_dims['mean'], self.feature_dims['dispersion']
+            self.loader, self.n_outcomes, self.feature_dims['mean'],
+            self.feature_dims['dispersion']
         )
         with torch.no_grad():
             self.predict.coefs['mean'].copy_(beta_init)

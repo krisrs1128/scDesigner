@@ -8,6 +8,7 @@ import torch
 import numpy as np
 from ..distributions import (
     NegBin,
+    NegBinInit,
     NegBinIRLS,
     ZeroInflatedNegBin,
     Gaussian,
@@ -259,7 +260,7 @@ class NegBinCopula(SCD3Simulator):
         dispersion_formula: Optional[str] = None,
         copula_formula: Optional[str] = None,
     ) -> None:
-        marginal = NegBin({"mean": mean_formula, "dispersion": dispersion_formula})
+        marginal = NegBinInit({"mean": mean_formula, "dispersion": dispersion_formula})
         covariance = StandardCopula(copula_formula)
         super().__init__(marginal, covariance)
 
@@ -478,3 +479,9 @@ class NegBinIRLSCopula(SCD3Simulator):
 
     def fit(self, adata: AnnData, batch_size: int = 8224, device="cpu", **kwargs):
         super().fit(adata, batch_size=batch_size, device=device, **kwargs)
+
+    def sample(self, obs=None, batch_size: int = 8224, **kwargs):
+        return super().sample(obs, batch_size, device="cpu", **kwargs)
+
+    def predict(self, obs=None, batch_size: int = 8224, **kwargs):
+        return super().predict(obs, batch_size, device="cpu", **kwargs)
