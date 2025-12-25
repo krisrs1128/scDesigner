@@ -1,4 +1,5 @@
 import torch
+from typing import Optional
 import torch.special as spec
 
 # ==============================================================================
@@ -96,9 +97,7 @@ def update_dispersion_coefficients(Z, counts, mean, gamma, clamp: float = 10.0):
 
     # Approximate Fisher information (replaces exact Hessian)
     # Approximation: θY/(θ + Y) ≈ θ²[ψ₁(θ) - ψ₁(Y + θ)]
-    info = (dispersion * counts) / (dispersion + counts)
-
-    weights = torch.clamp(info, min=1e-6)
+    weights = ((dispersion * counts) / (dispersion + counts)).clamp(min=1e-6)
     working_response = linear_pred + (dispersion * score) / weights
     return solve_weighted_least_squares(Z, weights, working_response)
 
@@ -179,11 +178,11 @@ def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clamp=10):
     weighted_Xy = torch.zeros((p_mean, n_genes))
 
     for y_batch, x_dict in loader:
-        X = x_dict['mean']
+        X = x_dict['mean'].to("cpu")
 
         linear_pred = torch.clamp(X @ beta, min=-clamp, max=clamp)
         mean = torch.exp(linear_pred)
-        working_response = linear_pred + (y_batch - mean) / mean
+        working_response = linear_pred + (y_batch.to("cpu") - mean) / mean
 
         X_outer = torch.einsum("ni,nj->nij", X, X)
         weighted_XX += torch.einsum("nm,nij->mij", mean, X_outer)
@@ -211,12 +210,12 @@ def accumulate_dispersion_statistics(loader, beta, clamp=10):
     n_total = 0
 
     for y_batch, x_dict in loader:
-        X = x_dict['mean']
+        X = x_dict['mean'].to('cpu')
         linear_pred = torch.clamp(X @ beta, min=-clamp, max=clamp)
         mean_batch = torch.exp(linear_pred)
 
         sum_mean += mean_batch.sum(dim=0)
-        sum_pearson += ((y_batch - mean_batch)**2 / mean_batch).sum(dim=0)
+        sum_pearson += ((y_batch.to('cpu') - mean_batch)**2 / mean_batch).sum(dim=0)
         n_total += y_batch.shape[0]
 
     return sum_mean, sum_pearson, n_total
@@ -293,10 +292,9 @@ def compute_batch_loglikelihood(y, mu, r):
     """
     # Note: log Γ(Y+1) is omitted if only used for relative change checks
     # between iterations on the same batch.
-    log_r = torch.log(r)
     ll = (
         torch.lgamma(y + r) - torch.lgamma(r)
-        + r * log_r + y * torch.log(mu)
+        + r * torch.log(r) + y * torch.log(mu)
         - (y + r) * torch.log(mu + r)
     )
     return torch.sum(ll, dim=0)
@@ -314,8 +312,9 @@ def step_stochastic_irls(
     gamma,
     eta: float = 0.8,
     tol: float = 1e-4,
+    ll_prev: Optional[torch.Tensor] = None,
     clamp_mean: float = 10.0,
-    clamp_disp: float = 10.0,
+    clamp_disp: float = 10.0
 ):
     """
     Perform a single damped Newton-Raphson update on a minibatch.
@@ -336,36 +335,29 @@ def step_stochastic_irls(
         tol: Relative log-likelihood change threshold for convergence.
 
     Returns:
-        beta_next: Updated mean coefficients (p × m)
         gamma_next: Updated dispersion coefficients (q × m)
         converged: Boolean mask of converged responses (m,)
     """
-    # --- 1. Baseline Likelihood ---
-    linear_pred_mu_old = torch.clamp(X @ beta, min=-clamp_mean, max=clamp_mean)
-    mu_old = torch.exp(linear_pred_mu_old)
-    linear_pred_r_old = torch.clamp(Z @ gamma, min=-clamp_disp, max=clamp_disp)
-    r_old = torch.exp(linear_pred_r_old)
-    ll_old = compute_batch_loglikelihood(y, mu_old, r_old)
-
     # --- 2. Update Mean (Beta) ---
     # Working weights W = μ/(1 + μ/θ)
-    beta_target = update_mean_coefficients(X, y, beta, r_old, clamp=clamp_mean)
+    beta_target = update_mean_coefficients(X, y, beta, torch.exp(Z @ gamma), clamp=clamp_mean)
     beta_next = (1 - eta) * beta + eta * beta_target
 
     # --- 3. Update Dispersion (Gamma) ---
     # Update depends on the latest mean estimates
-    linear_pred_mu_next = torch.clamp(X @ beta_next, min=-clamp_mean, max=clamp_mean)
-    mu_next = torch.exp(linear_pred_mu_next)
-    gamma_target = update_dispersion_coefficients(Z, y, mu_next, gamma, clamp=clamp_disp)
+    linear_pred_mu = torch.clamp(X @ beta_next, min=-clamp_mean, max=clamp_mean)
+    mu = torch.exp(linear_pred_mu)
+    gamma_target = update_dispersion_coefficients(Z, y, mu, gamma, clamp=clamp_disp)
     gamma_next = (1 - eta) * gamma + eta * gamma_target
 
     # --- 4. Convergence Check ---
     linear_pred_r_next = torch.clamp(Z @ gamma_next, min=-clamp_disp, max=clamp_disp)
-    r_next = torch.exp(linear_pred_r_next)
-    ll_next = compute_batch_loglikelihood(y, mu_next, r_next)
+    ll_next = compute_batch_loglikelihood(y, mu, torch.exp(linear_pred_r_next))
 
     # Relative improvement in the objective function
-    rel_change = torch.abs(ll_next - ll_old) / (torch.abs(ll_old) + 1e-10)
-    converged = rel_change <= tol
-
+    if ll_prev is not None:
+        rel_change = torch.abs(ll_next - ll_prev) / (torch.abs(ll_prev) + 1e-10)
+        converged = rel_change <= tol
+    else:
+        converged = False
     return beta_next, gamma_next, converged, ll_next
