@@ -20,5 +20,8 @@ DEFAULT_ALLOWED_KWARGS = {
         'verbose', 'patience', 'threshold', 'cooldown',
         'optimizer_class', 'optimizer', 'scheduler_class', 'scheduler',
         'monitor', 'interval', 'frequency'
+    },
+    'initialize': {
+        'tol', 'clamp', 'max_iter'
     }
 }

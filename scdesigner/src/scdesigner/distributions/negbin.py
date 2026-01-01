@@ -1,11 +1,12 @@
-from ..data.formula import standardize_formula
 from ..base.marginal import GLMPredictor, Marginal
+from ..data.formula import standardize_formula
 from ..data.loader import _to_numpy
+from ..utils.kwargs import _filter_kwargs, DEFAULT_ALLOWED_KWARGS
 from .negbin_irls_funs import initialize_parameters
-from typing import Union, Dict, Optional, Tuple
-import torch
-import numpy as np
 from scipy.stats import nbinom
+from typing import Union, Dict, Optional, Tuple
+import numpy as np
+import torch
 
 class NegBin(Marginal):
     """Negative-binomial marginal estimator
@@ -203,9 +204,11 @@ class NegBinInit(Marginal):
                 self.setup_optimizer(**kwargs)
 
         # initialize using a poisson fit
+        initialize_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['initialize'])
         beta_init, gamma_init = initialize_parameters(
             self.loader, self.n_outcomes, self.feature_dims['mean'],
-            self.feature_dims['dispersion']
+            self.feature_dims['dispersion'],
+            **initialize_kwargs
         )
         with torch.no_grad():
             self.predict.coefs['mean'].copy_(beta_init)

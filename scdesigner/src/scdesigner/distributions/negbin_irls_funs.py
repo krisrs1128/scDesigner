@@ -198,7 +198,7 @@ def fit_poisson_initial(X, counts, tol: float = 1e-3, max_iter: int = 100, clamp
     return beta
 
 
-def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clamp=10):
+def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clamp = 10):
     """
     Accumulate weighted normal equations for Poisson IRLS across batches.
 
@@ -239,7 +239,7 @@ def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clamp=10):
     return weighted_XX, weighted_Xy
 
 
-def accumulate_dispersion_statistics(loader, beta, clamp=10):
+def accumulate_dispersion_statistics(loader, beta, clamp = 10):
     """
     Accumulate Pearson statistics for method of moments dispersion estimation.
 
@@ -277,8 +277,8 @@ def accumulate_dispersion_statistics(loader, beta, clamp=10):
     return sum_mean, sum_pearson, n_total
 
 
-def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter=10,
-                          tol=1e-3, clamp=10):
+def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
+                          tol = 1e-3, clamp = 10):
     """
     Initialize parameters using batched Poisson IRLS followed by MoM dispersion.
 
