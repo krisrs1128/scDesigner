@@ -8,6 +8,8 @@ import torch
 import numpy as np
 from ..distributions import (
     NegBin,
+    NegBinInit,
+    NegBinIRLS,
     ZeroInflatedNegBin,
     Gaussian,
     Poisson,
@@ -437,5 +439,86 @@ class ZeroInflatedPoissonCopula(SCD3Simulator):
         marginal = ZeroInflatedPoisson(
             {"mean": mean_formula, "zero_inflation": zero_inflation_formula}
         )
+        covariance = StandardCopula(copula_formula)
+        super().__init__(marginal, covariance)
+
+class NegBinIRLSCopula(SCD3Simulator):
+    """Simulator using negative binomial marginals with a Gaussian copula.
+
+    Parameters
+    ----------
+    mean_formula : str or None, optional
+        Model formula for the mean parameter of the negative binomial
+        marginal (e.g. ``"~ 1"`` or ``"~ group"``). If ``None``, a
+        default constant-mean formula is used.
+    dispersion_formula : str or None, optional
+        Model formula for the dispersion parameter of the negative
+        binomial marginal. If ``None``, a default constant-dispersion
+        formula is used.
+    copula_formula : str or None, optional
+        Copula formula describing how copula depends on experimental
+        or biological conditions (e.g. ``"~ group"``).If ``None``,
+        a default intercept-only formula is used.
+
+    See Also
+    --------
+    :class:`SCD3Simulator`
+    :class:`NegBin`
+    :class:`StandardCopula`
+    """
+
+    def __init__(
+        self,
+        mean_formula: Optional[str] = None,
+        dispersion_formula: Optional[str] = None,
+        copula_formula: Optional[str] = None
+    ) -> None:
+        marginal = NegBinIRLS({"mean": mean_formula, "dispersion": dispersion_formula})
+        covariance = StandardCopula(copula_formula)
+        super().__init__(marginal, covariance)
+
+    def fit(self, adata: AnnData, batch_size: int = 8224, device="cpu", **kwargs):
+        super().fit(adata, batch_size=batch_size, device=device, **kwargs)
+
+    def sample(self, obs=None, batch_size: int = 8224, **kwargs):
+        return super().sample(obs, batch_size, device="cpu", **kwargs)
+
+    def predict(self, obs=None, batch_size: int = 8224, **kwargs):
+        return super().predict(obs, batch_size, device="cpu", **kwargs)
+
+class NegBinInitCopula(SCD3Simulator):
+    """Simulator using negative binomial marginals with a Gaussian copula.
+
+    Unlike NegBinCopula, this initializes using an initial Poisson fit.
+
+    Parameters
+    ----------
+    mean_formula : str or None, optional
+        Model formula for the mean parameter of the negative binomial
+        marginal (e.g. ``"~ 1"`` or ``"~ group"``). If ``None``, a
+        default constant-mean formula is used.
+    dispersion_formula : str or None, optional
+        Model formula for the dispersion parameter of the negative
+        binomial marginal. If ``None``, a default constant-dispersion
+        formula is used.
+    copula_formula : str or None, optional
+        Copula formula describing how copula depends on experimental
+        or biological conditions (e.g. ``"~ group"``).If ``None``,
+        a default intercept-only formula is used.
+
+    See Also
+    --------
+    :class:`SCD3Simulator`
+    :class:`NegBin`
+    :class:`StandardCopula`
+    """
+
+    def __init__(
+        self,
+        mean_formula: Optional[str] = None,
+        dispersion_formula: Optional[str] = None,
+        copula_formula: Optional[str] = None,
+    ) -> None:
+        marginal = NegBinInit({"mean": mean_formula, "dispersion": dispersion_formula})
         covariance = StandardCopula(copula_formula)
         super().__init__(marginal, covariance)

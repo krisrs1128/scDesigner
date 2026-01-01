@@ -16,15 +16,17 @@ from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from anndata import AnnData
 from formulaic import model_matrix
 from torch.utils.data import Dataset, DataLoader
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 import scipy.sparse
 import torch
 
-def get_device():
+def get_device(device=None):
     """Detect and return the best available device (MPS, CUDA, or CPU).
     """
+    if device is not None:
+        return torch.device(device)
     if torch.backends.mps.is_available():
         return torch.device("mps")
     elif torch.cuda.is_available():
@@ -51,9 +53,9 @@ class PreloadedDataset(Dataset):
         Mapping from formula key to the names of the design matrix columns.
     """
     def __init__(
-        self, 
-        y_tensor: torch.Tensor, 
-        x_tensors: Dict[str, torch.Tensor], 
+        self,
+        y_tensor: torch.Tensor,
+        x_tensors: Dict[str, torch.Tensor],
         predictor_names):
         self.y = y_tensor
         self.x = x_tensors
@@ -90,11 +92,12 @@ class AnnDataDataset(Dataset):
     device : torch.device
         Device used for caching tensors.
     """
-    def __init__(self, adata: AnnData, formula: Dict[str, str], chunk_size: int):
+    def __init__(self, adata: AnnData, formula: Dict[str, str], chunk_size: int,
+                 device: Optional[torch.device] = None):
         self.adata = adata
         self.formula = formula
         self.chunk_size = chunk_size
-        self.device = get_device()
+        self.device = get_device(device)
 
         # keeping track of covariate-related information
         self.obs_levels = categories(self.adata.obs)
@@ -122,7 +125,7 @@ class AnnDataDataset(Dataset):
         # Get obs data from GPU-cached matrices
         obs_dict = {}
         for key in self.formula.keys():
-            obs_dict[key] = self.obs_matrices[key][local_idx: local_idx + 1]
+            obs_dict[key] = self.obs_matrices[key][local_idx]
         return self._chunk_X[local_idx], obs_dict
 
     def _ensure_chunk_loaded(self, idx: int) -> None:
@@ -165,6 +168,7 @@ def adata_loader(
     batch_size: int = 1024,
     shuffle: bool = False,
     num_workers: int = 0,
+    device=None,
     **kwargs
 ) -> DataLoader:
     """Create a :class:`~torch.utils.data.DataLoader` over an AnnData dataset.
@@ -203,13 +207,13 @@ def adata_loader(
         DataLoader over the dataset.
     """
     data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
-    device = get_device()
+    device = get_device(device)
 
     # separate chunked from non-chunked cases
     if not getattr(adata, 'isbacked', False):
         dataset = _preloaded_adata(adata, formula, device)
     else:
-        dataset = AnnDataDataset(adata, formula, chunk_size or 5000)
+        dataset = AnnDataDataset(adata, formula, chunk_size or 5000, device)
 
     return DataLoader(
         dataset,

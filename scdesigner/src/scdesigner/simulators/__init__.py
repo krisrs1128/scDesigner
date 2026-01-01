@@ -1,16 +1,28 @@
 """Simulator classes"""
 
-from .scd3 import NegBinCopula, ZeroInflatedNegBinCopula, BernoulliCopula, GaussianCopula, PoissonCopula, ZeroInflatedPoissonCopula
+from .scd3 import (
+    BernoulliCopula,
+    GaussianCopula,
+    NegBinCopula,
+    NegBinInitCopula,
+    NegBinIRLSCopula,
+    PoissonCopula,
+    ZeroInflatedNegBinCopula,
+    ZeroInflatedPoissonCopula
+)
 from .composite import CompositeCopula
 from .positive_nonnegative_matrix_factorization import PositiveNMF
 
 __all__ = [
-    "NegBinCopula",
-    "ZeroInflatedNegBinCopula",
     "BernoulliCopula",
-    "GaussianCopula",
     "CompositeCopula",
-    "PositiveNMF",
+    "GaussianCopula",
+    "NegBinCopula",
+    "NegBinCopula",
+    "NegBinIRLSCopula",
+    "NegBinInitCopula",
     "PoissonCopula",
-    "ZeroInflatedPoissonCopula",
+    "PositiveNMF",
+    "ZeroInflatedNegBinCopula",
+    "ZeroInflatedPoissonCopula"
 ]
