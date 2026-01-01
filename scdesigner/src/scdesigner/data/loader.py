@@ -74,7 +74,7 @@ class AnnDataDataset(Dataset):
         # Get obs data from GPU-cached matrices
         obs_dict = {}
         for key in self.formula.keys():
-            obs_dict[key] = self.obs_matrices[key][local_idx: local_idx + 1]
+            obs_dict[key] = self.obs_matrices[key][local_idx]
         return self._chunk_X[local_idx], obs_dict
 
     def _ensure_chunk_loaded(self, idx: int) -> None:
