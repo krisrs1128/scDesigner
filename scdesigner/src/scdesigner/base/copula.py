@@ -10,7 +10,7 @@ from typing import Optional, Union
 
 class Copula(ABC):
     """Abstract Copula Class
-    
+
     The scDesign3 model is built from two components: a collection of marginal
     models, and a copula to tie them together. This class implements an abstract
     version of the copula. Within this class, we may define different subclasses
@@ -18,7 +18,7 @@ class Copula(ABC):
     experimental and biological conditions. Despite these differences, the
     overall class must always provide utilities for fitting and sampling
     dependent uniform variables.
-    
+
     Parameters
     ----------
     formula : str
@@ -42,7 +42,7 @@ class Copula(ABC):
         covariance matrix, but may also use more memory-efficient approximations
         like when using CovarianceStructure with a constraint on
         num_modeled_genes.
-        
+
     Examples
     --------
     >>> import scanpy as sc
@@ -96,7 +96,7 @@ class Copula(ABC):
             adata input object.
         """
         self.adata = adata
-        self.formula = self.formula | marginal_formula # 
+        self.formula = self.formula | marginal_formula #
         self.loader = adata_loader(adata, self.formula, batch_size=batch_size, **kwargs)
         X_batch, _ = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
@@ -119,7 +119,7 @@ class Copula(ABC):
         group : Union[str, list, None], optional
             The group or groups to apply the transformation to. If None, the
             transformation is applied to all groups.
-            
+
         Returns
         -------
         None

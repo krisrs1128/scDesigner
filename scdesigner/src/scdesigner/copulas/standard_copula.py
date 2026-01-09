@@ -226,7 +226,7 @@ class StandardCopula(Copula):
         group_data = x_dict.get("group")
         memberships = group_data.cpu().numpy()
         group_ix = {
-            g: np.where(memberships[:, self._group_col[g] == 1])[0] for g in self.groups
+            g: np.where(memberships[:, self._group_col[g]] == 1)[0] for g in self.groups
         }
 
         # initialize the result
@@ -286,7 +286,7 @@ class StandardCopula(Copula):
         group_data = x_dict.get("group")
         memberships = group_data.cpu().numpy()
         group_ix = {
-            g: np.where(memberships[:, self._group_col[g] == 1])[0] for g in self.groups
+            g: np.where(memberships[:, self._group_col[g]] == 1)[0] for g in self.groups
         }
 
         ll = np.zeros(len(z))
