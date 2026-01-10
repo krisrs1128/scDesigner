@@ -2,6 +2,7 @@ import torch
 from .negbin import NegBin
 from .negbin_irls_funs import initialize_parameters, step_stochastic_irls
 from ..data.formula import standardize_formula
+from ..utils.kwargs import _filter_kwargs, DEFAULT_ALLOWED_KWARGS
 from typing import Union, Dict
 
 
@@ -15,14 +16,16 @@ class NegBinIRLS(NegBin):
         super().__init__(formula, device="cpu")
 
 
-    def fit(self, max_epochs=10, tol=1e-6, eta=0.1, verbose=True, **kwargs):
+    def fit(self, max_epochs=10, tol=1e-4, eta=0.1, verbose=True, **kwargs):
         if self.predict is None:
                 self.setup_optimizer(**kwargs)
 
         # 1. Initialization using poisson fit
+        initialize_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['initialize'])
         beta_init, gamma_init = initialize_parameters(
-            self.loader, self.n_outcomes,
-            self.feature_dims['mean'], self.feature_dims['dispersion']
+            self.loader, self.n_outcomes, self.feature_dims['mean'],
+            self.feature_dims['dispersion'],
+            **initialize_kwargs
         )
 
         with torch.no_grad():
@@ -34,10 +37,11 @@ class NegBinIRLS(NegBin):
         ll_ = - 1e9 * torch.ones(self.n_outcomes, dtype=torch.float32)
 
         for epoch in range(max_epochs):
+            if not active_mask.any(): break
             ll, n_batches = 0.0, 0
+
             with torch.no_grad():
                 for y_batch, x_dict in self.loader:
-                    if not active_mask.any(): break
 
                     # Slice active genes
                     idx = torch.where(active_mask)[0]

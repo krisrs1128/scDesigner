@@ -47,7 +47,7 @@ def solve_weighted_least_squares(X, weights, responses):
 # Mean Parameter Updates (Beta)
 # ==============================================================================
 
-def update_mean_coefficients(X, counts, beta, dispersion, clamp: float = 10.0):
+def update_mean_coefficients(X, counts, beta, dispersion, clip: float = 5.0):
     """
     Update mean model coefficients using one Newton-Raphson step.
 
@@ -65,15 +65,15 @@ def update_mean_coefficients(X, counts, beta, dispersion, clamp: float = 10.0):
         Current coefficients (p × m)
     dispersion : torch.Tensor
         Current dispersion parameters (n × m)
-    clamp : float, optional
-        Maximum absolute value for linear predictor, by default 10.0
+    clip : float, optional
+        Maximum absolute value for linear predictor, by default 5.0
 
     Returns
     -------
     torch.Tensor
         Updated coefficients (p × m)
     """
-    linear_pred = torch.clamp(X @ beta, min=-clamp, max=clamp)
+    linear_pred = torch.clip(X @ beta, min=-clip, max=clip)
     mean = torch.exp(linear_pred)
     weights = mean / (1 + mean / dispersion)
     working_response = linear_pred + (counts - mean) / mean
@@ -84,7 +84,7 @@ def update_mean_coefficients(X, counts, beta, dispersion, clamp: float = 10.0):
 # Dispersion Parameter Updates (Gamma)
 # ==============================================================================
 
-def update_dispersion_coefficients(Z, counts, mean, gamma, clamp: float = 10.0):
+def update_dispersion_coefficients(Z, counts, mean, gamma, clip: float = 5.0):
     """
     Update dispersion model coefficients using one Fisher scoring step.
 
@@ -103,15 +103,15 @@ def update_dispersion_coefficients(Z, counts, mean, gamma, clamp: float = 10.0):
         Current mean estimates (n × m)
     gamma : torch.Tensor
         Current dispersion coefficients (q × m)
-    clamp : float, optional
-        Maximum absolute value for linear predictor, by default 10.0
+    clip : float, optional
+        Maximum absolute value for linear predictor, by default 5.0
 
     Returns
     -------
     torch.Tensor
         Updated dispersion coefficients (q × m)
     """
-    linear_pred = torch.clamp(Z @ gamma, min=-clamp, max=clamp)
+    linear_pred = torch.clip(Z @ gamma, min=-clip, max=clip)
     dispersion = torch.exp(linear_pred)
 
     # Score: ∂ℓ/∂θ
@@ -121,7 +121,7 @@ def update_dispersion_coefficients(Z, counts, mean, gamma, clamp: float = 10.0):
 
     # Approximate Fisher information (replaces exact Hessian)
     # Approximation: θY/(θ + Y) ≈ θ²[ψ₁(θ) - ψ₁(Y + θ)]
-    weights = ((dispersion * counts) / (dispersion + counts)).clamp(min=1e-6)
+    weights = ((dispersion * counts) / (dispersion + counts)).clip(min=1e-6)
     working_response = linear_pred + (dispersion * score) / weights
     return solve_weighted_least_squares(Z, weights, working_response)
 
@@ -156,11 +156,11 @@ def estimate_constant_dispersion(X, counts, beta):
     sum_mean = torch.sum(mean, dim=0)
 
     degrees_freedom = counts.shape[0] - X.shape[1]
-    dispersion = sum_mean / torch.clamp(pearson_chi2 - degrees_freedom, min=0.1)
-    return torch.clamp(dispersion, min=0.1)
+    dispersion = sum_mean / torch.clip(pearson_chi2 - degrees_freedom, min=0.1)
+    return torch.clip(dispersion, min=0.1)
 
 
-def fit_poisson_initial(X, counts, tol: float = 1e-3, max_iter: int = 100, clamp: float = 10.0):
+def fit_poisson_initial(X, counts, tol: float = 1e-3, max_iter: int = 100, clip: float = 5.0):
     """
     Fit Poisson GLM to initialize mean parameters.
 
@@ -174,8 +174,8 @@ def fit_poisson_initial(X, counts, tol: float = 1e-3, max_iter: int = 100, clamp
         Convergence tolerance, by default 1e-3
     max_iter : int, optional
         Maximum iterations, by default 100
-    clamp : float, optional
-        Maximum absolute value for linear predictor, by default 10.0
+    clip : float, optional
+        Maximum absolute value for linear predictor, by default 5.0
 
     Returns
     -------
@@ -187,7 +187,7 @@ def fit_poisson_initial(X, counts, tol: float = 1e-3, max_iter: int = 100, clamp
 
     for _ in range(max_iter):
         beta_old = beta.clone()
-        linear_pred = torch.clamp(X @ beta, min=-clamp, max=clamp)
+        linear_pred = torch.clip(X @ beta, min=-clip, max=clip)
         mean = torch.exp(linear_pred)
         working_response = linear_pred + (counts - mean) / mean
 
@@ -198,7 +198,7 @@ def fit_poisson_initial(X, counts, tol: float = 1e-3, max_iter: int = 100, clamp
     return beta
 
 
-def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clamp = 10):
+def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clip = 5):
     """
     Accumulate weighted normal equations for Poisson IRLS across batches.
 
@@ -212,8 +212,8 @@ def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clamp = 10):
         Number of genes
     p_mean : int
         Number of mean predictors
-    clamp : float, optional
-        Maximum absolute value for linear predictor, by default 10
+    clip : float, optional
+        Maximum absolute value for linear predictor, by default 5
 
     Returns
     -------
@@ -228,7 +228,7 @@ def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clamp = 10):
     for y_batch, x_dict in loader:
         X = x_dict['mean'].to("cpu")
 
-        linear_pred = torch.clamp(X @ beta, min=-clamp, max=clamp)
+        linear_pred = torch.clip(X @ beta, min=-clip, max=clip)
         mean = torch.exp(linear_pred)
         working_response = linear_pred + (y_batch.to("cpu") - mean) / mean
 
@@ -239,7 +239,7 @@ def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clamp = 10):
     return weighted_XX, weighted_Xy
 
 
-def accumulate_dispersion_statistics(loader, beta, clamp = 10):
+def accumulate_dispersion_statistics(loader, beta, clip = 5):
     """
     Accumulate Pearson statistics for method of moments dispersion estimation.
 
@@ -249,8 +249,8 @@ def accumulate_dispersion_statistics(loader, beta, clamp = 10):
         DataLoader yielding (y_batch, x_dict)
     beta : torch.Tensor
         Mean coefficients (p_mean × n_genes)
-    clamp : float, optional
-        Maximum absolute value for linear predictor, by default 10
+    clip : float, optional
+        Maximum absolute value for linear predictor, by default 5
 
     Returns
     -------
@@ -267,7 +267,7 @@ def accumulate_dispersion_statistics(loader, beta, clamp = 10):
 
     for y_batch, x_dict in loader:
         X = x_dict['mean'].to('cpu')
-        linear_pred = torch.clamp(X @ beta, min=-clamp, max=clamp)
+        linear_pred = torch.clip(X @ beta, min=-clip, max=clip)
         mean_batch = torch.exp(linear_pred)
 
         sum_mean += mean_batch.sum(dim=0)
@@ -278,7 +278,7 @@ def accumulate_dispersion_statistics(loader, beta, clamp = 10):
 
 
 def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
-                          tol = 1e-3, clamp = 10):
+                          tol = 1e-3, clip = 5):
     """
     Initialize parameters using batched Poisson IRLS followed by MoM dispersion.
 
@@ -300,7 +300,7 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
         Maximum Poisson IRLS iterations, by default 10
     tol : float, optional
         Convergence tolerance for beta coefficients, by default 1e-3
-    clamp : float, optional
+    clip : float, optional
         Maximum absolute value for linear predictor, by default 10
 
     Returns
@@ -313,7 +313,7 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
     beta = torch.zeros((p_mean, n_genes))
     for _ in range(max_iter):
         weighted_XX, weighted_Xy = accumulate_poisson_statistics(
-            loader, beta, n_genes, p_mean, clamp
+            loader, beta, n_genes, p_mean, clip
         )
 
         eye = torch.eye(p_mean).unsqueeze(0)
@@ -328,14 +328,14 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
         beta = beta_new
 
     sum_mean, sum_pearson, n_total = accumulate_dispersion_statistics(
-        loader, beta, clamp
+        loader, beta, clip
     )
 
     degrees_freedom = n_total - p_mean
-    dispersion = sum_mean / torch.clamp(sum_pearson - degrees_freedom, min=0.1)
+    dispersion = sum_mean / torch.clip(sum_pearson - degrees_freedom, min=0.1)
 
     gamma = torch.zeros((p_disp, n_genes))
-    gamma[0, :] = torch.log(torch.clamp(dispersion, min=0.1))
+    gamma[0, :] = torch.log(torch.clip(dispersion, min=0.1))
     return beta, gamma
 
 
@@ -385,8 +385,8 @@ def step_stochastic_irls(
     eta: float = 0.8,
     tol: float = 1e-4,
     ll_prev: Optional[torch.Tensor] = None,
-    clamp_mean: float = 10.0,
-    clamp_disp: float = 10.0
+    clip_mean: float = 10.0,
+    clip_disp: float = 10.0
 ):
     """
     Perform a single damped Newton-Raphson update on a minibatch.
@@ -415,9 +415,9 @@ def step_stochastic_irls(
         Relative log-likelihood change threshold for convergence, by default 1e-4
     ll_prev : torch.Tensor, optional
         Previous log-likelihood values, by default None
-    clamp_mean : float, optional
+    clip_mean : float, optional
         Maximum absolute value for mean linear predictor, by default 10.0
-    clamp_disp : float, optional
+    clip_disp : float, optional
         Maximum absolute value for dispersion linear predictor, by default 10.0
 
     Returns
@@ -433,18 +433,18 @@ def step_stochastic_irls(
     """
     # --- 2. Update Mean (Beta) ---
     # Working weights W = μ/(1 + μ/θ)
-    beta_target = update_mean_coefficients(X, y, beta, torch.exp(Z @ gamma), clamp=clamp_mean)
+    beta_target = update_mean_coefficients(X, y, beta, torch.exp(Z @ gamma), clip=clip_mean)
     beta_next = (1 - eta) * beta + eta * beta_target
 
     # --- 3. Update Dispersion (Gamma) ---
     # Update depends on the latest mean estimates
-    linear_pred_mu = torch.clamp(X @ beta_next, min=-clamp_mean, max=clamp_mean)
+    linear_pred_mu = torch.clip(X @ beta_next, min=-clip_mean, max=clip_mean)
     mu = torch.exp(linear_pred_mu)
-    gamma_target = update_dispersion_coefficients(Z, y, mu, gamma, clamp=clamp_disp)
+    gamma_target = update_dispersion_coefficients(Z, y, mu, gamma, clip=clip_disp)
     gamma_next = (1 - eta) * gamma + eta * gamma_target
 
     # --- 4. Convergence Check ---
-    linear_pred_r_next = torch.clamp(Z @ gamma_next, min=-clamp_disp, max=clamp_disp)
+    linear_pred_r_next = torch.clip(Z @ gamma_next, min=-clip_disp, max=clip_disp)
     ll_next = compute_batch_loglikelihood(y, mu, torch.exp(linear_pred_r_next))
 
     # Relative improvement in the objective function
