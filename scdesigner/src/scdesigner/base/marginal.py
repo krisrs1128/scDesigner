@@ -161,7 +161,7 @@ class Marginal(ABC):
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
         self.predictor_names = self.loader.dataset.predictor_names
 
-    def fit(self, max_epochs: int = 100, verbose: bool = True, **kwargs):
+    def fit(self, max_epochs: int = 50, verbose: bool = True, **kwargs):
         """Fit the marginal predictor using vanilla PyTorch training loop.
 
         This method runs stochastic gradient optimization using the template

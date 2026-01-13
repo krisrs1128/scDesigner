@@ -1,0 +1,190 @@
+---
+title: scDesigner Server Logic
+embed-resources: true
+execute:
+  message: false
+  warning: false
+---
+
+Here are some libraries we'll need.
+
+```{r}
+library(scDesigner)
+library(SummarizedExperiment)
+library(glue)
+library(stringr)
+```
+
+```{r}
+FAMILY_MAP <- list(
+    Gaussian = "GaussianCopula",
+    Bernoulli = "BernoulliCopula",
+    NegBin = "NegBinCopula",
+    NegBinIRLS = "NegBinIRLSCopula",
+    Poisson = "PoissonCopula",
+    pNMF = "PositiveNMF",
+    ZeroInflatedNegBin = "ZeroInflatedNegBinCopula",
+    ZeroInflatedPoisson = "ZeroInflatedPoissonCopula"
+)
+```
+
+The functions represent how I imagine the user input will map to the scDesigner
+code.
+
+```{r}
+make_formulas <- function(formulas) {
+    formula_strs <- list()
+
+    for (param in names(formulas)) {
+        terms <- c()
+        variables <- formulas[[param]]
+
+        for (var in variables) {
+            if (!is.null(var$transform) && var$transform$type == "spline") {
+                terms <- c(terms, glue("bs({var$variable}, df={var$transform$df})"))
+            } else {
+                terms <- c(terms, var$variable)
+            }
+        }
+
+        formula_key <- glue("{param}_formula")
+        formula_strs[[formula_key]] <- if (length(terms) > 0) {
+            glue("~ {str_c(terms, collapse = ' + ')}")
+        } else {
+            "~ 1"
+        }
+    }
+
+    formula_strs
+}
+
+generate_data <- function(state) {
+    class_name <- FAMILY_MAP[[state$family]]
+    simulator_class <- get(class_name)
+    fmla <- make_formulas(state$formulas)
+
+    simulator <- do.call(simulator_class$new, fmla)
+    simulator <- simulator$fit(state$template, max_epochs = 10)
+
+    if (!is.null(state$n_cells)) {
+        ix <- sample(1:nrow(state$template), state$n_cells, replace = TRUE)
+        new_obs <- colData(state$template[, ix])
+    } else {
+        new_obs <- colData(state$template)
+    }
+    new_data <- simulator$sample(as.data.frame(new_obs))
+    rownames(new_data) <- rownames(state$template)
+    list(parameters = simulator$parameters(), new_data = new_data)
+}
+```
+
+Here is a version of a negative binomial model where we use cell_type as a predictor and don't have any change as a function of pseudotime.
+
+```{r}
+example_sce <- fetch_pancreas()
+
+formulas <- list(
+    mean = list(list(variable = "cell_type")),
+    dispersion = list(list(variable = "cell_type")),
+    copula = list()
+)
+
+state <- list(
+    template = example_sce,
+    family = "NegBin",
+    formulas = formulas
+)
+
+result <- generate_data(state)
+parameters <- result$parameters
+adata_sim <- result$new_data
+```
+
+Here are the coefficients for each gene's negative binomial model.
+
+```{r}
+parameters$marginal$mean[, 1:10]
+```
+
+Here's the estimated copula covariance matrix.
+
+```{r}
+parameters$copula$Intercept
+```
+
+We can let the copula correlations depend on the cell type.
+
+```{r}
+formulas$copula <- list(list(variable = "cell_type"))
+state$formulas <- formulas
+result <- generate_data(state)
+parameters <- result$parameters
+
+parameters$copula$`cell_type[T.Beta]`
+```
+
+We can allow the means and dispersions to vary smoothly over pseudotime by using
+spline transformations in the predictors. The `make_formulas` function
+transforms the object below into strings like `~ bs(pseudotime, df=8)`. I'm
+breaking that string down into this structure because I think it might map more
+easily onto user inputs (e.g., selecting variables from a list populated by the
+`obs` field of the anndata object, then clicking whether a spline should be
+used). But internally we just need the formula strings -- let me know if there's
+a more natural data structure from a UI perspective.
+
+```{r}
+formulas <- list(
+    mean = list(list(variable = "pseudotime", transform = list(type = "spline", df = 8))),
+    dispersion = list(list(variable = "pseudotime", transform = list(type = "spline", df = 3))),
+    copula = list(list(variable = "cell_type"))
+)
+
+state <- list(
+    template = example_sce,
+    family = "NegBin",
+    formulas = formulas
+)
+
+result <- generate_data(state)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+theme_set(theme_classic())
+
+plot_df <- bind_rows(
+  as.data.frame(as.matrix(t(assay(example_sce)))) |> mutate(type = "real", pseudotime = example_sce$pseudotime),
+  as.data.frame(as.matrix(t(assay(result$new_data)))) |> mutate(type = "sim", pseudotime = result$new_data$pseudotime)
+) |>
+  pivot_longer(cols = -c(type, pseudotime), names_to = "gene", values_to = "expression")
+
+plot_df |>
+  filter(gene %in% rownames(example_sce)[1:8]) |>
+  ggplot(aes(pseudotime, log1p(expression), color = type)) +
+  geom_point(alpha = 0.3) +
+  facet_wrap(~gene, scales = "free_y", nrow = 2)
+```
+
+Here is an example where we use a Gaussian on log transformed data.
+
+```{r}
+formulas <- list(
+    mean = list(list(variable = "pseudotime", transform = list(type = "spline", df = 8))),
+    sdev = list(list(variable = "pseudotime", transform = list(type = "spline", df = 3))),
+    copula = list(list(variable = "cell_type"))
+)
+
+example_sce_transform <- example_sce
+example_sce_transform@assays@data$X <- log1p(example_sce_transform@assays@data$X)
+
+state <- list(
+    template = example_sce_transform,
+    family = "Gaussian",
+    formulas = formulas
+)
+
+result <- generate_data(state)
+result$parameters$marginal$mean[, 1:10]
+```

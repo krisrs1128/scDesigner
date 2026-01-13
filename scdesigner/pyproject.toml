@@ -1,6 +1,6 @@
 [project]
 name = "scdesigner"
-version = "0.0.5"
+version = "0.0.11"
 authors = [
   { name="Kris Sankaran", email="ksankaran@wisc.edu" },
 ]
@@ -29,8 +29,11 @@ Homepage = "https://github.com/krisrs1128/scDesigner/"
 Issues = "https://github.com/krisrs1128/scDesigner/Issues/"
 
 [build-system]
-requires = ["anndata", "formulaic", "pandas", "numpy", "lightning", "scipy", "hatchling", "torch", "rich"]
+requires = ["anndata", "formulaic", "pandas", "numpy", "scipy", "hatchling", "torch", "rich"]
 build-backend = "hatchling.build"
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scdesigner"]

@@ -1,6 +1,6 @@
 """Marginal distribution implementations."""
 
-from .negbin import NegBin, NegBinInit
+from .negbin import NegBin
 from .negbin_irls import NegBinIRLS
 from .zero_inflated_negbin import ZeroInflatedNegBin
 from .gaussian import Gaussian
@@ -10,7 +10,6 @@ from .zero_inflated_poisson import ZeroInflatedPoisson
 
 __all__ = [
     "NegBin",
-    "NegBinInit",
     "NegBinIRLS",
     "ZeroInflatedNegBin",
     "Gaussian",

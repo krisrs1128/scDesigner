@@ -1,54 +1,31 @@
-#' @importFrom reticulate import import_builtins
-#' @importFrom zellkonverter SCE2AnnData
-fit_helper <- function(sce, mean_formula, dispersion_formula, copula_formula, pickle_path, ...) {
-    scd <- import("scdesigner.simulators")
-    cloudpickle <- import("cloudpickle")
-    builtins <- import_builtins()
-    adata <- SCE2AnnData(sce)
-    sim <- scd$NegBinCopula(mean_formula, dispersion_formula, copula_formula)
-    sim$fit(
-        adata,
-        ...
-    )
-    f <- builtins$open(pickle_path, "wb")
-    cloudpickle$dump(sim, f)
-    f$close()
-    NULL
-}
-
-
-#' Negative Binomial Copula Simulator
+#' Gaussian Copula Simulator
 #' @importFrom basilisk basiliskStart basiliskRun basiliskStop
 #' @export
-NegBinCopula <- R6::R6Class(
-    "NegBinCopula",
+GaussianCopula <- R6::R6Class(
+    "GaussianCopula",
     public = list(
         mean_formula = NULL,
-        dispersion_formula = NULL,
+        sdev_formula = NULL,
         copula_formula = NULL,
         pickle_path = NULL,
         basilisk_proc = NULL,
-        initialize = function(mean_formula = NULL, dispersion_formula = NULL, copula_formula = NULL) {
+        initialize = function(mean_formula = NULL, sdev_formula = NULL, copula_formula = NULL) {
             self$mean_formula <- mean_formula
-            self$dispersion_formula <- dispersion_formula
+            self$sdev_formula <- sdev_formula
             self$copula_formula <- copula_formula
             self$pickle_path <- tempfile(fileext = ".pkl")
         },
         fit = function(sce, max_epochs = 50L, lr = 0.1, batch_size = 1024L) {
             self$basilisk_proc <- basiliskStart(env)
-            args <- list(
-                self$basilisk_proc,
-                fit_helper,
-                sce = sce,
-                mean_formula = self$mean_formula,
-                dispersion_formula = self$dispersion_formula,
-                copula_formula = self$copula_formula,
-                pickle_path = self$pickle_path,
-                max_epochs = as.integer(max_epochs),
-                batch_size = as.integer(batch_size)
-            )
-
-            do.call(basiliskRun, args)
+            scd <- import("scdesigner.simulators")
+            cloudpickle <- import("cloudpickle")
+            builtins <- import_builtins()
+            adata <- SCE2AnnData(sce)
+            sim <- scd$GaussianCopula(self$mean_formula, self$sdev_formula, self$copula_formula)
+            sim$fit(adata, max_epochs = as.integer(max_epochs), batch_size = as.integer(batch_size))
+            f <- builtins$open(self$pickle_path, "wb")
+            cloudpickle$dump(sim, f)
+            f$close()
             invisible(self)
         },
         parameters = function() {
