@@ -64,7 +64,7 @@ generate_data <- function(state) {
     fmla <- make_formulas(state$formulas)
 
     simulator <- do.call(simulator_class$new, fmla)
-    simulator <- simulator$fit(state$template, max_epochs = 10)
+    simulator <- simulator$fit(state$template, max_epochs = 25)
 
     if (!is.null(state$n_cells)) {
         ix <- sample(1:nrow(state$template), state$n_cells, replace = TRUE)
