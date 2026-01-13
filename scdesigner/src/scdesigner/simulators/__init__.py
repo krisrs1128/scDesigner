@@ -4,7 +4,6 @@ from .scd3 import (
     BernoulliCopula,
     GaussianCopula,
     NegBinCopula,
-    NegBinInitCopula,
     NegBinIRLSCopula,
     PoissonCopula,
     ZeroInflatedNegBinCopula,
