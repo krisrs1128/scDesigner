@@ -385,8 +385,8 @@ def step_stochastic_irls(
     eta: float = 0.8,
     tol: float = 1e-4,
     ll_prev: Optional[torch.Tensor] = None,
-    clip_mean: float = 10.0,
-    clip_disp: float = 10.0
+    clip_mean: float = 5.0,
+    clip_disp: float = 5.0
 ):
     """
     Perform a single damped Newton-Raphson update on a minibatch.
@@ -416,9 +416,9 @@ def step_stochastic_irls(
     ll_prev : torch.Tensor, optional
         Previous log-likelihood values, by default None
     clip_mean : float, optional
-        Maximum absolute value for mean linear predictor, by default 10.0
+        Maximum absolute value for mean linear predictor, by default 5.0
     clip_disp : float, optional
-        Maximum absolute value for dispersion linear predictor, by default 10.0
+        Maximum absolute value for dispersion linear predictor, by default 5.0
 
     Returns
     -------

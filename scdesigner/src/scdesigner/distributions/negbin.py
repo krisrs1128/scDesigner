@@ -38,9 +38,9 @@ class NegBin(Marginal):
     >>> u = sim.uniformize(y, x)
     >>> x_star = sim.invert(u, x)
     """
-    def __init__(self, formula: Union[Dict, str]):
+    def __init__(self, formula: Union[Dict, str], **kwargs):
         formula = standardize_formula(formula, allowed_keys=['mean', 'dispersion'])
-        super().__init__(formula)
+        super().__init__(formula, **kwargs)
 
     def setup_optimizer(
             self,
@@ -57,7 +57,8 @@ class NegBin(Marginal):
             feature_dims=self.feature_dims,
             loss_fn=nll,
             optimizer_class=optimizer_class,
-            optimizer_kwargs=optimizer_kwargs
+            optimizer_kwargs=optimizer_kwargs,
+            device=self.device
         )
 
     def likelihood(self, batch) -> torch.Tensor:
@@ -75,22 +76,29 @@ class NegBin(Marginal):
             - (r + y) * torch.log(r + mu)
         )
 
-    def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor]) -> torch.Tensor:
-        """Invert pseudoobservations."""
+    def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor],
+               r_min: float = 1e-3, r_max: float = 1e3, mu_min: float = 1e-5,
+               mu_max: float = 1e4) -> torch.Tensor:
         mu, r, u = self._local_params(x, u)
+        r = np.clip(r, r_min, r_max)
+        mu = np.clip(mu, mu_min, mu_max)
+
         p = r / (r + mu)
         y = nbinom(n=r, p=p).ppf(u)
         return torch.from_numpy(y).float()
 
-    def uniformize(self, y: torch.Tensor, x: Dict[str, torch.Tensor], epsilon=1e-6) -> torch.Tensor:
-        """Return uniformized pseudo-observations for counts y given covariates x."""
-        # cdf values using scipy's parameterization
+    def uniformize(self, y: torch.Tensor, x: Dict[str, torch.Tensor],
+                   epsilon: float =1e-6, r_min: float = 1e-3, r_max: float = 1e3,
+                   mu_min: float = 1e-5, mu_max: float = 1e5) -> torch.Tensor:
+        # extractl ocal parameters
         mu, r, y = self._local_params(x, y)
+        r = np.clip(r, r_min, r_max)
+        mu = np.clip(mu, mu_min, mu_max)
         p = r / (r + mu)
+
+        # generate associated quantiles
         u1 = nbinom(n=r, p=p).cdf(y)
         u2 = np.where(y > 0, nbinom(n=r, p=p).cdf(y - 1), 0.0)
-
-        # randomize within discrete mass to get uniform(0,1)
         v = np.random.uniform(size=y.shape)
         u = np.clip(v * u1 + (1.0 - v) * u2, epsilon, 1.0 - epsilon)
         return torch.from_numpy(u).float()
