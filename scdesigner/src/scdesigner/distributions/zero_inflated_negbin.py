@@ -36,9 +36,9 @@ class ZeroInflatedNegBin(Marginal):
     >>> u = sim.uniformize(y, x)
     >>> x_star = sim.invert(u, x)
     """
-    def __init__(self, formula: Union[Dict, str]):
+    def __init__(self, formula: Union[Dict, str], **kwargs):
         formula = standardize_formula(formula, allowed_keys=['mean', 'dispersion', 'zero_inflation'])
-        super().__init__(formula)
+        super().__init__(formula, **kwargs)
 
     def setup_optimizer(
             self,
