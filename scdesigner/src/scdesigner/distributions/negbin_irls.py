@@ -11,7 +11,7 @@ class NegBinIRLS(NegBin):
     Negative-Binomial Marginal using Stochastic IRLS with
     active response tracking and log-likelihood convergence.
     """
-    def __init__(self, formula: Union[Dict, str]):
+    def __init__(self, formula: Union[Dict, str], **kwargs):
         formula = standardize_formula(formula, allowed_keys=['mean', 'dispersion'])
         super().__init__(formula, device="cpu")
 
