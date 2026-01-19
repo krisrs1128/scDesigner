@@ -187,7 +187,7 @@ class SCD3Simulator(Simulator, ABC):
             u = torch.from_numpy(u)
             samples.append(self.marginal.invert(u, x_dict))
         samples = torch.cat(samples).detach().cpu().numpy()
-        return AnnData(X=samples, obs=obs)
+        return AnnData(X=samples, obs=obs, var=self.template.var)
 
     def complexity(self, adata: AnnData = None, **kwargs):
         """Compute model complexity metrics (AIC, BIC) for the copula component.
