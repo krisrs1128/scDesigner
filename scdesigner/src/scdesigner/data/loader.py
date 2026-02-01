@@ -190,7 +190,7 @@ def adata_loader(
         Mapping from key to a formula string consumed by
         :func:`formulaic.model_matrix` (applied to ``adata.obs``).
     chunk_size : int, optional
-        Chunk size used only for backed AnnData. If omitted, defaults to 5000.
+        Chunk size used only for backed AnnData.
     batch_size : int, optional
         Mini-batch size returned by the loader.
     shuffle : bool, optional
