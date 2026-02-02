@@ -1,17 +1,17 @@
-## scDesigner
+# scDesigner
 
 **scDesigner** is a Python Module for modeling and simulating single-cell data with various models built on top of PyTorch.
 
-### Features
+## Features
 
 - **Flexible models**: Poisson / Negative Binomial / Zero-inflated variants (and more).
 - **Scalable simulation**: GPU-accelerated training and simulation with PyTorch.
 - **User-friendly interface**: implemented with `scikit-learn`-like API.
 - **Extensible design**: easy to extend to new models and simulators.
 
-### Installation guide
+## Installation guide
 
-#### Option A: Install the Python package (recommended)
+### Option A: Install the Python package (recommended)
 
 Create a clean environment (optional but recommended):
 
@@ -26,17 +26,16 @@ Install:
 pip install scdesigner==0.0.6
 ```
 
-#### Option B: Install from source (this repository)
+### Option B: Install from source (this repository)
 
-This option is recommended if you want to access the latest features and bug fixes.
+This option is recommended if you want to access the latest features and edit the code.
 
 ```bash
 git clone https://github.com/krisrs1128/scDesigner.git
-cd scDesigner/scdesigner
-pip install -e .
+pip install -e scDesigner/scdesigner
 ```
 
-### Quickstart
+## Quickstart
 
 After installation, you can import the package in Python:
 
@@ -46,12 +45,12 @@ import scdesigner
 
 You may refer to `examples/quickstart.ipynb` for basic usage of the package.
 
-### Repository Structure
+## Repository Structure
 
 - **Examples**: `examples/`
 - **Python package source**: `scdesigner/src/scdesigner/`
 - **R wrappers**: `R/scDesigner/`
 
-### Contributing
+## Contributing
 
 Issues and pull requests are welcome. Please include a minimal reproducible example and relevant environment information.

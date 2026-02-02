@@ -255,9 +255,9 @@ class NegBinCopula(SCD3Simulator):
 
     def __init__(
         self,
-        mean_formula: Optional[str] = None,
-        dispersion_formula: Optional[str] = None,
-        copula_formula: Optional[str] = None,
+        mean_formula: Optional[str] = "~ 1",
+        dispersion_formula: Optional[str] = "~ 1",
+        copula_formula: Optional[str] = "~ 1",
     ) -> None:
         marginal = NegBin({"mean": mean_formula, "dispersion": dispersion_formula})
         covariance = StandardCopula(copula_formula)
@@ -296,10 +296,10 @@ class ZeroInflatedNegBinCopula(SCD3Simulator):
 
     def __init__(
         self,
-        mean_formula: Optional[str] = None,
-        dispersion_formula: Optional[str] = None,
-        zero_inflation_formula: Optional[str] = None,
-        copula_formula: Optional[str] = None,
+        mean_formula: Optional[str] = "~ 1",
+        dispersion_formula: Optional[str] = "~ 1",
+        zero_inflation_formula: Optional[str] = "~ 1",
+        copula_formula: Optional[str] = "~ 1",
     ) -> None:
         marginal = ZeroInflatedNegBin(
             {
@@ -334,7 +334,7 @@ class BernoulliCopula(SCD3Simulator):
     """
 
     def __init__(
-        self, mean_formula: Optional[str] = None, copula_formula: Optional[str] = None
+        self, mean_formula: Optional[str] = "~ 1", copula_formula: Optional[str] = "~ 1"
     ) -> None:
         marginal = Bernoulli({"mean": mean_formula})
         covariance = StandardCopula(copula_formula)
@@ -367,9 +367,9 @@ class GaussianCopula(SCD3Simulator):
 
     def __init__(
         self,
-        mean_formula: Optional[str] = None,
-        sdev_formula: Optional[str] = None,
-        copula_formula: Optional[str] = None,
+        mean_formula: Optional[str] = "~ 1",
+        sdev_formula: Optional[str] = "~ 1",
+        copula_formula: Optional[str] = "~ 1",
     ) -> None:
         marginal = Gaussian({"mean": mean_formula, "sdev": sdev_formula})
         covariance = StandardCopula(copula_formula)
@@ -398,7 +398,7 @@ class PoissonCopula(SCD3Simulator):
     """
 
     def __init__(
-        self, mean_formula: Optional[str] = None, copula_formula: Optional[str] = None
+        self, mean_formula: Optional[str] = "~ 1", copula_formula: Optional[str] = "~ 1"
     ) -> None:
         marginal = Poisson({"mean": mean_formula})
         covariance = StandardCopula(copula_formula)
@@ -431,9 +431,9 @@ class ZeroInflatedPoissonCopula(SCD3Simulator):
 
     def __init__(
         self,
-        mean_formula: Optional[str] = None,
-        zero_inflation_formula: Optional[str] = None,
-        copula_formula: Optional[str] = None,
+        mean_formula: Optional[str] = "~ 1",
+        zero_inflation_formula: Optional[str] = "~ 1",
+        copula_formula: Optional[str] = "~ 1",
     ) -> None:
         marginal = ZeroInflatedPoisson(
             {"mean": mean_formula, "zero_inflation": zero_inflation_formula}
@@ -468,9 +468,9 @@ class NegBinIRLSCopula(SCD3Simulator):
 
     def __init__(
         self,
-        mean_formula: Optional[str] = None,
-        dispersion_formula: Optional[str] = None,
-        copula_formula: Optional[str] = None
+        mean_formula: Optional[str] = "~ 1",
+        dispersion_formula: Optional[str] = "~ 1",
+        copula_formula: Optional[str] = "~ 1"
     ) -> None:
         marginal = NegBinIRLS({"mean": mean_formula, "dispersion": dispersion_formula})
         covariance = StandardCopula(copula_formula)
