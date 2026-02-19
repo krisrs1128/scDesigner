@@ -105,6 +105,7 @@ class StandardCopula(Copula):
         formula = standardize_formula(formula, allowed_keys=["group"])
         super().__init__(formula)
         self.groups = None
+        self.copula_likelihood = 0
 
     def setup_data(self, adata: AnnData, marginal_formula: Dict[str, str], **kwargs):
         """
@@ -389,12 +390,18 @@ class StandardCopula(Copula):
             Per‑group sums of squared values for the remaining genes.
         Ng : dict
             Per‑group number of observations contributing to the statistics.
+        top_k_Z : dict
+            Per‑group arrays of uniformized entries for the top‑``k`` genes across all batches.
+        rem_Z : dict
+            Per‑group arrays of uniformized entries for remaining genes across all batches.
         """
         top_k_sums = {g: np.zeros(top_k) for g in self.groups}
         top_k_second_moments = {g: np.zeros((top_k, top_k)) for g in self.groups}
         rem_sums = {g: np.zeros(self.n_outcomes - top_k) for g in self.groups}
         rem_second_moments = {g: np.zeros(self.n_outcomes - top_k) for g in self.groups}
         Ng = {g: 0 for g in self.groups}
+        top_k_Z = {g: [] for g in self.groups}
+        rem_Z = {g: [] for g in self.groups}
 
         for y, x_dict in tqdm(self.loader, desc="Estimating top-k copula covariance"):
             group_data = x_dict.get("group")
@@ -414,13 +421,15 @@ class StandardCopula(Copula):
 
                 top_k_sums[g] += top_k_z.sum(axis=0)
                 top_k_second_moments[g] += top_k_z.T @ top_k_z
+                top_k_Z[g].append(top_k_z)
 
                 rem_sums[g] += rem_z.sum(axis=0)
                 rem_second_moments[g] += (rem_z**2).sum(axis=0)
+                rem_Z[g].append(rem_z)
 
                 Ng[g] += n_g
 
-        return top_k_sums, top_k_second_moments, rem_sums, rem_second_moments, Ng
+        return top_k_sums, top_k_second_moments, rem_sums, rem_second_moments, Ng, top_k_Z, rem_Z
 
     def _accumulate_full_stats(
         self, uniformizer: Callable
@@ -452,6 +461,7 @@ class StandardCopula(Copula):
             g: np.zeros((self.n_outcomes, self.n_outcomes)) for g in self.groups
         }
         Ng = {g: 0 for g in self.groups}
+        Z = {g: [] for g in self.groups}
 
         for y, x_dict in tqdm(self.loader, desc="Estimating copula covariance"):
             group_data = x_dict.get("group")
@@ -469,12 +479,14 @@ class StandardCopula(Copula):
                 z_g = z[mask]
                 n_g = mask.sum()
 
+                Z[g].append(z_g)
                 second_moments[g] += z_g.T @ z_g
                 sums[g] += z_g.sum(axis=0)
 
                 Ng[g] += n_g
 
-        return sums, second_moments, Ng
+        Z = {g: np.vstack(chunks) for g, chunks in Z.items()}
+        return sums, second_moments, Ng, Z
 
     def _compute_block_covariance(
         self,
@@ -509,7 +521,7 @@ class StandardCopula(Copula):
             top_k_second_moments,
             remaining_sums,
             remaining_second_moments,
-            Ng,
+            Ng, top_k_Z, rem_Z,
         ) = self._accumulate_top_k_stats(uniformizer, top_k_idx, rem_idx, top_k)
         covariance = {}
         for g in self.groups:
@@ -520,6 +532,10 @@ class StandardCopula(Copula):
             cov_top_k = top_k_second_moments[g] / Ng[g] - np.outer(
                 mean_top_k, mean_top_k
             )
+            marginal_ll = norm.logpdf(top_k_Z[g]).sum()
+            ll = multivariate_normal.logpdf(top_k_Z[g], 
+                                            np.zeros(self.n_outcomes), cov_top_k).sum()
+            self.copula_likelihood += ll - marginal_ll
             mean_remaining = remaining_sums[g] / Ng[g]
             var_remaining = remaining_second_moments[g] / Ng[g] - mean_remaining**2
             top_k_names = self.adata.var_names[top_k_idx]
@@ -552,7 +568,7 @@ class StandardCopula(Copula):
             Mapping from group labels to :class:`CovarianceStructure`
             objects, each containing a full covariance matrix for all genes.
         """
-        sums, second_moments, Ng = self._accumulate_full_stats(uniformizer)
+        sums, second_moments, Ng, Z = self._accumulate_full_stats(uniformizer)
         covariance = {}
         for g in self.groups:
             if Ng[g] == 0:
@@ -560,6 +576,10 @@ class StandardCopula(Copula):
                 continue
             mean = sums[g] / Ng[g]
             cov = second_moments[g] / Ng[g] - np.outer(mean, mean)
+            marginal_ll = norm.logpdf(Z[g]).sum()
+            ll = multivariate_normal.logpdf(Z[g], 
+                                            np.zeros(self.n_outcomes), cov).sum()
+            self.copula_likelihood += ll - marginal_ll
             covariance[g] = CovarianceStructure(
                 cov=cov,
                 modeled_names=self.adata.var_names,
