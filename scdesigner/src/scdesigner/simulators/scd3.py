@@ -311,7 +311,7 @@ class ZeroInflatedNegBinCopula(SCD3Simulator):
             {
                 "mean": mean_formula,
                 "dispersion": dispersion_formula,
-                "zero_inflation_formula": zero_inflation_formula,
+                "zero_inflation": zero_inflation_formula,
             }
         )
         covariance = StandardCopula(copula_formula)
