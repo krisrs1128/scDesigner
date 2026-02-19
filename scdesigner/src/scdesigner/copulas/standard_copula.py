@@ -301,14 +301,14 @@ class StandardCopula(Copula):
                     z_modeled,
                     np.zeros(cov_struct.num_modeled_genes),
                     cov_struct.cov.values,
-                )
+                ).sum()
                 if cov_struct.num_remaining_genes > 0:
                     z_remaining = z[ix][:, cov_struct.remaining_indices]
                     ll_remaining = norm.logpdf(
                         z_remaining,
                         loc=0,
                         scale=np.sqrt(cov_struct.remaining_var.values),
-                    )
+                    ).sum()
                 else:
                     ll_remaining = 0
                 ll[ix] = ll_modeled + ll_remaining
@@ -429,6 +429,8 @@ class StandardCopula(Copula):
 
                 Ng[g] += n_g
 
+        top_k_Z = {g: np.vstack(chunks) for g, chunks in top_k_Z.items()}
+        rem_Z = {g: np.vstack(chunks) for g, chunks in rem_Z.items()}
         return top_k_sums, top_k_second_moments, rem_sums, rem_second_moments, Ng, top_k_Z, rem_Z
 
     def _accumulate_full_stats(
@@ -534,7 +536,7 @@ class StandardCopula(Copula):
             )
             marginal_ll = norm.logpdf(top_k_Z[g]).sum()
             ll = multivariate_normal.logpdf(top_k_Z[g], 
-                                            np.zeros(self.n_outcomes), cov_top_k).sum()
+                                            np.zeros(cov_top_k.shape[0]), cov_top_k).sum()
             self.copula_likelihood += ll - marginal_ll
             mean_remaining = remaining_sums[g] / Ng[g]
             var_remaining = remaining_second_moments[g] / Ng[g] - mean_remaining**2
