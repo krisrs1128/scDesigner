@@ -84,14 +84,19 @@ def update_mean_coefficients(X, counts, beta, dispersion, clip: float = 5.0):
 # Dispersion Parameter Updates (Gamma)
 # ==============================================================================
 
-def update_dispersion_coefficients(Z, counts, mean, gamma, clip: float = 5.0):
+def update_dispersion_coefficients(Z, counts, mean, gamma, clip: float = 5.0,
+                                   disp_ridge: float = 1e-4):
     """
     Update dispersion model coefficients using one Fisher scoring step.
 
-    Uses working response U = η + θ·s/w where:
-    - η = Zγ (linear predictor)
-    - s = score with respect to θ
-    - w = approximate Fisher information
+    Computes the score (∂ℓ/∂θ) and approximate Fisher information
+    (θY/(θ+Y)) per observation, then solves the weighted least squares
+    system directly using the products W·η and θ·score to avoid
+    dividing by near-zero weights for zero-count cells.
+
+    A ridge penalty disp_ridge · I is added to the information matrix
+    Z'WZ to regularize the update when many observations have zero
+    counts and thus zero Fisher information.
 
     Parameters
     ----------
@@ -105,6 +110,8 @@ def update_dispersion_coefficients(Z, counts, mean, gamma, clip: float = 5.0):
         Current dispersion coefficients (q × m)
     clip : float, optional
         Maximum absolute value for linear predictor, by default 5.0
+    disp_ridge : float, optional
+        Ridge penalty added to Z'WZ for the dispersion update, by default 1e-4
 
     Returns
     -------
@@ -119,11 +126,21 @@ def update_dispersion_coefficients(Z, counts, mean, gamma, clip: float = 5.0):
     score = (psi_diff + torch.log(dispersion) - torch.log(mean + dispersion) +
              (mean - counts) / (mean + dispersion))
 
-    # Approximate Fisher information (replaces exact Hessian)
-    # Approximation: θY/(θ + Y) ≈ θ²[ψ₁(θ) - ψ₁(Y + θ)]
-    weights = ((dispersion * counts) / (dispersion + counts)).clip(min=1e-6)
-    working_response = linear_pred + (dispersion * score) / weights
-    return solve_weighted_least_squares(Z, weights, working_response)
+    # Approximate Fisher information on the η = log(θ) scale:
+    # I_η ≈ θY/(θ + Y), derived from ψ'(x) ≈ 1/x approximation.
+    weights = (dispersion * counts) / (dispersion + counts)
+
+    # Build the WLS inputs directly: W·z = W·η + θ·score,
+    # Solve (Z'WZ + λI) γ = Z'(Wz) via normal equations
+    wz = weights * linear_pred + dispersion * score  # (n × m)
+    Z_outer = torch.einsum("ni,nj->nij", Z, Z)  # (n × q × q)
+    weighted_ZZ = torch.einsum("nm,nij->mij", weights, Z_outer)  # (m × q × q)
+    eye = torch.eye(Z.shape[1]).unsqueeze(0)
+    weighted_ZZ = weighted_ZZ + disp_ridge * eye
+    weighted_Zr = torch.einsum("ni,nm->mi", Z, wz)  # (m × q)
+
+    coefficients = torch.linalg.solve(weighted_ZZ, weighted_Zr.unsqueeze(-1))
+    return coefficients.squeeze(-1).T  # (q × m)
 
 
 # ==============================================================================
@@ -239,7 +256,7 @@ def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clip = 5):
     return weighted_XX, weighted_Xy
 
 
-def accumulate_dispersion_statistics(loader, beta, clip = 5):
+def accumulate_dispersion_statistics(loader, beta, clip = 5, pearson_clip = 10.0):
     """
     Accumulate Pearson statistics for method of moments dispersion estimation.
 
@@ -251,6 +268,11 @@ def accumulate_dispersion_statistics(loader, beta, clip = 5):
         Mean coefficients (p_mean × n_genes)
     clip : float, optional
         Maximum absolute value for linear predictor, by default 5
+    pearson_clip : float, optional
+        Maximum per-observation Pearson residual (y-μ)²/μ. Under a Poisson null
+        each residual is approximately χ²(1); the default of 10.0 corresponds
+        roughly to the 99.8th percentile, which helps robustify against extreme
+        outliers.
 
     Returns
     -------
@@ -271,14 +293,15 @@ def accumulate_dispersion_statistics(loader, beta, clip = 5):
         mean_batch = torch.exp(linear_pred)
 
         sum_mean += mean_batch.sum(dim=0)
-        sum_pearson += ((y_batch.to('cpu') - mean_batch)**2 / mean_batch).sum(dim=0)
+        pearson_resid = (y_batch.to('cpu') - mean_batch)**2 / mean_batch
+        sum_pearson += torch.clamp(pearson_resid, max=pearson_clip).sum(dim=0)
         n_total += y_batch.shape[0]
 
     return sum_mean, sum_pearson, n_total
 
 
 def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
-                          tol = 1e-3, clip = 5):
+                          tol = 1e-3, clip = 5, pearson_clip = 10.0):
     """
     Initialize parameters using batched Poisson IRLS followed by MoM dispersion.
 
@@ -302,6 +325,9 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
         Convergence tolerance for beta coefficients, by default 1e-3
     clip : float, optional
         Maximum absolute value for linear predictor, by default 10
+    pearson_clip : float, optional
+        Maximum per-observation Pearson residual for dispersion initialization,
+        by default 10.0
 
     Returns
     -------
@@ -328,14 +354,15 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
         beta = beta_new
 
     sum_mean, sum_pearson, n_total = accumulate_dispersion_statistics(
-        loader, beta, clip
+        loader, beta, clip, pearson_clip
     )
 
     degrees_freedom = n_total - p_mean
     dispersion = sum_mean / torch.clip(sum_pearson - degrees_freedom, min=0.1)
 
     gamma = torch.zeros((p_disp, n_genes))
-    gamma[0, :] = torch.log(torch.clip(dispersion, min=0.1))
+    #gamma[0, :] = torch.log(torch.clip(dispersion, min=0.1))
+    gamma[0, :] = torch.log(dispersion)
     return beta, gamma
 
 
@@ -386,7 +413,8 @@ def step_stochastic_irls(
     tol: float = 1e-4,
     ll_prev: Optional[torch.Tensor] = None,
     clip_mean: float = 5.0,
-    clip_disp: float = 5.0
+    clip_disp: float = 5.0,
+    disp_ridge: float = 0.0
 ):
     """
     Perform a single damped Newton-Raphson update on a minibatch.
@@ -440,7 +468,8 @@ def step_stochastic_irls(
     # Update depends on the latest mean estimates
     linear_pred_mu = torch.clip(X @ beta_next, min=-clip_mean, max=clip_mean)
     mu = torch.exp(linear_pred_mu)
-    gamma_target = update_dispersion_coefficients(Z, y, mu, gamma, clip=clip_disp)
+    gamma_target = update_dispersion_coefficients(Z, y, mu, gamma, clip=clip_disp,
+                                                     disp_ridge=disp_ridge)
     gamma_next = (1 - eta) * gamma + eta * gamma_target
 
     # --- 4. Convergence Check ---

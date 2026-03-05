@@ -16,7 +16,7 @@ class NegBinIRLS(NegBin):
         super().__init__(formula, device="cpu")
 
 
-    def fit(self, max_epochs=10, tol=1e-4, eta=0.1, verbose=True, **kwargs):
+    def fit(self, max_epochs=10, tol=1e-4, eta=0.1, verbose=True, disp_ridge=1e-4, **kwargs):
         if self.predict is None:
                 self.setup_optimizer(**kwargs)
 
@@ -52,7 +52,8 @@ class NegBinIRLS(NegBin):
                     # Fetch current coefficients and update
                     b_curr = self.predict.coefs['mean'][:, active_mask]
                     g_curr = self.predict.coefs['dispersion'][:, active_mask]
-                    b_next, g_next, conv_mask, ll_cur = step_stochastic_irls(y_act, X, Z, b_curr, g_curr, eta, tol, ll_[active_mask])
+                    b_next, g_next, conv_mask, ll_cur = step_stochastic_irls(y_act, X, Z, b_curr, g_curr, eta, tol, ll_[active_mask],
+                                                                                 disp_ridge=disp_ridge)
                     ll_[active_mask] = ll_cur
 
                     # Update Parameters and de-activate converged genes
