@@ -124,8 +124,8 @@ def simulate(
         "ncell": ncell,
         "ngene": ngene,
         "runtime": runtime,
-        "peak_RAM": peak_ram_mib,
-        "total_RAM": total_ram_mib,
+        "peak_RAM": peak_ram_mib, # Peak memory usage during the simulation
+        "total_RAM": total_ram_mib, # Total memory alloacted after the simulation
         "peak_GPU": peak_gpu_mib,
         "model": model,
         "simulator": "scdesigner",
