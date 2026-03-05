@@ -3,7 +3,7 @@ from .negbin import NegBin
 from .negbin_irls_funs import initialize_parameters, step_stochastic_irls
 from ..data.formula import standardize_formula
 from ..utils.kwargs import _filter_kwargs, DEFAULT_ALLOWED_KWARGS
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 
 
 class NegBinIRLS(NegBin):
@@ -16,7 +16,7 @@ class NegBinIRLS(NegBin):
         super().__init__(formula, device="cpu")
 
 
-    def fit(self, max_epochs=10, tol=1e-4, eta=0.1, verbose=True, **kwargs):
+    def fit(self, max_epochs=10, tol=1e-4, eta=0.1, verbose=True, log_dir: Optional[str] = None, **kwargs):
         if self.predict is None:
                 self.setup_optimizer(**kwargs)
 
@@ -35,6 +35,14 @@ class NegBinIRLS(NegBin):
         # 2. All genes are active at the start
         active_mask = torch.ones(self.n_outcomes, dtype=torch.bool)
         ll_ = - 1e9 * torch.ones(self.n_outcomes, dtype=torch.float32)
+
+        if log_dir is not None:
+            import os
+            from torch.utils.tensorboard import SummaryWriter
+            os.makedirs(log_dir, exist_ok=True)
+            writer = SummaryWriter(log_dir)
+        else:
+            writer = None
 
         for epoch in range(max_epochs):
             if not active_mask.any(): break
@@ -67,6 +75,16 @@ class NegBinIRLS(NegBin):
 
                 if verbose and ((epoch + 1) % 10) == 0:
                     print(f"Epoch {epoch+1}/{max_epochs} | Genes remaining: {active_mask.sum().item()} | Loss: {-ll / n_batches:.4f}", end='\r')
-                    if not active_mask.any(): break
+            
+            if writer is not None:
+                writer.add_scalar("loss/train", -ll / n_batches if n_batches > 0 else 0, epoch)
+            if not active_mask.any(): 
+                break
+
+        if verbose:
+            print() # Maintain the loss output
+
+        if writer is not None:
+            writer.close()
 
         self.parameters = self.format_parameters()

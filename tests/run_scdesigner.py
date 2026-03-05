@@ -60,6 +60,7 @@ def simulate(
     epochs=50,
     batch_size=1024,
     chunk_size=5000,
+    log_dir=None,
 ):
     """
     Fit a scDesigner model and sample simulated data with resource monitoring.
@@ -97,7 +98,8 @@ def simulate(
         lr=lr, 
         batch_size=batch_size, 
         chunk_size=chunk_size, 
-        top_k=top_k
+        top_k=top_k,
+        log_dir=log_dir
     )
     sim_data = simulator.sample(real_data.obs)
 
@@ -143,9 +145,26 @@ def simulate(
     return real_data, sim_data, pd.DataFrame([metrics]), simulator
 
 if __name__ == "__main__":
-    adata = ad.read_h5ad("../data/HVG_embryoatlas.h5ad")
+
+    n_genes = 2000
+    n_cells = 60000
+
+    # We test the performance up to 5 covariates for both mean and dispersion
+    mean_formula = "celltype + stage + sample + pool + theiler"
+    dispersion_formula = "celltype + stage + sample + pool + theiler"
+    
+    data_dir = "../data/HVG_embryoatlas.h5ad"
+    adata = ad.read_h5ad(data_dir)
+
+    log_dir = "logs/"
+
     _, _, metrics_df, _ = simulate(adata, 
-    ncell=1000, 
-    ngene=1000, 
-    top_k=None)
+    ncell=n_cells, 
+    ngene=n_genes, 
+    mean_formula=mean_formula,
+    dispersion_formula=dispersion_formula,
+    top_k=None,
+    model='zinb',
+    epochs = 50,
+    log_dir=log_dir)
     print(metrics_df)
