@@ -126,8 +126,8 @@ def simulate(
         "ncell": ncell,
         "ngene": ngene,
         "runtime": runtime,
-        "peak_RAM": peak_ram_mib, # Peak memory usage during the simulation
-        "total_RAM": total_ram_mib, # Total memory alloacted after the simulation
+        "peak_RAM": peak_ram_mib, # The peak memory usage during the simulation.
+        "total_RAM": total_ram_mib, # The memory alloacted after running the simulation.
         "peak_GPU": peak_gpu_mib,
         "model": model,
         "simulator": "scdesigner",
@@ -147,17 +147,17 @@ def simulate(
 if __name__ == "__main__":
 
     n_genes = 2000
-    n_cells = 60000
+    n_cells = 2000
 
     # We test the performance up to 5 covariates for both mean and dispersion
-    mean_formula = "celltype + stage + sample + pool + theiler"
-    dispersion_formula = "celltype + stage + sample + pool + theiler"
+    mean_formula = "celltype + stage + theiler"
+    dispersion_formula = "celltype + stage + theiler"
     
     data_dir = "../data/HVG_embryoatlas.h5ad"
     adata = ad.read_h5ad(data_dir)
 
     log_dir = "logs/"
-
+    
     _, _, metrics_df, _ = simulate(adata, 
     ncell=n_cells, 
     ngene=n_genes, 
