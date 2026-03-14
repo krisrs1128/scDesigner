@@ -16,7 +16,8 @@ class NegBinIRLS(NegBin):
         super().__init__(formula, device="cpu")
 
 
-    def fit(self, max_epochs=10, tol=1e-4, eta=0.1, verbose=True, log_dir: Optional[str] = None, **kwargs):
+    def fit(self, max_epochs=10, tol=1e-4, eta=0.1, verbose=True,
+            log_dir: Optional[str] = None, disp_ridge=1e-4, **kwargs):
         if self.predict is None:
                 self.setup_optimizer(**kwargs)
 
@@ -60,7 +61,8 @@ class NegBinIRLS(NegBin):
                     # Fetch current coefficients and update
                     b_curr = self.predict.coefs['mean'][:, active_mask]
                     g_curr = self.predict.coefs['dispersion'][:, active_mask]
-                    b_next, g_next, conv_mask, ll_cur = step_stochastic_irls(y_act, X, Z, b_curr, g_curr, eta, tol, ll_[active_mask])
+                    b_next, g_next, conv_mask, ll_cur = step_stochastic_irls(y_act, X, Z, b_curr, g_curr, eta, tol, ll_[active_mask],
+                                                                                 disp_ridge=disp_ridge)
                     ll_[active_mask] = ll_cur
 
                     # Update Parameters and de-activate converged genes
@@ -75,10 +77,10 @@ class NegBinIRLS(NegBin):
 
                 if verbose and ((epoch + 1) % 10) == 0:
                     print(f"Epoch {epoch+1}/{max_epochs} | Genes remaining: {active_mask.sum().item()} | Loss: {-ll / n_batches:.4f}", end='\r')
-            
+
             if writer is not None:
                 writer.add_scalar("loss/train", -ll / n_batches if n_batches > 0 else 0, epoch)
-            if not active_mask.any(): 
+            if not active_mask.any():
                 break
 
         if verbose:
