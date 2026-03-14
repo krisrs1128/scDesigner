@@ -161,7 +161,7 @@ class Marginal(ABC):
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
         self.predictor_names = self.loader.dataset.predictor_names
 
-    def fit(self, max_epochs: int = 50, verbose: bool = True, **kwargs):
+    def fit(self, max_epochs: int = 50, verbose: bool = True, log_dir: Optional[str] = None, **kwargs):
         """Fit the marginal predictor using vanilla PyTorch training loop.
 
         This method runs stochastic gradient optimization using the template
@@ -192,6 +192,14 @@ class Marginal(ABC):
         if self.predict is None:
             self.setup_optimizer(**kwargs)
 
+        if log_dir is not None:
+            import os
+            from torch.utils.tensorboard import SummaryWriter
+            os.makedirs(log_dir, exist_ok=True)
+            writer = SummaryWriter(log_dir)
+        else:
+            writer = None
+
         for epoch in range(max_epochs):
             epoch_loss, n_batches = 0.0, 0
 
@@ -210,8 +218,16 @@ class Marginal(ABC):
                 n_batches += 1
 
             avg_loss = epoch_loss / n_batches
+            if writer is not None:
+                writer.add_scalar("loss/train", avg_loss, epoch)
             if verbose:
                 print(f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}", end='\r')
+        if verbose:
+            print() # Maintain the loss output
+
+        if writer is not None:
+            writer.close()
+                
         self.parameters = self.format_parameters()
 
     def format_parameters(self):
