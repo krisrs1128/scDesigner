@@ -22,7 +22,7 @@ DEFAULT_ALLOWED_KWARGS = {
         'monitor', 'interval', 'frequency'
     },
     'initialize': {
-        'tol', 'clip', 'max_iter', 'pearson_clip'
+        'tol', 'clip', 'max_iter', 'damping'
     },
     'irls': {
         'disp_ridge'
