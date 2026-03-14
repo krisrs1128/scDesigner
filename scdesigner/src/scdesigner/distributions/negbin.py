@@ -111,7 +111,7 @@ class NegBin(Marginal):
             return _to_numpy(mu, r)
         return _to_numpy(mu, r, y)
 
-    def fit(self, max_epochs: int = 100, verbose: bool = True, **kwargs):
+    def fit(self, max_epochs: int = 100, verbose: bool = True, log_dir: Optional[str] = None, **kwargs):
         if self.predict is None:
                 self.setup_optimizer(**kwargs)
 
@@ -126,4 +126,4 @@ class NegBin(Marginal):
             self.predict.coefs['mean'].copy_(beta_init)
             self.predict.coefs['dispersion'].copy_(gamma_init)
 
-        return Marginal.fit(self, max_epochs, verbose, **kwargs)
+        return Marginal.fit(self, max_epochs, verbose, log_dir=log_dir, **kwargs)

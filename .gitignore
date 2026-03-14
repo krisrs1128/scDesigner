@@ -6,4 +6,6 @@ examples/data
 *logs*
 *DS_store
 tests_langtian/
-/data/
+/data/*.h5ad
+/.agents
+*.png
