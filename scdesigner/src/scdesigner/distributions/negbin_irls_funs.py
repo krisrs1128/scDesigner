@@ -126,20 +126,22 @@ def update_dispersion_coefficients(Z, counts, mean, gamma, clip: float = 50.0,
     score = (psi_diff + torch.log(dispersion) - torch.log(mean + dispersion) +
              (mean - counts) / (mean + dispersion))
 
-    # Approximate Fisher information on the η = log(θ) scale:
-    # I_η ≈ θY/(θ + Y), derived from ψ'(x) ≈ 1/x approximation.
+    # Approximate Fisher information (replaces exact Hessian) Uses the fact that
+    # θY/(θ + Y) ≈ θ²[ψ₁(θ) - ψ₁(Y + θ)] and the approximation ψ₁(x) ≈ 1/x
     weights = (dispersion * counts) / (dispersion + counts)
 
-    # Build the WLS inputs directly: W·z = W·η + θ·score,
-    # Solve (Z'WZ + λI) γ = Z'(Wz) via normal equations
-    wz = weights * linear_pred + dispersion * score  # (n × m)
-    Z_outer = torch.einsum("ni,nj->nij", Z, Z)  # (n × q × q)
-    weighted_ZZ = torch.einsum("nm,nij->mij", weights, Z_outer)  # (m × q × q)
-    eye = torch.eye(Z.shape[1]).unsqueeze(0)
-    weighted_ZZ = weighted_ZZ + disp_ridge * eye
-    weighted_Zr = torch.einsum("ni,nm->mi", Z, wz)  # (m × q)
+    # Solve (Z'WZ + λI) γ = Z'(Wz) via normal equations. We will refer to this
+    # as normal_lhs and normal_rhs, respectively. The first step builds
+    #    W·z = W·η + θ·score = weights * linear_pred + dispersion * score,
+    # which helps avoid any division by small weights in the usual IRLS update.
+    Wz = weights * linear_pred + dispersion * score  # (n × m)
+    sample_outer = torch.einsum("ni,nj->nij", Z, Z)  # (n × q × q), {zₙzₙᵀ} for n
+    ZtWZ = torch.einsum("nm,nij->mij", weights, sample_outer)  # (m × q × q)
+    I = torch.eye(Z.shape[1]).unsqueeze(0)
+    normal_lhs = ZtWZ + disp_ridge * I
+    normal_rhs = torch.einsum("ni,nm->mi", Z, Wz)  # (m × q), Z'(Wz)
 
-    coefficients = torch.linalg.solve(weighted_ZZ, weighted_Zr.unsqueeze(-1))
+    coefficients = torch.linalg.solve(normal_lhs, normal_rhs.unsqueeze(-1))
     return coefficients.squeeze(-1).T  # (q × m)
 
 
@@ -260,12 +262,14 @@ def _initialize_beta_intercept(loader, n_genes, p_mean):
 def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
                           tol = 1e-5, clip = 5, damping = 0.5):
     """
-    Initialize parameters using batched Poisson IRLS followed by MoM dispersion.
+    Initialize parameters using batched Poisson IRLS followed by
+    Method-of-Moments dispersion.
 
-    Logic:
+    Approach:
         1. Iteratively fit Poisson GLM by accumulating X'WX and X'WZ across batches
-        2. Use fitted Poisson means to estimate dispersion via variance-based MoM:
-           θ = Σμ² / max(Σ(Y-μ)² - Σμ, ε)
+        2. Use fitted Poisson means to estimate dispersion via variance-based
+        MoM: θ = Σμ² / max(Σ(Y-μ)² - Σμ, ε) This estimator comes from the fact
+        that Var(y) = μ + μ²/θ.
 
     Parameters
     ----------
@@ -294,7 +298,7 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
     gamma_init : torch.Tensor
         (p_disp × n_genes) tensor
     """
-    # Initialize so that predicted mean ≈ observed gene mean for all cells.
+    # Initialize predicted mean ≈ observed gene mean across cells.
     beta = _initialize_beta_intercept(loader, n_genes, p_mean)
 
     for _ in range(max_iter):
