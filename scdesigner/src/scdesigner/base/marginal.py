@@ -152,6 +152,10 @@ class Marginal(ABC):
 
         Returns
         -------
+        None
+            This method doesn't return anything but modifies the self.adata,
+            self.loader, self.n_outcomes, self.feature_dims, and self.predictor_names
+            attributes.
         """
         # keep a reference to the AnnData for later use (e.g., var_names)
         self.adata = adata

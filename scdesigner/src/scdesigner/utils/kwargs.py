@@ -1,3 +1,7 @@
+"""
+Miscellaneous utility functions
+"""
+
 def _filter_kwargs(kwargs: dict, allowed: set) -> dict:
     """Return a new dict containing only keys from kwargs that are in allowed."""
     return {k: v for k, v in kwargs.items() if k in allowed}

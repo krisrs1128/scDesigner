@@ -150,7 +150,7 @@ class StandardCopula(Copula):
                 )
 
     def fit(self, uniformizer: Callable, **kwargs):
-        """
+        r"""
         Fit the Gaussian copula covariance model.
 
         The data are first transformed to pseudo‑Gaussian variables via the
