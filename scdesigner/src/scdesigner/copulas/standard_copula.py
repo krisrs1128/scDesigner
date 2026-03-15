@@ -13,7 +13,7 @@ import warnings
 
 class StandardCopula(Copula):
     """
-    Gaussian copula model with optional group-specific covariance structures.
+    Gaussian copula model with optional group-specific correlation structures.
 
     This implementation estimates a multivariate normal dependence structure
     on latent Gaussian variables. Optionally, different covariance
@@ -109,7 +109,7 @@ class StandardCopula(Copula):
 
     def setup_data(self, adata: AnnData, marginal_formula: Dict[str, str], **kwargs):
         """
-        Set up data and design matrices for covariance estimation.
+        Set up data and design matrices for copula estimation.
 
         After this call, the internal loader produces batches whose
         ``x_dict`` always contains a binary ``"group"`` one‑hot matrix.
@@ -147,18 +147,19 @@ class StandardCopula(Copula):
             unique_vals = torch.unique(obs_batch_group)
             if not torch.all((unique_vals == 0) | (unique_vals == 1)).item():
                 raise ValueError(
-                    "Only categorical groups are currently supported in copula covariance estimation."
+                    "Only categorical groups are currently supported in copula correlation estimation."
                 )
 
     def fit(self, uniformizer: Callable, **kwargs):
         """
-        Fit the Gaussian copula covariance model.
+        Fit the Gaussian copula correlation model.
 
         The data are first transformed to pseudo‑Gaussian variables via the
         ``uniformizer`` (PIT) and an inverse normal CDF. Depending on
-        ``top_k``, either a full covariance matrix is estimated for all genes,
-        or a block structure with an explicit covariance for the top‑``k``
-        most expressed genes and diagonal variances for the remainder.
+        ``top_k``, either a full correlation matrix is estimated for all genes,
+        or a block structure with an explicit correlation matrix for the top‑``k``
+        most expressed genes and independent standard normal marginals for the
+        remainder.
 
         Parameters
         ----------
@@ -181,28 +182,12 @@ class StandardCopula(Copula):
             If ``top_k`` is not a positive integer or exceeds the number
             of modeled outcomes.
         """
-        top_k = kwargs.get("top_k", None)
-        if top_k is not None:
-            if not isinstance(top_k, int):
-                raise ValueError("top_k must be an integer")
-            if top_k <= 0:
-                raise ValueError("top_k must be positive")
-            if top_k > self.n_outcomes:
-                raise ValueError(
-                    f"top_k ({top_k}) cannot exceed number of outcomes "
-                    f"({self.n_outcomes})"
-                )
-            gene_total_expression = np.array(self.adata.X.sum(axis=0)).flatten()
-            sorted_indices = np.argsort(gene_total_expression)
-            top_k_indices = sorted_indices[-top_k:]
-            remaining_indices = sorted_indices[:-top_k]
-            covariances = self._compute_block_covariance(
-                uniformizer, top_k_indices, remaining_indices, top_k
-            )
-        else:
-            covariances = self._compute_full_covariance(uniformizer)
-
-        self.parameters = covariances
+        top_k = self._validate_parameters(**kwargs)
+        modeled_indices, remaining_indices = self._get_gene_partitions(top_k)
+        self.copula_likelihood = 0
+        self.parameters = self._estimate_correlation_structures(
+            uniformizer, modeled_indices, remaining_indices
+        )
 
     def pseudo_obs(self, x_dict: Dict):
         """
@@ -236,14 +221,9 @@ class StandardCopula(Copula):
 
         # loop over groups and sample each part in turn
         for group, cov_struct in parameters.items():
-            if cov_struct.remaining_var is not None:
-                u[group_ix[group]] = self._fast_normal_pseudo_obs(
-                    len(group_ix[group]), cov_struct
-                )
-            else:
-                u[group_ix[group]] = self._normal_pseudo_obs(
-                    len(group_ix[group]), cov_struct
-                )
+            u[group_ix[group]] = self._normal_pseudo_obs(
+                len(group_ix[group]), cov_struct
+            )
         return u
 
     def likelihood(
@@ -297,26 +277,18 @@ class StandardCopula(Copula):
             if len(ix) > 0:
                 z_modeled = z[ix][:, cov_struct.modeled_indices]
 
+                ll_marginal = norm.logpdf(z_modeled).sum(axis=1)
                 ll_modeled = multivariate_normal.logpdf(
                     z_modeled,
                     np.zeros(cov_struct.num_modeled_genes),
                     cov_struct.cov.values,
-                ).sum()
-                if cov_struct.num_remaining_genes > 0:
-                    z_remaining = z[ix][:, cov_struct.remaining_indices]
-                    ll_remaining = norm.logpdf(
-                        z_remaining,
-                        loc=0,
-                        scale=np.sqrt(cov_struct.remaining_var.values),
-                    ).sum()
-                else:
-                    ll_remaining = 0
-                ll[ix] = ll_modeled + ll_remaining
+                )
+                ll[ix] = ll_modeled - ll_marginal
         return ll
 
     def num_params(self, **kwargs):
         """
-        Return the effective number of covariance parameters.
+        Return the effective number of correlation parameters.
 
         Parameters
         ----------
@@ -329,7 +301,7 @@ class StandardCopula(Copula):
         int
             Total number of free covariance parameters across all groups,
             computed as the number of unique off‑diagonal entries in each
-            modeled covariance block.
+            modeled correlation block.
         """
         S = self.parameters
         per_group = [
@@ -355,298 +327,171 @@ class StandardCopula(Copula):
                 )
         return top_k
 
-    def _accumulate_top_k_stats(
-        self, uniformizer: Callable, top_k_idx, rem_idx, top_k
+    def _get_gene_partitions(
+        self, top_k: Union[int, None]
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Return modeled and remaining gene indices for the requested fit.
+        top_k selected based on order of per-gene expression level.
+        """
+        if top_k is None:
+            return np.arange(self.n_outcomes), np.array([], dtype=int)
+
+        gene_total_expression = np.asarray(self.adata.X.sum(axis=0)).flatten()
+        sorted_indices = np.argsort(gene_total_expression)
+        return sorted_indices[-top_k:], sorted_indices[:-top_k]
+
+    def _accumulate_stats(
+        self,
+        uniformizer: Callable,
+        modeled_indices: np.ndarray,
+        remaining_indices: np.ndarray,
     ) -> Tuple[
         Dict[Union[str, int], np.ndarray],
         Dict[Union[str, int], np.ndarray],
-        Dict[Union[str, int], np.ndarray],
-        Dict[Union[str, int], np.ndarray],
         Dict[Union[str, int], int],
+        Dict[Union[str, int], list],
     ]:
         """
-        Accumulate sufficient statistics for top‑``k`` block covariance.
+        Accumulate sufficient statistics for covariance estimation. If ``top_k`` is 
+        indicated in :meth:`fit`, covariance of the top-``k`` genes are estimated; 
+        if ``top_k`` is None, covariance of the full matrix is estimated.
 
         Parameters
         ----------
         uniformizer : callable
             Function that converts each batch of counts to uniform values.
-        top_k_idx : np.ndarray
-            Array of indices corresponding to the top‑``k`` genes.
-        rem_idx : np.ndarray
+        modeled_indices : np.ndarray
+            Array of indices corresponding to selected genes.
+        remaining_indices : np.ndarray
             Array of indices for the remaining genes.
-        top_k : int
-            Number of top genes modeled with a full covariance block.
-
-        Returns
-        -------
-        top_k_sums : dict
-            Per‑group sums of the transformed top‑``k`` genes.
-        top_k_second_moments : dict
-            Per‑group second‑moment matrices for the top‑``k`` genes.
-        rem_sums : dict
-            Per‑group sums for the remaining genes.
-        rem_second_moments : dict
-            Per‑group sums of squared values for the remaining genes.
-        Ng : dict
-            Per‑group number of observations contributing to the statistics.
-        top_k_Z : dict
-            Per‑group arrays of uniformized entries for the top‑``k`` genes across all batches.
-        rem_Z : dict
-            Per‑group arrays of uniformized entries for remaining genes across all batches.
-        """
-        top_k_sums = {g: np.zeros(top_k) for g in self.groups}
-        top_k_second_moments = {g: np.zeros((top_k, top_k)) for g in self.groups}
-        rem_sums = {g: np.zeros(self.n_outcomes - top_k) for g in self.groups}
-        rem_second_moments = {g: np.zeros(self.n_outcomes - top_k) for g in self.groups}
-        Ng = {g: 0 for g in self.groups}
-        top_k_Z = {g: [] for g in self.groups}
-        rem_Z = {g: [] for g in self.groups}
-
-        for y, x_dict in tqdm(self.loader, desc="Estimating top-k copula covariance"):
-            group_data = x_dict.get("group")
-            memberships = group_data.cpu().numpy()
-            u = uniformizer(y, x_dict)
-            z = norm.ppf(u)
-
-            for g in self.groups:
-                mask = memberships[:, self._group_col[g]] == 1
-                if not np.any(mask):
-                    continue
-
-                z_g = z[mask]
-                n_g = mask.sum()
-
-                top_k_z, rem_z = z_g[:, top_k_idx], z_g[:, rem_idx]
-
-                top_k_sums[g] += top_k_z.sum(axis=0)
-                top_k_second_moments[g] += top_k_z.T @ top_k_z
-                top_k_Z[g].append(top_k_z)
-
-                rem_sums[g] += rem_z.sum(axis=0)
-                rem_second_moments[g] += (rem_z**2).sum(axis=0)
-                rem_Z[g].append(rem_z)
-
-                Ng[g] += n_g
-
-        top_k_Z = {g: np.vstack(chunks) for g, chunks in top_k_Z.items()}
-        rem_Z = {g: np.vstack(chunks) for g, chunks in rem_Z.items()}
-        return top_k_sums, top_k_second_moments, rem_sums, rem_second_moments, Ng, top_k_Z, rem_Z
-
-    def _accumulate_full_stats(
-        self, uniformizer: Callable
-    ) -> Tuple[
-        Dict[Union[str, int], np.ndarray],
-        Dict[Union[str, int], np.ndarray],
-        Dict[Union[str, int], int],
-    ]:
-        """
-        Accumulate sufficient statistics for full covariance estimation.
-
-        Parameters
-        ----------
-        uniformizer : callable
-            Function that converts each batch of expression counts to
-            uniform values.
 
         Returns
         -------
         sums : dict
-            Per‑group sums of transformed values for all genes.
+            Per‑group sums of the transformed selected genes.
         second_moments : dict
-            Per‑group second‑moment matrices for all genes.
-        Ng : dict
+            Per‑group second‑moment matrices for the selected genes.
+        counts : dict
             Per‑group number of observations contributing to the statistics.
+        modeled_Z : dict
+            Per‑group arrays of uniformized entries for the selected genes across all batches.
         """
-        sums = {g: np.zeros(self.n_outcomes) for g in self.groups}
-        second_moments = {
-            g: np.zeros((self.n_outcomes, self.n_outcomes)) for g in self.groups
-        }
-        Ng = {g: 0 for g in self.groups}
-        Z = {g: [] for g in self.groups}
+        n_modeled = len(modeled_indices)
+        sums = {g: np.zeros(n_modeled) for g in self.groups}
+        second_moments = {g: np.zeros((n_modeled, n_modeled)) for g in self.groups}
+        counts = {g: 0 for g in self.groups}
+        modeled_z = {g: [] for g in self.groups}
 
-        for y, x_dict in tqdm(self.loader, desc="Estimating copula covariance"):
-            group_data = x_dict.get("group")
-            memberships = group_data.cpu().numpy()
-
-            u = uniformizer(y, x_dict)
-            z = norm.ppf(u)
+        desc = (
+            "Estimating top-k copula correlation"
+            if len(remaining_indices) > 0
+            else "Estimating copula correlation"
+        )
+        for y, x_dict in tqdm(self.loader, desc=desc):
+            memberships = x_dict["group"].cpu().numpy()
+            z = norm.ppf(uniformizer(y, x_dict))
 
             for g in self.groups:
                 mask = memberships[:, self._group_col[g]] == 1
-
                 if not np.any(mask):
                     continue
 
-                z_g = z[mask]
-                n_g = mask.sum()
-
-                Z[g].append(z_g)
+                z_g = z[mask][:, modeled_indices]
                 second_moments[g] += z_g.T @ z_g
                 sums[g] += z_g.sum(axis=0)
+                counts[g] += z_g.shape[0]
+                modeled_z[g].append(z_g)
 
-                Ng[g] += n_g
+        return sums, second_moments, counts, modeled_z
 
-        Z = {g: np.vstack(chunks) for g, chunks in Z.items()}
-        return sums, second_moments, Ng, Z
-
-    def _compute_block_covariance(
+    def _estimate_correlation_structures(
         self,
         uniformizer: Callable,
-        top_k_idx: np.ndarray,
-        rem_idx: np.ndarray,
-        top_k: int,
+        modeled_indices: np.ndarray,
+        remaining_indices: np.ndarray,
     ) -> Dict[Union[str, int], CovarianceStructure]:
         """
-        Compute block covariance structures for top‑``k`` and remaining genes.
+        Compute correlation structures for genes at ``modeled_indices``, selected
+        by ``top_k`` indicated in :meth:`fit`.
 
         Parameters
         ----------
         uniformizer : callable
             Function that converts each batch of expression counts to
             uniform values.
-        top_k_idx : np.ndarray
-            Indices of the top‑``k`` genes in the original feature ordering.
-        rem_idx : np.ndarray
-            Indices of the remaining genes in the original feature ordering.
-        top_k : int
-            Number of top genes modeled with a full covariance block.
+        modeled_indices : np.ndarray
+            Array of indices corresponding to selected genes.
+        remaining_indices : np.ndarray
+            Array of indices for the remaining genes.
 
         Returns
         -------
-        dict
+        covariance : dict
             Mapping from group labels to :class:`CovarianceStructure`
             objects that encode the estimated covariance for each group.
         """
-        (
-            top_k_sums,
-            top_k_second_moments,
-            remaining_sums,
-            remaining_second_moments,
-            Ng, top_k_Z, rem_Z,
-        ) = self._accumulate_top_k_stats(uniformizer, top_k_idx, rem_idx, top_k)
+        sums, second_moments, counts, modeled_z = self._accumulate_stats(
+            uniformizer, modeled_indices, remaining_indices
+        )
         covariance = {}
+        remaining_var = (
+            np.ones(len(remaining_indices)) if len(remaining_indices) > 0 else None
+        )
         for g in self.groups:
-            if Ng[g] == 0:
+            if counts[g] == 0:
                 warnings.warn(f"Group {g} has no observations, skipping")
                 continue
-            mean_top_k = top_k_sums[g] / Ng[g]
-            cov_top_k = top_k_second_moments[g] / Ng[g] - np.outer(
-                mean_top_k, mean_top_k
-            )
-            marginal_ll = norm.logpdf(top_k_Z[g]).sum()
-            ll = multivariate_normal.logpdf(top_k_Z[g], 
-                                            np.zeros(cov_top_k.shape[0]), cov_top_k).sum()
+
+            mean = sums[g] / counts[g]
+            cov = second_moments[g] / counts[g] - np.outer(mean, mean)
+            corr = self._covariance_to_correlation(cov)
+            z_g = np.vstack(modeled_z[g])
+            marginal_ll = norm.logpdf(z_g).sum()
+            ll = multivariate_normal.logpdf(
+                z_g,
+                np.zeros(len(modeled_indices)),
+                corr,
+            ).sum()
             self.copula_likelihood += ll - marginal_ll
-            mean_remaining = remaining_sums[g] / Ng[g]
-            var_remaining = remaining_second_moments[g] / Ng[g] - mean_remaining**2
-            top_k_names = self.adata.var_names[top_k_idx]
-            remaining_names = self.adata.var_names[rem_idx]
+
             covariance[g] = CovarianceStructure(
-                cov=cov_top_k,
-                modeled_names=top_k_names,
-                modeled_indices=top_k_idx,
-                remaining_var=var_remaining,
-                remaining_indices=rem_idx,
-                remaining_names=remaining_names,
+                cov=corr,
+                modeled_names=self.adata.var_names[modeled_indices],
+                modeled_indices=modeled_indices,
+                remaining_var=remaining_var,
+                remaining_indices=remaining_indices if len(remaining_indices) > 0 else None,
+                remaining_names=(
+                    self.adata.var_names[remaining_indices]
+                    if len(remaining_indices) > 0
+                    else None
+                ),
             )
         return covariance
 
-    def _compute_full_covariance(
-        self, uniformizer: Callable
-    ) -> Dict[Union[str, int], CovarianceStructure]:
+    def _covariance_to_correlation(self, cov: np.ndarray) -> np.ndarray:
         """
-        Compute full covariance matrices for all genes.
-
-        Parameters
-        ----------
-        uniformizer : callable
-            Function that converts each batch of expression counts to
-            uniform values.
-
-        Returns
-        -------
-        dict
-            Mapping from group labels to :class:`CovarianceStructure`
-            objects, each containing a full covariance matrix for all genes.
+        Convert an empirical covariance matrix to a correlation matrix.
         """
-        sums, second_moments, Ng, Z = self._accumulate_full_stats(uniformizer)
-        covariance = {}
-        for g in self.groups:
-            if Ng[g] == 0:
-                warnings.warn(f"Group {g} has no observations, skipping")
-                continue
-            mean = sums[g] / Ng[g]
-            cov = second_moments[g] / Ng[g] - np.outer(mean, mean)
-            marginal_ll = norm.logpdf(Z[g]).sum()
-            ll = multivariate_normal.logpdf(Z[g], 
-                                            np.zeros(self.n_outcomes), cov).sum()
-            self.copula_likelihood += ll - marginal_ll
-            covariance[g] = CovarianceStructure(
-                cov=cov,
-                modeled_names=self.adata.var_names,
-                modeled_indices=np.arange(self.n_outcomes),
-                remaining_var=None,
-                remaining_indices=None,
-                remaining_names=None,
-            )
-        return covariance
-
-    def _fast_normal_pseudo_obs(
-        self, n_samples: int, cov_struct: CovarianceStructure
-    ) -> np.ndarray:
-        """
-        Sample uniform pseudo‑observations using a block covariance structure.
-
-        Parameters
-        ----------
-        n_samples : int
-            Number of samples (cells) to generate.
-        cov_struct : CovarianceStructure
-            Covariance structure with a modeled block and diagonal variances
-            for remaining genes.
-
-        Returns
-        -------
-        np.ndarray
-            Array of shape ``(n_samples, total_genes)`` containing uniform
-            pseudo‑observations.
-        """
-        u = np.zeros((n_samples, cov_struct.total_genes))
-
-        z_modeled = np.random.multivariate_normal(
-            mean=np.zeros(cov_struct.num_modeled_genes),
-            cov=cov_struct.cov.values,
-            size=n_samples,
-        )
-
-        z_remaining = np.random.normal(
-            loc=0,
-            scale=cov_struct.remaining_var.values**0.5,
-            size=(n_samples, cov_struct.num_remaining_genes),
-        )
-
-        normal_distn_modeled = norm(0, np.diag(cov_struct.cov.values) ** 0.5)
-        u[:, cov_struct.modeled_indices] = normal_distn_modeled.cdf(z_modeled)
-
-        normal_distn_remaining = norm(0, cov_struct.remaining_var.values**0.5)
-        u[:, cov_struct.remaining_indices] = normal_distn_remaining.cdf(z_remaining)
-
-        return u
+        std = np.sqrt(np.clip(np.diag(cov), a_min=np.finfo(float).eps, a_max=None))
+        corr = cov / np.outer(std, std)
+        corr = 0.5 * (corr + corr.T)
+        np.fill_diagonal(corr, 1.0)
+        return corr
 
     def _normal_pseudo_obs(
         self, n_samples: int, cov_struct: CovarianceStructure
     ) -> np.ndarray:
         """
-        Sample uniform pseudo‑observations from a full covariance matrix.
+        Sample uniform pseudo‑observations from a correlation structure.
 
         Parameters
         ----------
         n_samples : int
             Number of samples (cells) to generate.
         cov_struct : CovarianceStructure
-            Covariance structure containing a full covariance matrix
-            for all genes.
+            Covariance structure containing either a full correlation matrix
+            or a modeled block plus independent standard normal remainder.
 
         Returns
         -------
@@ -655,13 +500,19 @@ class StandardCopula(Copula):
             pseudo‑observations.
         """
         u = np.zeros((n_samples, cov_struct.total_genes))
-        z = np.random.multivariate_normal(
-            mean=np.zeros(cov_struct.total_genes),
+        z_modeled = np.random.multivariate_normal(
+            mean=np.zeros(cov_struct.num_modeled_genes),
             cov=cov_struct.cov.values,
             size=n_samples,
         )
+        u[:, cov_struct.modeled_indices] = norm.cdf(z_modeled)
 
-        normal_distn = norm(0, np.diag(cov_struct.cov.values) ** 0.5)
-        u = normal_distn.cdf(z)
+        if cov_struct.num_remaining_genes > 0:
+            z_remaining = np.random.normal(
+                loc=0,
+                scale=1,
+                size=(n_samples, cov_struct.num_remaining_genes),
+            )
+            u[:, cov_struct.remaining_indices] = norm.cdf(z_remaining)
 
         return u
