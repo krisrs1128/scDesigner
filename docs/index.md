@@ -1,17 +1,56 @@
-# Welcome to MkDocs
+# scDesigner
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+**scDesigner** is a Python Module for modeling and simulating single-cell data with various models built on top of PyTorch.
 
-## Commands
+## Features
 
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
+- **Flexible models**: Poisson / Negative Binomial / Zero-inflated variants (and more).
+- **Scalable simulation**: GPU-accelerated training and simulation with PyTorch.
+- **User-friendly interface**: implemented with `scikit-learn`-like API.
+- **Extensible design**: easy to extend to new models and simulators.
 
-## Project layout
+## Installation guide
 
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+### Option A: Install the Python package (recommended)
+
+Create a clean environment (optional but recommended):
+
+```bash
+conda create -n scdesigner python=3.11 -y
+conda activate scdesigner
+```
+
+Install:
+
+```bash
+pip install scdesigner==0.0.6
+```
+
+### Option B: Install from source (this repository)
+
+This option is recommended if you want to access the latest features and edit the code.
+
+```bash
+git clone https://github.com/krisrs1128/scDesigner.git
+pip install -e scDesigner/scdesigner
+```
+
+## Quickstart
+
+After installation, you can import the package in Python:
+
+```python
+import scdesigner
+```
+
+You may refer to `examples/quickstart.ipynb` for basic usage of the package.
+
+## Repository Structure
+
+- **Examples**: `examples/`
+- **Python package source**: `scdesigner/src/scdesigner/`
+- **R wrappers**: `R/scDesigner/`
+
+## Contributing
+
+Issues and pull requests are welcome. Please include a minimal reproducible example and relevant environment information.

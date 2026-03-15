@@ -256,7 +256,7 @@ class StandardCopula(Copula):
         Parameters
         ----------
         uniformizer : callable
-            Function that converts expression data to uniform \([0, 1]\)
+            Function that converts expression data to uniform ``[0, 1]``
             pseudo‑observations given covariates, with signature
             ``uniformizer(y, x_dict)``.
         batch : tuple of (torch.Tensor, dict)
