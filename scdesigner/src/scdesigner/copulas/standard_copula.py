@@ -353,9 +353,7 @@ class StandardCopula(Copula):
         Dict[Union[str, int], list],
     ]:
         """
-        Accumulate sufficient statistics for covariance estimation. If ``top_k`` is 
-        indicated in :meth:`fit`, covariance of the top-``k`` genes are estimated; 
-        if ``top_k`` is None, covariance of the full matrix is estimated.
+        Accumulate sufficient statistics for covariance and correlation estimation.
 
         Parameters
         ----------
@@ -413,7 +411,9 @@ class StandardCopula(Copula):
     ) -> Dict[Union[str, int], CovarianceStructure]:
         """
         Compute correlation structures for genes at ``modeled_indices``, selected
-        by ``top_k`` indicated in :meth:`fit`.
+        by ``top_k`` indicated in :meth:`fit`.  If ``top_k`` is 
+        indicated in :meth:`fit`, correlation of the top-``k`` genes are estimated; 
+        if ``top_k`` is None, correlation of the full matrix is estimated.
 
         Parameters
         ----------
