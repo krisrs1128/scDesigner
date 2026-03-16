@@ -43,13 +43,7 @@ After installation, you can import the package in Python:
 import scdesigner
 ```
 
-You may refer to `examples/quickstart.ipynb` for basic usage of the package.
-
-## Repository Structure
-
-- **Examples**: `examples/`
-- **Python package source**: `scdesigner/src/scdesigner/`
-- **R wrappers**: `R/scDesigner/`
+You may refer to [`quickstart.ipynb`](https://github.com/krisrs1128/scDesigner/blob/main/examples/quickstart.ipynb) for basic usage of the package.
 
 ## Contributing
 
