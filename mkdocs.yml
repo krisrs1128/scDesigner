@@ -1,0 +1,28 @@
+site_name: scDesigner Project
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/gen_docs.py
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["scdesigner/src"]
+          options:
+            docstring_style: numpy
+            show_source: true
+  - mkdocs-jupyter:
+      include: ["examples/*.ipynb"]
+      execute: false
+  - literate-nav:
+      nav_file: SUMMARY.md
+
+nav:
+  - Home: index.md
+  - Examples:
+      - Quickstart: examples/quickstart.ipynb
+  - API Reference: reference/

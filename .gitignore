@@ -9,3 +9,6 @@ tests_langtian/
 /data/*.h5ad
 /.agents
 *.png
+.vscode/
+.conda/
+site/
