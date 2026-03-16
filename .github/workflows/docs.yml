@@ -1,0 +1,45 @@
+name: Deploy docs
+
+on:
+  push:
+    branches: [main]   
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip' 
+
+      - name: Install dependencies
+        run: |
+          pip install 'mkdocstrings[python]' mkdocs-material mkdocs-gen-files mkdocs-jupyter mkdocs-literate-nav 
+
+      - name: Build documentation
+        run: mkdocs build 
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site 
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
