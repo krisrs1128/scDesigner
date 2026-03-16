@@ -41,7 +41,7 @@ class Simulator:
 
         Parameters
         ----------
-        adata : AnnData
+        anndata : AnnData
             This is the object on which we want to estimate the simulator. This
             serves as the template for all downstream fitting.
         """

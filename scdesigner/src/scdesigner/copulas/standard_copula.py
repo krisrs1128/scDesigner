@@ -151,8 +151,8 @@ class StandardCopula(Copula):
                 )
 
     def fit(self, uniformizer: Callable, **kwargs):
-        """
-        Fit the Gaussian copula correlation model.
+        r"""
+        Fit the Gaussian copula covariance model.
 
         The data are first transformed to pseudo‑Gaussian variables via the
         ``uniformizer`` (PIT) and an inverse normal CDF. Depending on
@@ -237,7 +237,7 @@ class StandardCopula(Copula):
         Parameters
         ----------
         uniformizer : callable
-            Function that converts expression data to uniform \([0, 1]\)
+            Function that converts expression data to uniform ``[0, 1]``
             pseudo‑observations given covariates, with signature
             ``uniformizer(y, x_dict)``.
         batch : tuple of (torch.Tensor, dict)

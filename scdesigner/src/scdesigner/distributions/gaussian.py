@@ -54,9 +54,9 @@ class Gaussian(Marginal):
         Parameters
         ----------
         optimizer_class : Optional[callable]
-           We optimize the negative log likelihood using the Adam optimizer by
-           default. Alternative torch.optim.* optimizer can be passed in
-           through this argument.
+            We optimize the negative log likelihood using the Adam optimizer by
+            default. Alternative torch.optim.* optimizer can be passed in
+            through this argument.
         **optimizer_kwargs :
             Arguments that are passed to the optimizer during estimation.
 
