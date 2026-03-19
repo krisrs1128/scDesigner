@@ -206,9 +206,9 @@ class SCD3Simulator(Simulator, ABC):
             Dictionary with keys ``"aic"`` and ``"bic"`` computed from the
             copula log-likelihood and :meth:`copula.num_params`.
         """
-        use_old = False
+        use_template_ll = False
         if adata is None:
-            use_old = True
+            use_template_ll = True
             adata = self.template
 
         N, marginal_ll, copula_ll = 0, 0, 0
@@ -219,7 +219,7 @@ class SCD3Simulator(Simulator, ABC):
             copula_ll += self.copula.likelihood(self.marginal.uniformize, batch).sum()
             N += len(batch[0])
 
-        if use_old: copula_ll = self.copula.copula_likelihood
+        if use_template_ll: copula_ll = self.copula.copula_likelihood
 
         return {
             "marginal_aic": -2 * marginal_ll.item() + 2 * self.marginal.num_params(),

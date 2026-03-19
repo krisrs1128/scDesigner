@@ -185,7 +185,7 @@ class StandardCopula(Copula):
         top_k = self._validate_parameters(**kwargs)
         modeled_indices, remaining_indices = self._get_gene_partitions(top_k)
         self.copula_likelihood = 0
-        self.parameters = self._estimate_correlation_structures(
+        self.parameters = self._estimate_correlation(
             uniformizer, modeled_indices, remaining_indices
         )
 
@@ -370,7 +370,7 @@ class StandardCopula(Copula):
             Per‑group sums of the transformed selected genes.
         second_moments : dict
             Per‑group second‑moment matrices for the selected genes.
-        counts : dict
+        group_sizes : dict
             Per‑group number of observations contributing to the statistics.
         modeled_Z : dict
             Per‑group arrays of uniformized entries for the selected genes across all batches.
@@ -378,7 +378,7 @@ class StandardCopula(Copula):
         n_modeled = len(modeled_indices)
         sums = {g: np.zeros(n_modeled) for g in self.groups}
         second_moments = {g: np.zeros((n_modeled, n_modeled)) for g in self.groups}
-        counts = {g: 0 for g in self.groups}
+        group_sizes = {g: 0 for g in self.groups}
         modeled_z = {g: [] for g in self.groups}
 
         desc = (
@@ -398,12 +398,12 @@ class StandardCopula(Copula):
                 z_g = z[mask][:, modeled_indices]
                 second_moments[g] += z_g.T @ z_g
                 sums[g] += z_g.sum(axis=0)
-                counts[g] += z_g.shape[0]
+                group_sizes[g] += z_g.shape[0]
                 modeled_z[g].append(z_g)
 
-        return sums, second_moments, counts, modeled_z
+        return sums, second_moments, group_sizes, modeled_z
 
-    def _estimate_correlation_structures(
+    def _estimate_correlation(
         self,
         uniformizer: Callable,
         modeled_indices: np.ndarray,
@@ -431,7 +431,7 @@ class StandardCopula(Copula):
             Mapping from group labels to :class:`CovarianceStructure`
             objects that encode the estimated covariance for each group.
         """
-        sums, second_moments, counts, modeled_z = self._accumulate_stats(
+        sums, second_moments, group_sizes, modeled_z = self._accumulate_stats(
             uniformizer, modeled_indices, remaining_indices
         )
         covariance = {}
@@ -439,12 +439,12 @@ class StandardCopula(Copula):
             np.ones(len(remaining_indices)) if len(remaining_indices) > 0 else None
         )
         for g in self.groups:
-            if counts[g] == 0:
+            if group_sizes[g] == 0:
                 warnings.warn(f"Group {g} has no observations, skipping")
                 continue
 
-            mean = sums[g] / counts[g]
-            cov = second_moments[g] / counts[g] - np.outer(mean, mean)
+            mean = sums[g] / group_sizes[g]
+            cov = second_moments[g] / group_sizes[g] - np.outer(mean, mean)
             corr = self._covariance_to_correlation(cov)
             z_g = np.vstack(modeled_z[g])
             marginal_ll = norm.logpdf(z_g).sum()
