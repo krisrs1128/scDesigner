@@ -4,11 +4,13 @@ from ..base.marginal import Marginal
 from ..base.simulator import Simulator
 from anndata import AnnData
 from tqdm import tqdm
-import torch
 import numpy as np
+import scipy.sparse as sp
+import torch
 from ..distributions import (
     NegBin,
     NegBinIRLS,
+    PenalizedNegBin,
     ZeroInflatedNegBin,
     Gaussian,
     Poisson,
@@ -484,3 +486,82 @@ class NegBinIRLSCopula(SCD3Simulator):
 
     def predict(self, obs=None, batch_size: int = 8224, **kwargs):
         return super().predict(obs, batch_size, device="cpu", **kwargs)
+
+
+class PenalizedNegBinCopula(SCD3Simulator):
+    """NB copula simulator with smoothness penalties on spatial basis coefficients
+    for both mean and dispersion models, plus per-gene count capping.
+
+    Parameters
+    ----------
+    mean_formula, dispersion_formula, copula_formula : str
+        As in NegBinCopula.
+    mean_penalty_diag : np.ndarray or None
+        Diagonal of the penalty matrix for mean spatial coefficients.
+    disp_penalty_diag : np.ndarray or None
+        Diagonal of the penalty matrix for dispersion spatial coefficients.
+    n_parametric : int
+        Number of leading coefficient rows that are unpenalized in the mean
+        model (intercept, cell type dummies, etc.).
+    n_parametric_disp : int
+        Number of leading coefficient rows that are unpenalized in the
+        dispersion model (intercept, etc.).
+    lam : float
+        Base penalty strength for mean model.
+    lam_disp : float
+        Penalty strength for dispersion model.
+    gene_means : np.ndarray or None
+        Per-gene mean expression for adaptive penalty scaling (1/mean_j).
+    cap_at_observed_max : bool
+        If True, clip simulated counts to the per-gene observed maximum.
+    """
+
+    def __init__(
+        self,
+        mean_formula="~ 1",
+        dispersion_formula="~ 1",
+        copula_formula="~ 1",
+        mean_penalty_diag=None,
+        disp_penalty_diag=None,
+        n_parametric=0,
+        n_parametric_disp=0,
+        lam=1.0,
+        lam_disp=1.0,
+        gene_means=None,
+        cap_at_observed_max=True,
+    ):
+        self._mean_penalty_diag = mean_penalty_diag
+        self._disp_penalty_diag = disp_penalty_diag
+        self._n_parametric = n_parametric
+        self._n_parametric_disp = n_parametric_disp
+        self._lam = lam
+        self._lam_disp = lam_disp
+        self._gene_means = gene_means
+        self._cap_at_observed_max = cap_at_observed_max
+        self._gene_max = None  # set during fit
+        marginal = PenalizedNegBin(
+            {"mean": mean_formula, "dispersion": dispersion_formula},
+            mean_penalty_diag=mean_penalty_diag,
+            disp_penalty_diag=disp_penalty_diag,
+            n_parametric=n_parametric,
+            n_parametric_disp=n_parametric_disp,
+            lam=lam,
+            lam_disp=lam_disp,
+            gene_means=gene_means,
+        )
+        copula = StandardCopula(copula_formula)
+        super().__init__(marginal, copula)
+
+    def fit(self, adata, **kwargs):
+        # Store per-gene max before fitting
+        if self._cap_at_observed_max:
+            X = adata.X.toarray() if sp.issparse(adata.X) else np.array(adata.X)
+            self._gene_max = X.max(axis=0).flatten()
+        return super().fit(adata, **kwargs)
+
+    def sample(self, **kwargs):
+        result = super().sample(**kwargs)
+        if self._cap_at_observed_max and self._gene_max is not None:
+            X = result.X
+            result.X = np.minimum(X, self._gene_max[None, :])
+        return result
