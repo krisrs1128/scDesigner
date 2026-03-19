@@ -47,48 +47,6 @@ class StandardCopula(Copula):
         The list of groups in the formula.
     n_groups : int
         The number of groups in the formula.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> import scanpy as sc
-    >>> from scdesigner.copulas.standard_copula import StandardCopula
-    >>>
-    >>> # Load a small dataset (cells x genes) and keep only a few genes for speed
-    >>> adata = sc.datasets.pbmc3k()[:500, :20].copy()
-    >>>
-    >>> # Instantiate the copula with a simple group formula and set up data
-    >>> copula = StandardCopula("group ~ 1")
-    >>> copula.setup_data(adata, {"group": "~ 1"}, batch_size=256)
-    >>> copula.groups  # groups inferred from the design matrix
-    ['Intercept']
-    >>> copula.n_outcomes  # number of modeled genes
-    20
-    >>> # Define a simple rank-based uniformizer used by fit() and likelihood()
-    >>> def rank_uniformizer(y, x_dict):
-    ...     y_np = y.cpu().numpy()
-    ...     # Convert each gene to ranks and scale to (0, 1)
-    ...     ranks = np.argsort(np.argsort(y_np, axis=0), axis=0) + 1
-    ...     return ranks / (y_np.shape[0] + 1.0)
-    >>>
-    >>> # Fit the Gaussian copula covariance model
-    >>> copula.fit(rank_uniformizer, top_k=10)
-    >>> isinstance(copula.parameters, dict)
-    True
-    >>> # Draw dependent uniform pseudo-observations for a batch of covariates
-    >>> y_batch, x_batch = next(iter(copula.loader))
-    >>> u = copula.pseudo_obs(x_batch)
-    >>> u.shape[1] == copula.n_outcomes
-    True
-    >>> # Compute per-cell log-likelihoods for the same batch
-    >>> ll = copula.likelihood(rank_uniformizer, (y_batch, x_batch))
-    >>> ll.shape[0] == y_batch.shape[0]
-    True
-    >>> # Inspect the effective number of covariance parameters
-    >>> n_params = copula.num_params()
-    >>> isinstance(n_params, int) and n_params > 0
-    True
-
     """
 
     def __init__(self, formula: Union[str, dict] = "~ 1"):
