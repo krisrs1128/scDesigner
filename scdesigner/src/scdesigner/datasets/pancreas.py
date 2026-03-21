@@ -5,7 +5,8 @@ import joblib
 import os
 import urllib.request
 
-ARCHIVE_URL = "https://figshare.com/ndownloader/files/60087086"
+FIGSHARE_FILE_ID = 60087086
+ARCHIVE_URL = f"https://api.figshare.com/v2/file/download/{FIGSHARE_FILE_ID}"
 
 
 def _ensure_data_home(data_home: Optional[Union[str, os.PathLike]]) -> Path:
@@ -29,11 +30,13 @@ def fetch_pancreas(
 
     tmp_path = data_home_path / "pancreas.h5ad"
     try:
-        urllib.request.urlretrieve(ARCHIVE_URL, str(tmp_path))
+        req = urllib.request.Request(ARCHIVE_URL, headers={"User-Agent": "scdesigner/1.0"})
+        with urllib.request.urlopen(req) as response, open(tmp_path, "wb") as f:
+            f.write(response.read())
         adata = anndata.read_h5ad(str(tmp_path))
         joblib.dump(adata, str(cache_path), compress=6)
         return adata
-    except:
-        pass
-    if tmp_path.exists():
-        tmp_path.unlink()
+    except Exception as e:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise RuntimeError(f"Failed to download Figshare {FIGSHARE_FILE_ID}: {e}") from e
