@@ -208,20 +208,27 @@ class SCD3Simulator(Simulator, ABC):
             Dictionary with keys ``"aic"`` and ``"bic"`` computed from the
             copula log-likelihood and :meth:`copula.num_params`.
         """
+        use_template_ll = False
         if adata is None:
+            use_template_ll = True
             adata = self.template
 
-        N, ll = 0, 0
-        loader = adata_loader(
-            adata, self.marginal.formula | self.copula.formula, **kwargs
-        )
+        N, marginal_ll, copula_ll = 0, 0, 0
+        loader = adata_loader(adata, self.marginal.formula | self.copula.formula, **kwargs)
         for batch in tqdm(loader, desc="Computing log-likelihood..."):
-            ll += self.copula.likelihood(self.marginal.uniformize, batch).sum()
+            with torch.no_grad():
+                marginal_ll += self.marginal.likelihood(batch).sum()
+            if not use_template_ll:
+                copula_ll += self.copula.likelihood(self.marginal.uniformize, batch).sum()
             N += len(batch[0])
 
+        if use_template_ll: copula_ll = self.copula.copula_likelihood
+
         return {
-            "aic": -2 * ll + 2 * self.copula.num_params(),
-            "bic": -2 * ll + np.log(N) * self.copula.num_params(),
+            "marginal_aic": -2 * marginal_ll.item() + 2 * self.marginal.num_params(),
+            "marginal_bic": -2 * marginal_ll.item() + np.log(N) * self.marginal.num_params(),
+            "copula_aic": -2 * copula_ll + 2 * self.copula.num_params(),
+            "copula_bic": -2 * copula_ll + np.log(N) * self.copula.num_params()
         }
 
 
