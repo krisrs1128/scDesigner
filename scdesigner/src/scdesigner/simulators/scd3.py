@@ -216,7 +216,8 @@ class SCD3Simulator(Simulator, ABC):
         for batch in tqdm(loader, desc="Computing log-likelihood..."):
             with torch.no_grad():
                 marginal_ll += self.marginal.likelihood(batch).sum()
-            copula_ll += self.copula.likelihood(self.marginal.uniformize, batch).sum()
+            if not use_template_ll:
+                copula_ll += self.copula.likelihood(self.marginal.uniformize, batch).sum()
             N += len(batch[0])
 
         if use_template_ll: copula_ll = self.copula.copula_likelihood
