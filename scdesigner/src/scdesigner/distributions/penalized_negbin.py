@@ -4,6 +4,12 @@ from scdesigner.distributions import NegBin
 from scdesigner.base.marginal import GLMPredictor
 
 
+def count_parametric(predictor_names, basis_cols):
+    """Count non-basis columns in a design matrix."""
+    basis_set = set(basis_cols)
+    return sum(1 for name in predictor_names if name not in basis_set)
+
+
 class PenalizedNegBin(NegBin):
     """NegBin with quadratic penalties on a subset of mean and dispersion coefficients.
 
@@ -16,8 +22,8 @@ class PenalizedNegBin(NegBin):
     per-basis-column weights (e.g. eigenvalues of a graph Laplacian), β_kj and
     γ_kj are the k-th basis coefficients for gene j, and 1/μ_j is a per-gene
     weight that normalises across genes with very different expression levels.
-    Parametric (unpenalised, e.g. intercept, cell type) coefficients indexed by
-    ``[0:n_parametric]`` are excluded from the penalty.
+    Columns whose names appear in ``mean_basis_cols`` / ``disp_basis_cols`` are
+    penalised; all others (intercept, cell type, etc.) are left unpenalised.
 
     Parameters
     ----------
@@ -29,11 +35,11 @@ class PenalizedNegBin(NegBin):
     disp_penalty_diag : array-like of shape (n_pen_disp,) or None
         Per-basis-column penalty weights for the dispersion linear predictor.
         ``None`` disables the dispersion penalty.
-    n_parametric : int
-        Number of leading mean coefficients that are unpenalised (e.g. intercept,
-        experimental covariates).
-    n_parametric_disp : int
-        Number of leading dispersion coefficients that are unpenalised.
+    mean_basis_cols : list of str
+        Names of the penalised basis columns in the mean design matrix
+        (e.g. ``["sp_basis_0", "sp_basis_1", ...]``).
+    disp_basis_cols : list of str
+        Names of the penalised basis columns in the dispersion design matrix.
     lam : float
         Global penalty strength for mean basis coefficients.
     lam_disp : float
@@ -52,19 +58,19 @@ class PenalizedNegBin(NegBin):
     >>> model = PenalizedNegBin(
     ...     "~ 0 + sp_basis_0 + sp_basis_1 + sp_basis_2",
     ...     mean_penalty_diag=penalty,
-    ...     n_parametric=0,
+    ...     mean_basis_cols=["sp_basis_0", "sp_basis_1", "sp_basis_2"],
     ...     lam=0.1,
     ... )
     """
 
     def __init__(self, formula, mean_penalty_diag=None, disp_penalty_diag=None,
-                 n_parametric=0, n_parametric_disp=0, lam=1.0, lam_disp=1.0,
+                 mean_basis_cols=None, disp_basis_cols=None, lam=1.0, lam_disp=1.0,
                  gene_means=None, **kwargs):
         super().__init__(formula, **kwargs)
         self._mean_penalty_diag = mean_penalty_diag
         self._disp_penalty_diag = disp_penalty_diag
-        self._n_parametric = n_parametric
-        self._n_parametric_disp = n_parametric_disp
+        self._mean_basis_cols = mean_basis_cols or []
+        self._disp_basis_cols = disp_basis_cols or []
         self._lam = lam
         self._lam_disp = lam_disp
         self._gene_means = gene_means
@@ -88,8 +94,8 @@ class PenalizedNegBin(NegBin):
         else:
             gene_w = None
 
-        n_par = self._n_parametric
-        n_par_d = self._n_parametric_disp
+        n_par = count_parametric(self.predictor_names.get("mean", []), self._mean_basis_cols)
+        n_par_d = count_parametric(self.predictor_names.get("dispersion", []), self._disp_basis_cols)
         lam = self._lam
         lam_d = self._lam_disp
 
