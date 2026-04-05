@@ -21,7 +21,8 @@ dependencies = [
     "scanpy",
     "scipy",
     "torch",
-    "tqdm"
+    "tqdm",
+    "scikit-learn",
 ]
 
 [project.urls]
