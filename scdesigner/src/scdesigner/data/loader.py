@@ -100,7 +100,7 @@ class AnnDataDataset(Dataset):
         self.device = get_device(device)
 
         # keeping track of covariate-related information
-        self.obs_levels = categories(self.adata.obs)
+        self.obs_levels, self.ref_levels = categories(self.adata.obs)
         self.obs_matrices = {}
         self.predictor_names = None
 
@@ -152,8 +152,8 @@ class AnnDataDataset(Dataset):
             self.obs_matrices = {}
             predictor_names = {}
             for key, f in self.formula.items():
-                mat = model_matrix(f, obs_coded_chunk)
-                predictor_names [key] = list(mat.columns)
+                mat = drop_reference_columns(model_matrix(f, obs_coded_chunk), self.ref_levels)
+                predictor_names[key] = list(mat.columns)
                 self.obs_matrices[key] = torch.tensor(mat.values, dtype=torch.float32).to(self.device)
 
             # Capture predictor (column) names from the model matrices once.
@@ -268,12 +268,11 @@ def _preloaded_adata(adata: AnnData, formula: Dict[str, str], device: torch.devi
         X = X.toarray()
     y = torch.tensor(X, dtype=torch.float32).to(device)
 
-    obs = code_levels(adata.obs.copy(), categories(adata.obs))
-    x = {
-        k: torch.tensor(model_matrix(f, obs).values, dtype=torch.float32).to(device)
-        for k, f in formula.items()
-    }
-    predictor_names = {k: list(model_matrix(f, obs).columns) for k, f in formula.items()}
+    obs_levels, ref_levels = categories(adata.obs)
+    obs = code_levels(adata.obs.copy(), obs_levels)
+    matrices = {k: drop_reference_columns(model_matrix(f, obs), ref_levels) for k, f in formula.items()}
+    x = {k: torch.tensor(mat.values, dtype=torch.float32).to(device) for k, mat in matrices.items()}
+    predictor_names = {k: list(mat.columns) for k, mat in matrices.items()}
     return PreloadedDataset(y, x, predictor_names)
 
 ################################################################################
@@ -305,13 +304,35 @@ def to_tensor(X):
     return t.squeeze()
 
 def categories(obs):
-    """Collect levels for categorical/object columns in an observation table."""
+    """Collect levels and reference levels for categorical/object columns.
+
+    Returns
+    -------
+    levels : dict[str, np.ndarray]
+        Unique levels for each categorical/object column.
+    references : dict[str, str]
+        Most common level for each categorical/object column.
+    """
     levels = {}
+    references = {}
     for k in obs.columns:
         obs_type = str(obs[k].dtype)
         if obs_type in ["category", "object"]:
-            levels[k] = obs[k].unique()
-    return levels
+            counts = obs[k].value_counts()
+            levels[k] = counts.index.values
+            references[k] = counts.index[0]
+    return levels, references
+
+
+def drop_reference_columns(mat: pd.DataFrame, ref_levels: dict) -> pd.DataFrame:
+    """Drop reference-level dummy columns to avoid collinearity.
+
+    For each categorical variable ``col`` with reference level ``ref``,
+    formulaic names the corresponding dummy ``col[ref]``.  If that column is
+    present, this function will drop it.
+    """
+    to_drop = [f"{col}[{ref}]" for col, ref in ref_levels.items() if f"{col}[{ref}]" in mat.columns]
+    return mat.drop(columns=to_drop)
 
 
 def code_levels(obs, categories):

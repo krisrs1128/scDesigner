@@ -507,12 +507,10 @@ class PenalizedNegBinCopula(SCD3Simulator):
         Diagonal of the penalty matrix for mean spatial coefficients.
     disp_penalty_diag : np.ndarray or None
         Diagonal of the penalty matrix for dispersion spatial coefficients.
-    n_parametric : int
-        Number of leading coefficient rows that are unpenalized in the mean
-        model (intercept, cell type dummies, etc.).
-    n_parametric_disp : int
-        Number of leading coefficient rows that are unpenalized in the
-        dispersion model (intercept, etc.).
+    mean_basis_cols : list of str
+        Names of the penalised basis columns in the mean design matrix.
+    disp_basis_cols : list of str
+        Names of the penalised basis columns in the dispersion design matrix.
     lam : float
         Base penalty strength for mean model.
     lam_disp : float
@@ -530,17 +528,13 @@ class PenalizedNegBinCopula(SCD3Simulator):
         copula_formula="~ 1",
         mean_penalty_diag=None,
         disp_penalty_diag=None,
-        n_parametric=0,
-        n_parametric_disp=0,
+        mean_basis_cols=None,
+        disp_basis_cols=None,
         lam=1.0,
         lam_disp=1.0,
         gene_means=None,
         cap_at_observed_max=True,
     ):
-        self._mean_penalty_diag = mean_penalty_diag
-        self._disp_penalty_diag = disp_penalty_diag
-        self._n_parametric = n_parametric
-        self._n_parametric_disp = n_parametric_disp
         self._lam = lam
         self._lam_disp = lam_disp
         self._gene_means = gene_means
@@ -550,8 +544,8 @@ class PenalizedNegBinCopula(SCD3Simulator):
             {"mean": mean_formula, "dispersion": dispersion_formula},
             mean_penalty_diag=mean_penalty_diag,
             disp_penalty_diag=disp_penalty_diag,
-            n_parametric=n_parametric,
-            n_parametric_disp=n_parametric_disp,
+            mean_basis_cols=mean_basis_cols,
+            disp_basis_cols=disp_basis_cols,
             lam=lam,
             lam_disp=lam_disp,
             gene_means=gene_means,

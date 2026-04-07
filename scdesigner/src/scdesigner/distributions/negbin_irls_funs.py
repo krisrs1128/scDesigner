@@ -236,13 +236,23 @@ def accumulate_dispersion_statistics(loader, beta, clip = 5):
     return sum_mu, sum_mu2, sum_sq_resid, n_total
 
 
+def _is_intercept_column(col):
+    """Return True if col is all ones (i.e. an intercept column)."""
+    return torch.allclose(col, torch.ones_like(col), atol=1e-6)
+
+
 def _initialize_beta_intercept(loader, n_genes, p_mean):
     """Initialize using Gene Means
 
-    Initialize beta in the poisson regression so that predicted mean ≈
-    observed gene mean.
+    Initialize beta in the poisson regression so that predicted mean ≈ observed
+    gene mean. When the model has no intercept (checked by looking at the first
+    column of the first batch), we return zeros without any initialization.
     """
     beta = torch.zeros((p_mean, n_genes))
+    _, x_peek = next(iter(loader))
+    if not _is_intercept_column(x_peek["mean"][:, 0].to("cpu")):
+        return beta
+
     gene_sums = torch.zeros(n_genes)
     intercept_sum = 0.0
     n_total = 0
