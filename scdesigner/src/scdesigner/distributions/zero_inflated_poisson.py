@@ -1,6 +1,8 @@
 from ..data.formula import standardize_formula
 from ..base.marginal import GLMPredictor, Marginal
 from ..data.loader import _to_numpy
+from ..distributions.negbin_irls_funs import initialize_parameters
+from ..distributions.zero_inflated_poisson_funs import _initialize_zi_intercept
 from typing import Union, Dict, Optional, Tuple
 import torch
 import numpy as np
@@ -63,6 +65,14 @@ class ZeroInflatedPoisson(Marginal):
             optimizer_class=optimizer_class,
             optimizer_kwargs=optimizer_kwargs
         )
+
+        beta, _ = initialize_parameters(
+            self.loader, self.n_outcomes, self.feature_dims["mean"], p_disp=1
+        )
+        self.predict.coefs["mean"].data.copy_(beta)
+
+        logit_pi = _initialize_zi_intercept(self.loader, beta, self.n_outcomes)
+        self.predict.coefs["zero_inflation"].data[0].copy_(logit_pi)
 
     def likelihood(self, batch) -> torch.Tensor:
         """Compute the log-likelihood"""
