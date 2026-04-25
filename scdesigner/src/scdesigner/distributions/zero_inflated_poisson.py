@@ -2,7 +2,7 @@ from ..data.formula import standardize_formula
 from ..base.marginal import GLMPredictor, Marginal
 from ..data.loader import _to_numpy
 from ..distributions.negbin_irls_funs import initialize_parameters
-from ..distributions.zero_inflated_poisson_funs import _initialize_zi_intercept
+from ..distributions.zero_inflated_poisson_funs import _initialize_zi_intercept, _lam_to_mu
 from typing import Union, Dict, Optional, Tuple
 import torch
 import numpy as np
@@ -11,12 +11,10 @@ from scipy.stats import poisson, bernoulli
 class ZeroInflatedPoisson(Marginal):
     """Zero-Inflated Poisson marginal estimator
 
-    This subclass models counts with an explicit zero-inflation component.
-    For each feature j the observation follows a mixture: with probability
-    `pi_j(x)` the value is an extra zero, otherwise the count is drawn from
-    a Poisson distribution with mean `mu_j(x)`. Both `mu_j(x)` and the
-    inflation probability `pi_j(x)` may depend on covariates `x` through the
-    `formula` argument.
+    Feature j's zero inflation probability is `pi_j(x)`.  If not zero-ed, the
+    draw is Poi(mu_j(x)). The 'mean' formula models the marginal mean
+    λ_j(x) = (1−π_j)μ_j. During likelihood calculation, μ_j is set to
+    λ_j/(1−π_j).
 
     The allowed formula keys are 'mean' and 'zero_inflation'. If a string
     formula is supplied it is taken to specify the `mean` by default.
@@ -78,8 +76,9 @@ class ZeroInflatedPoisson(Marginal):
         """Compute the log-likelihood"""
         y, x = batch
         params = self.predict(x)
-        mu = params.get("mean")
+        lam = params.get("mean")
         pi = params.get("zero_inflation")
+        mu = _lam_to_mu(lam, pi)
 
         poisson_loglikelihood = y * torch.log(mu + 1e-10) - mu - torch.lgamma(y + 1)
         return torch.log(
@@ -106,8 +105,9 @@ class ZeroInflatedPoisson(Marginal):
 
     def _local_params(self, x, y=None) -> Tuple:
         params = self.predict(x)
-        mu = params.get('mean')
+        lam = params.get('mean')
         pi = params.get('zero_inflation')
+        mu = _lam_to_mu(lam, pi)
         if y is None:
             return _to_numpy(mu, pi)
         return _to_numpy(mu, pi, y)

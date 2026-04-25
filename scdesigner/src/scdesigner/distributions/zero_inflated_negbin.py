@@ -1,6 +1,8 @@
 from ..data.formula import standardize_formula
 from ..base.marginal import GLMPredictor, Marginal
 from ..data.loader import _to_numpy
+from ..distributions.negbin_irls_funs import initialize_parameters
+from ..distributions.zero_inflated_negbin_funs import _initialize_zi_intercept_nb, _lam_to_mu
 from typing import Union, Dict, Optional, Tuple
 import torch
 import numpy as np
@@ -9,12 +11,10 @@ from scipy.stats import nbinom, bernoulli
 class ZeroInflatedNegBin(Marginal):
     """Zero-inflated negative-binomial marginal estimator
 
-    This subclass models a two-part mixture for counts. For each feature
-    j the observation follows a mixture: with probability `pi_j(x)` the value
-    is an extra zero (inflation), otherwise the count is drawn from a
-    negative-binomial distribution NB(mu_j(x), r_j(x)) parameterized here via
-    a mean `mu_j(x)` and dispersion `r_j(x)`. All parameters may depend on
-    covariates `x` through the `formula` argument.
+    Feature j's zero inflation probability is `pi_j(x)`.  If not zero-ed, the
+    draw is NB(mu_j(x), r_j(x)). The 'mean' formula models the marginal mean
+    λ_j(x) = (1−π_j)μ_j. During likelihood calculation, μ_j is set to
+    λ_j/(1−π_j).
 
     The allowed formula keys are 'mean', 'dispersion', and 'zero_inflation'.
 
@@ -64,13 +64,23 @@ class ZeroInflatedNegBin(Marginal):
             optimizer_kwargs=optimizer_kwargs
         )
 
+        beta, gamma = initialize_parameters(
+            self.loader, self.n_outcomes, self.feature_dims["mean"], self.feature_dims["dispersion"]
+        )
+        self.predict.coefs["mean"].data.copy_(beta)
+        self.predict.coefs["dispersion"].data.copy_(gamma)
+
+        logit_pi = _initialize_zi_intercept_nb(self.loader, beta, gamma, self.n_outcomes)
+        self.predict.coefs["zero_inflation"].data[0].copy_(logit_pi)
+
     def likelihood(self, batch) -> torch.Tensor:
         """Compute the negative log-likelihood"""
         y, x = batch
         params = self.predict(x)
-        mu = params.get("mean")
+        lam = params.get("mean")
         r = params.get("dispersion")
         pi = params.get("zero_inflation")
+        mu = _lam_to_mu(lam, pi)
 
         # negative binomial component
         negbin_loglikelihood = (
@@ -107,9 +117,10 @@ class ZeroInflatedNegBin(Marginal):
 
     def _local_params(self, x, y=None) -> Tuple:
         params = self.predict(x)
-        mu = params.get('mean')
+        lam = params.get('mean')
         r = params.get('dispersion')
         pi = params.get('zero_inflation')
+        mu = _lam_to_mu(lam, pi)
         if y is None:
             return _to_numpy(mu, pi, r)
         return _to_numpy(mu, r, pi, y)
