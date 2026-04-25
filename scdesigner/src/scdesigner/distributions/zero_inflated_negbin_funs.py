@@ -1,25 +1,21 @@
 from ..distributions.negbin_irls_funs import _is_intercept_column
 import torch
 
-# Clamp logit(pi) to avoid degenerate initialization: [-6, 4] → [0.25%, 98%]
-# inflation. A sparse batch could otherwise push logit(pi) to the extremes.
+# Shared with zero_inflated_poisson_funs — see comments there.
 _LOGIT_PI_CLAMP = (-6, 4)
-
-# Scan at most this many batches to estimate zero fractions.
 _MAX_INIT_BATCHES = 10
 
 
 def _lam_to_mu(lam, pi, eps=1e-10):
-    """mu = lam / (1 - pi); eps prevents division by zero if pi → 1 during optimization."""
+    """mu = lam / (1 - pi); eps prevents division by zero"""
     return lam / (1 - pi + eps)
 
 
-def _initialize_zi_intercept(loader, beta_mean, n_genes):
+def _initialize_zi_intercept_nb(loader, beta_mean, gamma_disp, n_genes):
     """Return per-gene logit(pi) intercepts estimated from a short data scan.
 
-    Computes excess zeros (observed minus Poisson-expected, using beta_mean)
-    over up to _MAX_INIT_BATCHES batches. Returns zeros if the zero_inflation
-    design matrix has no intercept column.
+    NB has expected zero fraction P(Y=0 | mu, r) = (r/(r+mu))^r. Besides this,
+    uses the same logic as zero_inflated_poisson_funs.py
     """
     zero_counts = torch.zeros(n_genes)
     expected_zero_sum = torch.zeros(n_genes)
@@ -32,8 +28,9 @@ def _initialize_zi_intercept(loader, beta_mean, n_genes):
             return torch.zeros(n_genes)
 
         mu_hat = torch.exp(x_batch["mean"].to("cpu") @ beta_mean)
+        r_hat = torch.exp(x_batch["dispersion"].to("cpu") @ gamma_disp)
         zero_counts += (y_batch.to("cpu") == 0).float().sum(dim=0)
-        expected_zero_sum += torch.exp(-mu_hat).sum(dim=0)
+        expected_zero_sum += (r_hat / (r_hat + mu_hat)).pow(r_hat).sum(dim=0)
         n_cells += y_batch.shape[0]
 
     obs_zero_frac = zero_counts / n_cells
