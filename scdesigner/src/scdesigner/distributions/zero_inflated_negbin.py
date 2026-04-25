@@ -6,7 +6,7 @@ from ..distributions.zero_inflated_negbin_funs import _initialize_zi_intercept_n
 from typing import Union, Dict, Optional, Tuple
 import torch
 import numpy as np
-from scipy.stats import nbinom, bernoulli
+from scipy.stats import nbinom
 
 class ZeroInflatedNegBin(Marginal):
     """Zero-inflated negative-binomial marginal estimator
@@ -98,8 +98,9 @@ class ZeroInflatedNegBin(Marginal):
     def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Invert pseudoobservations."""
         mu, r, pi, u = self._local_params(x, u)
-        y = nbinom(n=r, p=r / (r + mu)).ppf(u)
-        delta = bernoulli(1 - pi).ppf(u)
+        conditional_u = np.where(u > pi, (u - pi) / (1 - pi + 1e-10), 0.0)
+        y = nbinom(n=r, p=r / (r + mu)).ppf(conditional_u)
+        delta = (u > pi).astype(float)
         return torch.from_numpy(y * delta).float()
 
     def uniformize(self, y: torch.Tensor, x: Dict[str, torch.Tensor], epsilon=1e-6) -> torch.Tensor:

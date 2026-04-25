@@ -6,7 +6,7 @@ from ..distributions.zero_inflated_poisson_funs import _initialize_zi_intercept,
 from typing import Union, Dict, Optional, Tuple
 import torch
 import numpy as np
-from scipy.stats import poisson, bernoulli
+from scipy.stats import poisson
 
 class ZeroInflatedPoisson(Marginal):
     """Zero-Inflated Poisson marginal estimator
@@ -88,8 +88,9 @@ class ZeroInflatedPoisson(Marginal):
     def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Invert pseudoobservations."""
         mu, pi, u = self._local_params(x, u)
-        y = poisson(mu).ppf(u)
-        delta = bernoulli(1 - pi).ppf(u)
+        conditional_u = np.where(u > pi, (u - pi) / (1 - pi + 1e-10), 0.0)
+        y = poisson(mu).ppf(conditional_u)
+        delta = (u > pi).astype(float)
         return torch.from_numpy(y * delta).float()
 
     def uniformize(self, y: torch.Tensor, x: Dict[str, torch.Tensor], epsilon=1e-6) -> torch.Tensor:
