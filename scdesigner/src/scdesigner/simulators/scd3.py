@@ -1,5 +1,6 @@
 from ..base.copula import Copula
 from ..data.loader import obs_loader, adata_loader
+from ..data import add_spatial_basis, basis_formula
 from ..base.marginal import Marginal
 from ..base.simulator import Simulator
 from anndata import AnnData
@@ -565,4 +566,115 @@ class PenalizedNegBinCopula(SCD3Simulator):
         if self._cap_at_observed_max and self._gene_max is not None:
             X = result.X
             result.X = np.minimum(X, self._gene_max[None, :])
+        return result
+
+
+class SpatialNegBinCopula(SCD3Simulator):
+    """Negative binomial copula simulator for spatial expression
+
+    Wraps :class:`PenalizedNegBinCopula`, building the spatial basis, penalty
+    structure, and per-gene adaptive weights automatically from ``adata`` at
+    fit time. For custom design matrices or non-spatial penalties, use
+    :class:`PenalizedNegBinCopula` directly.
+
+    Parameters
+    ----------
+    mean_df, disp_df : int
+        Rank of the spatial basis for the mean and dispersion models.
+    method : {"gp", "tps"}
+        Kernel used to construct the basis. Options are gaussian process with
+        RBF kernel (``"gp"``) or thin-plate spline (``"tps"``).
+    standardize : bool
+        Rescale basis columns to unit variance before fitting.
+    mean_extra_terms, disp_extra_terms : list of str or None
+        Additional additive covariates (e.g. ``["cell_type"]``) appended to
+        the mean or dispersion formula. Removes the intercept when included.
+    copula_formula : str
+        Formula for the gaussian copula.
+    lam, lam_disp : float
+        Smoothness penalty strength for mean and dispersion basis coefficients.
+    cap_at_observed_max : bool
+        Clip simulated counts to the per-gene observed maximum.
+    spatial_cols : tuple of str
+        Column names for the two spatial coordinates in ``adata.obs``.
+    **basis_kwargs
+        Passed to :func:`add_spatial_basis` (e.g. ``n_landmarks``,
+        ``length_scale``).
+    """
+
+    def __init__(
+        self,
+        mean_df: int = 15,
+        disp_df: int = 5,
+        method: str = "gp",
+        standardize: bool = True,
+        mean_extra_terms: Optional[list] = None,
+        disp_extra_terms: Optional[list] = None,
+        copula_formula: str = "~ 1",
+        lam: float = 1.0,
+        lam_disp: float = 1.0,
+        cap_at_observed_max: bool = True,
+        spatial_cols: tuple = ("spatial1", "spatial2"),
+        **basis_kwargs,
+    ):
+        self.marginal = self.copula = self.template = self.parameters = self._gene_max = None
+        self._config = {k: v for k, v in locals().items() if k != "self"}
+
+    def fit(self, adata: AnnData, **kwargs):
+        """Fit spatial basis, marginal, and copula to an AnnData object.
+
+        Calls :func:`add_spatial_basis` for mean and dispersion internally,
+        estimates gene means for penalty rescaling, and passes the results to
+        :meth:`SCD3Simulator.fit`.
+
+        Parameters
+        ----------
+        adata : AnnData
+            Input anndata. Must contain the spatial coordinate columns specified
+            by ``spatial_cols`` in ``adata.obs``.
+        **kwargs
+            Forwarded to the marginal and copula fit routines.
+        """
+        cfg = self._config
+        col1, col2 = cfg["spatial_cols"]
+        if col1 != "spatial1" or col2 != "spatial2":
+            adata.obs["spatial1"] = adata.obs[col1]
+            adata.obs["spatial2"] = adata.obs[col2]
+
+        adata, mean_cols, mean_pen_diag = add_spatial_basis(
+            adata, method=cfg["method"], df=cfg["mean_df"],
+            prefix="sp_mean_", standardize=cfg["standardize"],
+            **cfg["basis_kwargs"],
+        )
+        adata, disp_cols, disp_pen_diag = add_spatial_basis(
+            adata, method=cfg["method"], df=cfg["disp_df"],
+            prefix="sp_disp_", standardize=cfg["standardize"],
+            **cfg["basis_kwargs"],
+        )
+
+        X = adata.X.toarray() if sp.issparse(adata.X) else np.array(adata.X)
+        gene_means = X.mean(axis=0).flatten()
+        if cfg["cap_at_observed_max"]:
+            self._gene_max = X.max(axis=0).flatten()
+
+        mean_formula = basis_formula(mean_cols, extra_terms=cfg["mean_extra_terms"])
+        disp_formula = basis_formula(disp_cols, extra_terms=cfg["disp_extra_terms"])
+
+        self.marginal = PenalizedNegBin(
+            {"mean": mean_formula, "dispersion": disp_formula},
+            mean_penalty_diag=mean_pen_diag,
+            disp_penalty_diag=disp_pen_diag,
+            mean_basis_cols=mean_cols,
+            disp_basis_cols=disp_cols,
+            lam=cfg["lam"],
+            lam_disp=cfg["lam_disp"],
+            gene_means=gene_means,
+        )
+        self.copula = StandardCopula(cfg["copula_formula"])
+        SCD3Simulator.fit(self, adata, **kwargs)
+
+    def sample(self, obs=None, batch_size: int = 1000, **kwargs):
+        result = super().sample(obs=obs, batch_size=batch_size, **kwargs)
+        if self._config["cap_at_observed_max"] and self._gene_max is not None:
+            result.X = np.minimum(result.X, self._gene_max[None, :])
         return result
