@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import numpy as np
 from scipy.spatial.distance import cdist
 from scipy.linalg import svd
@@ -55,202 +56,141 @@ def rbf_kernel(A, B, length_scale):
     return np.exp(-0.5 * (D / length_scale) ** 2)
 
 
-def tps_basis(coords, df=15, n_landmarks=200, eps=1e-6, max_penalty_ratio=1e3,
-              standardize=False):
-    """Low-rank TPS basis using a Nystrom approximation.
+class SpatialBasis(ABC):
+    """Low-rank 2D spatial basis with stateful fit / transform.
 
-    Selects `n_landmarks` points, projects out the null space of the TPS
-    penalty (intercept + linear terms), and returns the leading `df` eigenvectors
-    of the projected landmark kernel as spatial basis columns.
+    Subclasses define ``_kernel`` and ``_regularize`` (applied to the
+    landmark kernel before SVD). ``fit`` picks landmarks, stores the
+    projection ``U_m[:, :df] / s_m[:df]``, training column std (if
+    ``standardize``), and the penalty diagonal ``s_0 / s_j`` (capped).
+    ``transform`` reuses that state on new coordinates.
 
     Parameters
     ----------
-    coords : ndarray of shape (n, 2)
-        2D spatial coordinates, one row per observation.
     df : int
-        Number of basis columns to retain (i.e. rank of the approximation).
+        Basis columns to retain.
     n_landmarks : int
-        Number of landmark points used in the Nystrom approximation. Larger
-        values improve accuracy at higher computational cost.
+        Landmark count for the Nystrom approximation.
     eps : float
-        Epsilon parameter for the TPS kernel and eigenvalue threshold for
-        discarding near-zero singular values.
+        Numerical floor for kernel and column-std.
     max_penalty_ratio : float
-        Cap on penalty_diag[j] = s_0 / s_j. Prevents extreme down-weighting of
-        high-frequency components when eigenvalues decay sharply.
+        Cap on ``penalty_diag[j]``.
     standardize : bool
-        If True, rescale columns to unit variance. Use True for penalized
-        fits (so penalty and coefficients are on the same scale) and False
-        for unpenalized fits (where the natural column scaling provides
-        implicit regularization of wiggly components).
+        Divide columns by training std.
 
-    Returns
-    -------
-    basis : ndarray of shape (n, df)
-        Spatial basis matrix.
-    penalty_diag : ndarray of shape (df,)
-        Per-column penalty weights proportional to s_0 / s_j, where s_j is
-        the j-th eigenvalue of the projected landmark kernel.
-
-    Examples
-    --------
-    >>> coords = np.random.uniform(size=(100, 2))
-    >>> basis, penalty = tps_basis(coords, df=10)
-    >>> basis.shape, penalty.shape  # doctest: +SKIP
+    Attributes
+    ----------
+    landmarks_, projection_, col_sd_, penalty_diag
+        Set by :meth:`fit`. Shapes ``(m, 2)``, ``(m, df)``, ``(df,)``, ``(df,)``.
     """
-    n = coords.shape[0]
-    idx = np.random.choice(n, size=min(n_landmarks, n), replace=False)
-    landmarks = coords[idx]
 
-    K_mm = tps_kernel(landmarks, landmarks, eps)
-    K_nm = tps_kernel(coords, landmarks, eps)
+    def __init__(self, df=15, n_landmarks=200, eps=1e-6,
+                 max_penalty_ratio=1e3, standardize=False):
+        self.df = df
+        self.n_landmarks = n_landmarks
+        self.eps = eps
+        self.max_penalty_ratio = max_penalty_ratio
+        self.standardize = standardize
 
-    P = np.column_stack([np.ones(len(idx)), landmarks])
-    Q, _ = np.linalg.qr(P, mode="reduced")
-    proj = np.eye(len(idx)) - Q @ Q.T
-    K_mm = proj @ K_mm @ proj
+        self.landmarks_ = None
+        self.projection_ = None
+        self.col_sd_ = None
+        self.penalty_diag = None
 
-    U_m, s_m, _ = svd(K_mm, full_matrices=False)
-    keep = s_m > eps
-    U_m, s_m = U_m[:, keep], s_m[keep]
+    @abstractmethod
+    def _kernel(self, A, B):
+        """Kernel matrix between rows of ``A`` and rows of ``B``."""
 
-    basis = K_nm @ U_m / s_m
-    basis = basis[:, :df]
-    s_trunc = s_m[:df]
+    @abstractmethod
+    def _regularize(self, K_mm, landmarks):
+        """Transform the landmark kernel before SVD."""
 
-    if standardize:
-        col_sd = np.std(basis, axis=0, keepdims=True)
-        col_sd = np.maximum(col_sd, eps)
-        basis = basis / col_sd
+    def _truncate_singular(self, U_m, s_m):
+        """Drop near-zero singular values before truncating to ``df``."""
+        return U_m, s_m
 
-    penalty_diag = np.minimum(s_trunc[0] / s_trunc, max_penalty_ratio)
-    return basis, penalty_diag
+    def fit(self, coords):
+        coords = np.asarray(coords)
+        n = coords.shape[0]
+        idx = np.random.choice(n, size=min(self.n_landmarks, n), replace=False)
+        landmarks = coords[idx]
+
+        K_mm = self._kernel(landmarks, landmarks)
+        K_mm = self._regularize(K_mm, landmarks)
+        U_m, s_m, _ = svd(K_mm, full_matrices=False)
+        U_m, s_m = self._truncate_singular(U_m, s_m)
+
+        df = self.df
+        self.landmarks_ = landmarks
+        self.projection_ = U_m[:, :df] / s_m[:df]
+
+        s_trunc = s_m[:df]
+        self.penalty_diag = np.minimum(
+            s_trunc[0] / s_trunc, self.max_penalty_ratio
+        )
+
+        if self.standardize:
+            basis = self._kernel(coords, landmarks) @ self.projection_
+            col_sd = basis.std(axis=0)
+            self.col_sd_ = np.maximum(col_sd, self.eps)
+        return self
+
+    def transform(self, coords):
+        if self.landmarks_ is None:
+            raise RuntimeError("SpatialBasis.transform called before fit.")
+        coords = np.asarray(coords)
+        basis = self._kernel(coords, self.landmarks_) @ self.projection_
+        if self.standardize:
+            basis = basis / self.col_sd_
+        return basis
+
+    def fit_transform(self, coords):
+        return self.fit(coords).transform(coords)
 
 
-def gp_basis(coords, df=15, n_landmarks=200, length_scale=1.0, eps=1e-6,
-             max_penalty_ratio=1e3, standardize=False):
-    """Low-rank GP basis using a Nystrom approximation with an RBF kernel.
+class TPSBasis(SpatialBasis):
+    """Thin-plate spline basis (Nystrom).
 
-    Selects `n_landmarks` points, regularizes the landmark kernel with a
-    diagonal `eps` shift, and returns the leading `df` eigenvectors as spatial
-    basis columns.
+    Projects out the TPS penalty null space (intercept + linear terms over
+    landmarks) before SVD; drops singular values below ``eps``.
+    """
+
+    def _kernel(self, A, B):
+        return tps_kernel(A, B, self.eps)
+
+    def _regularize(self, K_mm, landmarks):
+        P = np.column_stack([np.ones(len(landmarks)), landmarks])
+        Q, _ = np.linalg.qr(P, mode="reduced")
+        proj = np.eye(len(landmarks)) - Q @ Q.T
+        return proj @ K_mm @ proj
+
+    def _truncate_singular(self, U_m, s_m):
+        keep = s_m > self.eps
+        return U_m[:, keep], s_m[keep]
+
+
+class GPBasis(SpatialBasis):
+    """Gaussian-process basis with an RBF kernel (Nystrom).
+
+    Regularizes the landmark kernel with ``eps * I`` before SVD.
 
     Parameters
     ----------
-    coords : ndarray of shape (n, 2)
-        2D spatial coordinates, one row per observation.
-    df : int
-        Number of basis columns to retain (i.e. rank of the approximation).
-    n_landmarks : int
-        Number of landmark points used in the Nystrom approximation. Larger
-        values improve accuracy at higher computational cost.
     length_scale : float
-        RBF kernel length scale. Smaller values capture shorter-range spatial
-        structure; larger values produce smoother functions.
-    eps : float
-        Diagonal regularization added to the landmark kernel before SVD.
-    max_penalty_ratio : float
-        Cap on penalty_diag[j] = s_0 / s_j. Prevents extreme down-weighting of
-        high-frequency components when eigenvalues decay sharply.
-    standardize : bool
-        If True, rescale columns to unit variance. Use True for penalized
-        fits (so penalty and coefficients are on the same scale) and False
-        for unpenalized fits (where the natural column scaling provides
-        implicit regularization of high frequency components).
-
-    Returns
-    -------
-    basis : ndarray of shape (n, df)
-        Spatial basis matrix.
-    penalty_diag : ndarray of shape (df,)
-        Per-column penalty weights proportional to s_0 / s_j, where s_j is
-        the j-th eigenvalue of the (regularized) landmark kernel.
-
-    Examples
-    --------
-    >>> coords = np.random.uniform(size=(100, 2))
-    >>> basis, penalty = gp_basis(coords, df=10, length_scale=0.3)
-    >>> basis.shape, penalty.shape  # doctest: +SKIP
-    """
-    n = coords.shape[0]
-    idx = np.random.choice(n, size=min(n_landmarks, n), replace=False)
-    landmarks = coords[idx]
-
-    K_mm = rbf_kernel(landmarks, landmarks, length_scale)
-    K_nm = rbf_kernel(coords, landmarks, length_scale)
-
-    K_mm += eps * np.eye(len(idx))
-    U_m, s_m, _ = svd(K_mm, full_matrices=False)
-
-    basis = K_nm @ U_m / s_m
-    basis = basis[:, :df]
-    s_trunc = s_m[:df]
-
-    if standardize:
-        col_sd = np.std(basis, axis=0, keepdims=True)
-        col_sd = np.maximum(col_sd, eps)
-        basis = basis / col_sd
-
-    penalty_diag = np.minimum(s_trunc[0] / s_trunc, max_penalty_ratio)
-    return basis, penalty_diag
-
-
-def add_spatial_basis(adata, method="tps", df=15, prefix="sp_basis_", **kwargs):
-    """Add 2D spatial basis columns to adata.obs.
-
-    Reads ``spatial1`` and ``spatial2`` from ``adata.obs``, constructs a
-    low-rank spatial basis, and appends each column as a new obs variable.
-
-    Parameters
-    ----------
-    adata : AnnData
-        Annotated data object. Must contain ``adata.obs["spatial1"]`` and
-        ``adata.obs["spatial2"]``.
-    method : {"tps", "gp"}
-        Basis construction method. ``"tps"`` uses a thin-plate spline kernel;
-        ``"gp"`` uses an RBF kernel.
-    df : int
-        Number of basis columns to add (passed to the underlying basis function).
-    prefix : str
-        Column name prefix; columns are named ``{prefix}0``, ``{prefix}1``, ...
+        RBF length scale. Smaller = shorter-range structure.
     **kwargs
-        Additional keyword arguments forwarded to :func:`tps_basis` or
-        :func:`gp_basis` (e.g. ``n_landmarks``, ``length_scale``,
-        ``standardize``).
-
-    Returns
-    -------
-    adata : AnnData
-        Input object with basis columns appended to ``adata.obs`` in-place.
-    basis_cols : list of str
-        Names of the newly added columns.
-    penalty_diag : ndarray of shape (df,)
-        Per-column penalty weights from the chosen basis function.
-
-    Examples
-    --------
-    >>> import anndata, pandas as pd
-    >>> obs = pd.DataFrame({"spatial1": np.random.uniform(size=50),
-    ...                     "spatial2": np.random.uniform(size=50)})
-    >>> adata = anndata.AnnData(obs=obs)
-    >>> adata, cols, penalty = add_spatial_basis(adata, method="tps", df=5)
+        Forwarded to :class:`SpatialBasis`.
     """
-    coords = np.column_stack([
-        adata.obs["spatial1"].values,
-        adata.obs["spatial2"].values,
-    ])
 
-    if method == "tps":
-        basis, penalty_diag = tps_basis(coords, df=df, **kwargs)
-    elif method == "gp":
-        basis, penalty_diag = gp_basis(coords, df=df, **kwargs)
-    else:
-        raise ValueError(f"Unknown method: {method}")
+    def __init__(self, length_scale=1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.length_scale = length_scale
 
-    basis_cols = [f"{prefix}{i}" for i in range(basis.shape[1])]
-    for i, col in enumerate(basis_cols):
-        adata.obs[col] = basis[:, i]
-    return adata, basis_cols, penalty_diag
+    def _kernel(self, A, B):
+        return rbf_kernel(A, B, self.length_scale)
+
+    def _regularize(self, K_mm, landmarks):
+        return K_mm + self.eps * np.eye(len(landmarks))
 
 
 def basis_formula(basis_cols, extra_terms=None):
