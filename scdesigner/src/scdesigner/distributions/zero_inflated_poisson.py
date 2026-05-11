@@ -22,7 +22,9 @@ class ZeroInflatedPoisson(Marginal):
     Examples
     --------
     >>> from scdesigner.distributions import ZeroInflatedPoisson
-    >>> from scdesigner.datasets import pancreas
+    >>> import scdesigner.datasets
+    >>>
+    >>> pancreas = scdesigner.datasets.pancreas()
     >>>
     >>> sim = ZeroInflatedPoisson(formula={"mean": "~ pseudotime", "zero_inflation": "~ pseudotime"})
     >>> sim.setup_data(pancreas)

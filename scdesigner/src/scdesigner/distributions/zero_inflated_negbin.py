@@ -21,7 +21,9 @@ class ZeroInflatedNegBin(Marginal):
     Examples
     --------
     >>> from scdesigner.distributions import ZeroInflatedNegBin
-    >>> from scdesigner.datasets import pancreas
+    >>> import scdesigner.datasets
+    >>>
+    >>> pancreas = scdesigner.datasets.pancreas()
     >>>
     >>> sim = ZeroInflatedNegBin(formula={"mean": "~ pseudotime", "dispersion": "~ 1", "zero_inflation": "~ pseudotime"})
     >>> sim.setup_data(pancreas)

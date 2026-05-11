@@ -23,7 +23,9 @@ class NegBin(Marginal):
     Examples
     --------
     >>> from scdesigner.distributions import NegBin
-    >>> from scdesigner.datasets import pancreas
+    >>> import scdesigner.datasets
+    >>>
+    >>> pancreas = scdesigner.datasets.pancreas()
     >>>
     >>> sim = NegBin(formula={"mean": "~ bs(pseudotime, df=5)", "dispersion": "~ pseudotime"})
     >>> sim.setup_data(pancreas)

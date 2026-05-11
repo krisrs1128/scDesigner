@@ -20,7 +20,9 @@ class Poisson(Marginal):
     Examples
     --------
     >>> from scdesigner.distributions import Poisson
-    >>> from scdesigner.datasets import pancreas
+    >>> import scdesigner.datasets
+    >>>
+    >>> pancreas = scdesigner.datasets.pancreas()
     >>>
     >>> sim = Poisson(formula="~ bs(pseudotime, df=5)")
     >>> sim.setup_data(pancreas)
