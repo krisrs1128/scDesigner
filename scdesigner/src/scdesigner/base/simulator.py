@@ -22,7 +22,9 @@ class Simulator:
 
     Examples
     --------
-    >>> from scdesigner.datasets import pancreas
+    >>> import scdesigner.datasets
+    >>>
+    >>> pancreas = scdesigner.datasets.pancreas()
     >>> sim = Simulator()
     >>> sim.parameters
     >>>

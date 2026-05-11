@@ -585,9 +585,9 @@ class SpatialNegBinCopula(SCD3Simulator):
         Basis class (:class:`GPBasis` or :class:`TPSBasis`).
     standardize : bool
         Rescale basis columns by training std.
-    mean_extra_terms, disp_extra_terms : list of str or None
+    mean_extra_terms, disp_extra_terms : list of str or str or None
         Extra additive covariates appended to each formula. Drops the intercept
-        when set.
+        when set. If a single string is provided, it will be converted to a list.
     copula_formula : str
         Gaussian copula formula.
     lam, lam_disp : float
@@ -623,6 +623,13 @@ class SpatialNegBinCopula(SCD3Simulator):
                 f"Unknown basis {basis!r}; expected one of "
                 f"{sorted(self._BASIS_CLASSES)}"
             )
+        
+        # Convert string arguments to lists for compatibility with basis_formula
+        if isinstance(mean_extra_terms, str):
+            mean_extra_terms = [mean_extra_terms]
+        if isinstance(disp_extra_terms, str):
+            disp_extra_terms = [disp_extra_terms]
+        
         self.marginal = self.copula = self.template = None
         self.parameters = self._gene_max = None
         self._mean_basis = None

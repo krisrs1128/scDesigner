@@ -20,7 +20,9 @@ class Gaussian(Marginal):
     Examples
     --------
     >>> from scdesigner.distributions import Gaussian
-    >>> from scdesigner.datasets import pancreas
+    >>> import scdesigner.datasets
+    >>>
+    >>> pancreas = scdesigner.datasets.pancreas()
     >>>
     >>> sim = Gaussian(formula={"mean": "~ bs(pseudotime, df=5)", "sdev": "~ pseudotime"})
     >>> sim.setup_data(pancreas)

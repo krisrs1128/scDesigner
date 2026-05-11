@@ -1,12 +1,12 @@
 [project]
 name = "scdesigner"
-version = "0.0.13"
+version = "0.0.18"
 authors = [
   { name="Kris Sankaran", email="ksankaran@wisc.edu" },
 ]
 description = "Interactive simulation for rigorous and transparent multi-omics analysis."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

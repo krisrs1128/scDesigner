@@ -20,7 +20,9 @@ class Bernoulli(Marginal):
     Examples
     --------
     >>> from scdesigner.distributions import Bernoulli
-    >>> from scdesigner.datasets import pancreas
+    >>> import scdesigner.datasets
+    >>>
+    >>> pancreas = scdesigner.datasets.pancreas()
     >>>
     >>> sim = Bernoulli(formula="~ pseudotime")
     >>> sim.setup_data(pancreas)
