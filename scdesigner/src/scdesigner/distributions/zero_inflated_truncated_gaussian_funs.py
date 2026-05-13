@@ -9,13 +9,14 @@ _LOGIT_PI_CLAMP = (-6, 4)
 _MAX_INIT_BATCHES = 10
 
 
-def _initialize_zig_intercepts(loader, n_genes):
+def _initialize_zitg_intercepts(loader, n_genes):
     """Estimate per-gene intercepts for (mean, log-sdev, logit-pi) from a short scan.
 
-    The Gaussian component is fit to *nonzero* observations only, and pi is
-    the empirical zero fraction. Returns three (n_genes,) tensors. If the
-    first batch has no intercept column for a head, the corresponding
-    intercept is left at zero.
+    Uses sample mean/variance of nonzero observations as initial estimates for the
+    truncated-normal parameters and the empirical zero fraction for π. This
+    approximation is biased when μ is small relative to σ. Returns three
+    (n_genes,) tensors. If the first batch has no intercept column for a head,
+    the corresponding intercept is left at zero.
     """
     sum_y = torch.zeros(n_genes)
     sum_y2 = torch.zeros(n_genes)
