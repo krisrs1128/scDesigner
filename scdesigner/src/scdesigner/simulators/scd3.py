@@ -16,7 +16,7 @@ from ..distributions import (
     Gaussian,
     Poisson,
     ZeroInflatedPoisson,
-    ZeroInflatedGaussian,
+    ZeroInflatedTruncatedGaussian,
     Bernoulli,
 )
 from ..copulas import StandardCopula
@@ -416,17 +416,22 @@ class PoissonCopula(SCD3Simulator):
         super().__init__(marginal, covariance)
 
 
-class ZeroInflatedGaussianCopula(SCD3Simulator):
-    """Simulator using zero-inflated Gaussian marginals with a Gaussian copula.
+class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
+    """Simulator using zero-inflated truncated Gaussian marginals with a Gaussian copula.
+
+    The marginal is a mixture of a point mass at zero and a Gaussian
+    component truncated to the positive half-line, appropriate for
+    nonnegative data.
 
     Parameters
     ----------
     mean_formula : str or None, optional
-        Model formula for the (Gaussian-component) mean of the zero-inflated
-        Gaussian marginal. If ``None``, a default constant-mean formula is used.
+        Model formula for the latent (pre-truncation) Gaussian-component
+        mean of the zero-inflated truncated Gaussian marginal. If ``None``,
+        a default constant-mean formula is used.
     sdev_formula : str or None, optional
         Model formula for the standard deviation parameter of the
-        zero-inflated Gaussian marginal. If ``None``, a default
+        zero-inflated truncated Gaussian marginal. If ``None``, a default
         constant-sdev formula is used.
     zero_inflation_formula : str or None, optional
         Model formula for the zero-inflation parameter. If ``None``, a
@@ -435,11 +440,14 @@ class ZeroInflatedGaussianCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
+    prior_alpha : float, default=1.1
+        Alpha for Beta(alpha, alpha) prior on zero-inflation probabilities.
+        Values > 1 discourage extreme π, improving generalization for sparse genes.
 
     See Also
     --------
     :class:`SCD3Simulator`
-    :class:`ZeroInflatedGaussian`
+    :class:`ZeroInflatedTruncatedGaussian`
     :class:`StandardCopula`
     """
 
@@ -449,13 +457,15 @@ class ZeroInflatedGaussianCopula(SCD3Simulator):
         sdev_formula: Optional[str] = "~ 1",
         zero_inflation_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
+        prior_alpha: float = 1.1,
     ) -> None:
-        marginal = ZeroInflatedGaussian(
+        marginal = ZeroInflatedTruncatedGaussian(
             {
                 "mean": mean_formula,
                 "sdev": sdev_formula,
                 "zero_inflation": zero_inflation_formula,
-            }
+            },
+            prior_alpha=prior_alpha,
         )
         covariance = StandardCopula(copula_formula)
         super().__init__(marginal, covariance)
