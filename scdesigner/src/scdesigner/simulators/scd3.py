@@ -16,6 +16,7 @@ from ..distributions import (
     Gaussian,
     Poisson,
     ZeroInflatedPoisson,
+    ZeroInflatedTruncatedGaussian,
     Bernoulli,
 )
 from ..copulas import StandardCopula
@@ -415,6 +416,61 @@ class PoissonCopula(SCD3Simulator):
         super().__init__(marginal, covariance)
 
 
+class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
+    """Simulator using zero-inflated truncated Gaussian marginals with a Gaussian copula.
+
+    The marginal is a mixture of a point mass at zero and a Gaussian
+    component truncated to the positive half-line, appropriate for
+    nonnegative data.
+
+    Parameters
+    ----------
+    mean_formula : str or None, optional
+        Model formula for the latent (pre-truncation) Gaussian-component
+        mean of the zero-inflated truncated Gaussian marginal. If ``None``,
+        a default constant-mean formula is used.
+    sdev_formula : str or None, optional
+        Model formula for the standard deviation parameter of the
+        zero-inflated truncated Gaussian marginal. If ``None``, a default
+        constant-sdev formula is used.
+    zero_inflation_formula : str or None, optional
+        Model formula for the zero-inflation parameter. If ``None``, a
+        default constant-zero-inflation formula is used.
+    copula_formula : str or None, optional
+        Copula formula describing how copula depends on experimental or
+        biological conditions (e.g. ``"~ group"``). If ``None``, a default
+        intercept-only formula is used.
+    prior_alpha : float, default=1.1
+        Alpha for Beta(alpha, alpha) prior on zero-inflation probabilities.
+        Values > 1 discourage extreme π, improving generalization for sparse genes.
+
+    See Also
+    --------
+    :class:`SCD3Simulator`
+    :class:`ZeroInflatedTruncatedGaussian`
+    :class:`StandardCopula`
+    """
+
+    def __init__(
+        self,
+        mean_formula: Optional[str] = "~ 1",
+        sdev_formula: Optional[str] = "~ 1",
+        zero_inflation_formula: Optional[str] = "~ 1",
+        copula_formula: Optional[str] = "~ 1",
+        prior_alpha: float = 1.1,
+    ) -> None:
+        marginal = ZeroInflatedTruncatedGaussian(
+            {
+                "mean": mean_formula,
+                "sdev": sdev_formula,
+                "zero_inflation": zero_inflation_formula,
+            },
+            prior_alpha=prior_alpha,
+        )
+        covariance = StandardCopula(copula_formula)
+        super().__init__(marginal, covariance)
+
+
 class ZeroInflatedPoissonCopula(SCD3Simulator):
     """Simulator using zero-inflated Poisson marginals with a Gaussian copula.
 
@@ -623,13 +679,13 @@ class SpatialNegBinCopula(SCD3Simulator):
                 f"Unknown basis {basis!r}; expected one of "
                 f"{sorted(self._BASIS_CLASSES)}"
             )
-        
+
         # Convert string arguments to lists for compatibility with basis_formula
         if isinstance(mean_extra_terms, str):
             mean_extra_terms = [mean_extra_terms]
         if isinstance(disp_extra_terms, str):
             disp_extra_terms = [disp_extra_terms]
-        
+
         self.marginal = self.copula = self.template = None
         self.parameters = self._gene_max = None
         self._mean_basis = None

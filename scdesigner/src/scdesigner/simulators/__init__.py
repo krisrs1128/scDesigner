@@ -8,6 +8,7 @@ from .scd3 import (
     PenalizedNegBinCopula,
     PoissonCopula,
     SpatialNegBinCopula,
+    ZeroInflatedTruncatedGaussianCopula,
     ZeroInflatedNegBinCopula,
     ZeroInflatedPoissonCopula
 )
@@ -26,6 +27,7 @@ __all__ = [
     "PoissonCopula",
     "PositiveNMF",
     "SpatialNegBinCopula",
+    "ZeroInflatedTruncatedGaussianCopula",
     "ZeroInflatedNegBinCopula",
     "ZeroInflatedPoissonCopula"
 ]
