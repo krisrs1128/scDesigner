@@ -19,11 +19,13 @@ DEFAULT_ALLOWED_KWARGS = {
     },
     'optimizer': {
         'lr', 'learning_rate', 'momentum', 'weight_decay', 'eps', 'betas',
-        'amsgrad', 'dampening', 'nesterov', 'alpha',
+        'amsgrad', 'dampening', 'nesterov', 'alpha', 'verbose',
+        'optimizer_class', 'optimizer'
+    },
+    'scheduler': {
         'T_max', 'eta_min', 'step_size', 'gamma', 'milestones', 'last_epoch',
-        'verbose', 'patience', 'threshold', 'cooldown',
-        'optimizer_class', 'optimizer', 'scheduler_class', 'scheduler',
-        'monitor', 'interval', 'frequency'
+        'patience', 'threshold', 'cooldown',
+        'scheduler_class', 'scheduler', 'monitor', 'interval', 'frequency'
     },
     'initialize': {
         'tol', 'clip', 'max_iter', 'damping'

@@ -193,8 +193,15 @@ class Marginal(ABC):
             This method doesn't return anything but modifies the self.parameters
             attribute with the trained model parameters.
         """
+        T_max = kwargs.pop('T_max', max_epochs)
+        eta_min = kwargs.pop('eta_min', 0.0)
+
         if self.predict is None:
             self.setup_optimizer(**kwargs)
+
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.predict.optimizer, T_max=T_max, eta_min=eta_min
+        )
 
         if log_dir is not None:
             import os
@@ -226,12 +233,13 @@ class Marginal(ABC):
                 writer.add_scalar("loss/train", avg_loss, epoch)
             if verbose:
                 print(f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}", end='\r')
+            scheduler.step()
         if verbose:
             print() # Maintain the loss output
 
         if writer is not None:
             writer.close()
-                
+
         self.parameters = self.format_parameters()
 
     def format_parameters(self):
