@@ -140,8 +140,6 @@ class Marginal(ABC):
         self.train_loader = None
         self.validation_loader = None
         self.fit_history = []
-        self.train_indices = None
-        self.validation_indices = None
         self._validation_split_config = None
         self.best_epoch = None
         self.best_validation_loss = None
@@ -191,8 +189,6 @@ class Marginal(ABC):
         self.train_loader = self.loader
         self.validation_loader = None
         self.fit_history = []
-        self.train_indices = np.arange(len(self.loader.dataset))
-        self.validation_indices = np.array([], dtype=int)
         self._validation_split_config = None
         self.best_epoch = None
         self.best_validation_loss = None
@@ -226,8 +222,6 @@ class Marginal(ABC):
         if val_frac == 0 or n_obs < 2:
             self.train_loader = self.loader
             self.validation_loader = None
-            self.train_indices = np.arange(n_obs)
-            self.validation_indices = np.array([], dtype=int)
             self._validation_split_config = split_config
             return
 
@@ -238,8 +232,6 @@ class Marginal(ABC):
         validation_indices = indices[:n_validation]
         train_indices = indices[n_validation:]
 
-        self.train_indices = train_indices
-        self.validation_indices = validation_indices
         self.train_loader = self._subset_loader(train_indices, training=True)
         self.validation_loader = self._subset_loader(validation_indices, training=False)
         self._validation_split_config = split_config
@@ -308,7 +300,6 @@ class Marginal(ABC):
         self,
         max_epochs: int = 500,
         verbose: bool = True,
-        log_dir: Optional[str] = None,
         val_frac: float = 0.1,
         min_epochs: int = 10,
         loss_tol: float = 0.01,
@@ -359,14 +350,6 @@ class Marginal(ABC):
 
         if self.predict is None:
             self.setup_optimizer(**kwargs)
-
-        if log_dir is not None:
-            import os
-            from torch.utils.tensorboard import SummaryWriter
-            os.makedirs(log_dir, exist_ok=True)
-            writer = SummaryWriter(log_dir)
-        else:
-            writer = None
 
         self.fit_history = []
         self.best_epoch = None
@@ -422,10 +405,6 @@ class Marginal(ABC):
                     "stopped": stopped,
                 }
             )
-            if writer is not None:
-                writer.add_scalar("loss/train", avg_loss, epoch)
-                if val_loss is not None:
-                    writer.add_scalar("loss/validation", val_loss, epoch)
             if verbose:
                 msg = f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}"
                 if val_loss is not None:
@@ -435,9 +414,6 @@ class Marginal(ABC):
                 break
         if verbose:
             print() # Maintain the loss output
-
-        if writer is not None:
-            writer.close()
 
         if best_state is not None:
             self.predict.load_state_dict(best_state)
