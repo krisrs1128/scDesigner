@@ -7,7 +7,12 @@ from anndata import AnnData
 from scdesigner.base.marginal import GLMPredictor, Marginal
 from scdesigner.data.loader import AnnDataDataset
 from scdesigner.distributions import Bernoulli, Poisson
-from scdesigner.simulators import CompositeCopula, NegBinCopula, PoissonCopula
+from scdesigner.simulators import (
+    CompositeCopula,
+    NegBinCopula,
+    NegBinIRLSCopula,
+    PoissonCopula,
+)
 
 
 def _adata(n_obs=20, n_vars=4):
@@ -51,6 +56,17 @@ class ConstantValidationMarginal(Marginal):
         return torch.full_like(y, 0.5)
 
 
+class RecordingInitializerMarginal(ConstantValidationMarginal):
+    def __init__(self):
+        super().__init__()
+        self.initializer_train_size = None
+        self.initializer_validation_size = None
+
+    def _initialize_parameters(self, **kwargs):
+        self.initializer_train_size = len(self._active_train_loader().dataset)
+        self.initializer_validation_size = len(self.validation_loader.dataset)
+
+
 def test_validation_split_keeps_full_loader_and_is_deterministic():
     adata = _adata(n_obs=12)
     model = ConstantValidationMarginal()
@@ -60,15 +76,21 @@ def test_validation_split_keeps_full_loader_and_is_deterministic():
     assert len(model.loader.dataset) == 12
     assert len(model.train_loader.dataset) == 9
     assert len(model.validation_loader.dataset) == 3
-    assert set(model.train_indices).isdisjoint(set(model.validation_indices))
+    assert set(model.train_loader.dataset.indices).isdisjoint(
+        set(model.validation_loader.dataset.indices)
+    )
 
     model_same_seed = ConstantValidationMarginal()
     model_same_seed.setup_data(adata, batch_size=4, device="cpu")
     model_same_seed.setup_validation_split(val_frac=0.25, validation_seed=42)
 
-    np.testing.assert_array_equal(model.train_indices, model_same_seed.train_indices)
     np.testing.assert_array_equal(
-        model.validation_indices, model_same_seed.validation_indices
+        model.train_loader.dataset.indices,
+        model_same_seed.train_loader.dataset.indices,
+    )
+    np.testing.assert_array_equal(
+        model.validation_loader.dataset.indices,
+        model_same_seed.validation_loader.dataset.indices,
     )
 
 
@@ -117,6 +139,22 @@ def test_glm_predictor_default_lr_and_learning_rate_alias():
     alias_model.setup_optimizer(learning_rate=0.02)
     assert alias_model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.02)
 
+    precedence_model = ConstantValidationMarginal()
+    precedence_model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")
+    precedence_model.setup_validation_split(val_frac=0)
+    precedence_model.setup_optimizer(lr=0.03, learning_rate=0.02)
+    assert precedence_model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.03)
+
+
+def test_initializer_hook_runs_after_validation_split():
+    model = RecordingInitializerMarginal()
+    model.setup_data(_adata(n_obs=20), batch_size=5, device="cpu")
+
+    model.fit(max_epochs=1, val_frac=0.25, verbose=False)
+
+    assert model.initializer_train_size == 15
+    assert model.initializer_validation_size == 5
+
 
 def test_object_covariates_keep_stable_chunk_design_columns():
     obs = pd.DataFrame({"group": ["A", "B", "C", "C", "A", "B"]})
@@ -157,6 +195,8 @@ def test_poisson_copula_smoke_fit_with_early_stopping():
 
     assert sim.marginal.stopped_epoch == 2
     assert len(sim.marginal.loader.dataset) == adata.n_obs
+    assert sim.marginal.validation_loader is not None
+    assert len(sim.marginal.train_loader.dataset) < len(sim.marginal.loader.dataset)
     assert sim.parameters["copula"] is not None
 
 
@@ -184,6 +224,34 @@ def test_negbin_copula_smoke_fit_with_early_stopping():
 
     assert sim.marginal.stopped_epoch == 2
     assert len(sim.marginal.loader.dataset) == adata.n_obs
+    assert sim.parameters["copula"] is not None
+
+
+def test_negbin_irls_copula_uses_full_data_without_validation_stopping():
+    adata = _adata(n_obs=20, n_vars=3)
+    sim = NegBinIRLSCopula(
+        mean_formula="~ group",
+        dispersion_formula="~ 1",
+        copula_formula="~ 1",
+    )
+
+    sim.fit(
+        adata,
+        batch_size=10,
+        max_epochs=1,
+        val_frac=0.5,
+        min_epochs=1,
+        patience=1,
+        loss_tol=1e9,
+        validation_seed=2,
+        verbose=False,
+        top_k=2,
+    )
+
+    assert sim.marginal.train_loader is sim.marginal.loader
+    assert sim.marginal.validation_loader is None
+    assert sim.marginal.fit_history[-1]["val_loss"] is None
+    assert sim.marginal.stopped_epoch is None
     assert sim.parameters["copula"] is not None
 
 
