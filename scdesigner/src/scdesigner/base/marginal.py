@@ -416,6 +416,13 @@ class Marginal(ABC):
         if best_state is not None:
             self.predict.load_state_dict(best_state)
         self.parameters = self.format_parameters()
+        
+    @property
+    def fit_history_df(self) -> pd.DataFrame:
+        """Return the fit history as a pandas DataFrame."""
+        if len(self.fit_history) == 0:
+            raise ValueError("fit_history is empty. Call fit() before accessing fit_history_df.")
+        return pd.DataFrame(self.fit_history)
 
     def format_parameters(self):
         """Convert fitted coefficient tensors into pandas DataFrames.
