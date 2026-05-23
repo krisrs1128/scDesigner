@@ -127,19 +127,22 @@ class SCD3Simulator(Simulator, ABC):
         """
         self.template = adata
         self.marginal.setup_data(adata, **kwargs)
-        self.marginal.setup_validation_split(
-            val_frac=val_frac,
-            validation_seed=validation_seed,
-        )
         self.marginal.setup_optimizer(**kwargs)
-        self.marginal.fit(
-            val_frac=val_frac,
-            min_epochs=min_epochs,
-            loss_tol=loss_tol,
-            patience=patience,
-            validation_seed=validation_seed,
-            **kwargs,
-        )
+        if isinstance(self.marginal, NegBinIRLS):
+            self.marginal.fit(**kwargs)
+        else:
+            self.marginal.setup_validation_split(
+                val_frac=val_frac,
+                validation_seed=validation_seed,
+            )
+            self.marginal.fit(
+                val_frac=val_frac,
+                min_epochs=min_epochs,
+                loss_tol=loss_tol,
+                patience=patience,
+                validation_seed=validation_seed,
+                **kwargs,
+            )
 
         # copula simulator
         self.copula.setup_data(adata, self.marginal.formula, **kwargs)

@@ -60,7 +60,6 @@ def simulate(
     epochs=500,
     batch_size=1024,
     chunk_size=5000,
-    log_dir=None,
 ):
     """
     Fit a scDesigner model and sample simulated data with resource monitoring.
@@ -99,7 +98,6 @@ def simulate(
         batch_size=batch_size, 
         chunk_size=chunk_size, 
         top_k=top_k,
-        log_dir=log_dir
     )
     sim_data = simulator.sample(real_data.obs)
 
@@ -156,8 +154,6 @@ if __name__ == "__main__":
     data_dir = "../data/HVG_embryoatlas.h5ad"
     adata = ad.read_h5ad(data_dir)
 
-    log_dir = "logs/"
-    
     _, _, metrics_df, _ = simulate(adata, 
     ncell=n_cells, 
     ngene=n_genes, 
@@ -165,6 +161,5 @@ if __name__ == "__main__":
     dispersion_formula=dispersion_formula,
     top_k=None,
     model='zinb',
-    epochs = 50,
-    log_dir=log_dir)
+    epochs = 50)
     print(metrics_df)
