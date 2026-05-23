@@ -23,8 +23,17 @@ class NegBinIRLS(NegBin):
         eta=0.1,
         verbose=True,
         disp_ridge=1e-4,
+        val_frac: float = 0.1,
+        min_epochs: int = 10,
+        loss_tol: float = 0.01,
+        patience: int = 6,
+        validation_seed: int = 0,
         **kwargs,
     ):
+        self.train_loader = self.loader
+        self.validation_loader = None
+        self._validation_split_config = None
+
         if self.predict is None:
             self.setup_optimizer(**kwargs)
 

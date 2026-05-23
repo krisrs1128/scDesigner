@@ -4,7 +4,6 @@ from anndata import AnnData
 from typing import Union, Dict, Optional, Tuple
 from torch.utils.data import DataLoader, RandomSampler, Subset
 import copy
-import inspect
 import numpy as np
 import pandas as pd
 import torch
@@ -347,9 +346,8 @@ class Marginal(ABC):
         """
         self._validate_early_stopping_args(min_epochs, loss_tol, patience)
         self.setup_validation_split(val_frac=val_frac, validation_seed=validation_seed)
-
-        if self.predict is None:
-            self.setup_optimizer(**kwargs)
+        self.setup_optimizer(**kwargs)
+        self._initialize_parameters(**kwargs)
 
         self.fit_history = []
         self.best_epoch = None
@@ -454,6 +452,16 @@ class Marginal(ABC):
     @abstractmethod
     def setup_optimizer(self, **kwargs):
         raise NotImplementedError
+
+    def _initialize_parameters(self, **kwargs):
+        """Initialize fitted coefficients after train/validation loaders exist.
+
+        Distribution subclasses can override this hook when initialization
+        depends on the training data. The default GLM parameter initialization
+        from :class:`GLMPredictor` is sufficient for distributions that do not
+        need a data-dependent initializer.
+        """
+        return None
 
     @abstractmethod
     def likelihood(self, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
@@ -570,7 +578,15 @@ class GLMPredictor(nn.Module):
         self.loss_fn = loss_fn
         self.to(get_device(device))
 
-        filtered_kwargs = _prepare_optimizer_kwargs(optimizer_class, optimizer_kwargs)
+        optimizer_kwargs = dict(optimizer_kwargs or {})
+        if "learning_rate" in optimizer_kwargs and "lr" not in optimizer_kwargs:
+            optimizer_kwargs["lr"] = optimizer_kwargs.pop("learning_rate")
+        else:
+            optimizer_kwargs.pop("learning_rate", None)
+        optimizer_kwargs.setdefault("lr", 0.005)
+        filtered_kwargs = _filter_kwargs(
+            optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer']
+        )
         self.optimizer = optimizer_class(self.parameters(), **filtered_kwargs)
 
     def reset_parameters(self):
@@ -593,30 +609,3 @@ class GLMPredictor(nn.Module):
             link = self.link_fns.get(name, torch.exp)
             out[name] = link(x_beta)
         return out
-
-
-def _prepare_optimizer_kwargs(optimizer_class, optimizer_kwargs: Optional[Dict]) -> Dict:
-    optimizer_kwargs = dict(optimizer_kwargs or {})
-    filtered_kwargs = _filter_kwargs(optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])
-    if "learning_rate" in filtered_kwargs:
-        learning_rate = filtered_kwargs.pop("learning_rate")
-        filtered_kwargs.setdefault("lr", learning_rate)
-    filtered_kwargs.setdefault("lr", 0.005)
-
-    try:
-        signature = inspect.signature(optimizer_class.__init__)
-    except (TypeError, ValueError, AttributeError):
-        return filtered_kwargs
-
-    params = signature.parameters
-    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
-        return filtered_kwargs
-
-    accepted = {
-        name
-        for name, param in params.items()
-        if name not in {"self", "params"}
-        and param.kind
-        in {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
-    }
-    return {k: v for k, v in filtered_kwargs.items() if k in accepted}

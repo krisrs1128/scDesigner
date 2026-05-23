@@ -113,24 +113,7 @@ class NegBin(Marginal):
             return _to_numpy(mu, r)
         return _to_numpy(mu, r, y)
 
-    def fit(
-        self,
-        max_epochs: int = 500,
-        verbose: bool = True,
-        val_frac: float = 0.1,
-        min_epochs: int = 10,
-        loss_tol: float = 0.01,
-        patience: int = 6,
-        validation_seed: int = 0,
-        **kwargs,
-    ):
-        self._validate_early_stopping_args(min_epochs, loss_tol, patience)
-        self.setup_validation_split(val_frac=val_frac, validation_seed=validation_seed)
-
-        if self.predict is None:
-            self.setup_optimizer(**kwargs)
-
-        # initialize using a poisson fit
+    def _initialize_parameters(self, **kwargs):
         initialize_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['initialize'])
         beta_init, gamma_init = initialize_parameters(
             self._active_train_loader(), self.n_outcomes, self.feature_dims['mean'],
@@ -140,15 +123,3 @@ class NegBin(Marginal):
         with torch.no_grad():
             self.predict.coefs['mean'].copy_(beta_init)
             self.predict.coefs['dispersion'].copy_(gamma_init)
-
-        return Marginal.fit(
-            self,
-            max_epochs=max_epochs,
-            verbose=verbose,
-            val_frac=val_frac,
-            min_epochs=min_epochs,
-            loss_tol=loss_tol,
-            patience=patience,
-            validation_seed=validation_seed,
-            **kwargs,
-        )

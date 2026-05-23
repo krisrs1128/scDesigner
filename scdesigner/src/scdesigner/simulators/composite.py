@@ -8,7 +8,6 @@ marginal models and then couples their dependence structure with a
 from ..data.loader import obs_loader
 from .scd3 import SCD3Simulator
 from ..copulas.standard_copula import StandardCopula
-from ..distributions import NegBinIRLS
 from anndata import AnnData
 from typing import Dict, Optional, List
 import numpy as np
@@ -134,23 +133,15 @@ class CompositeCopula(SCD3Simulator):
         for m in range(len(self.marginals)):
             marginal = self.marginals[m][1]
             marginal.setup_data(adata[:, self.marginals[m][0]], **kwargs)
-            marginal.setup_optimizer(**kwargs)
-            if isinstance(marginal, NegBinIRLS):
-                marginal.fit(**kwargs, verbose=verbose)
-            else:
-                marginal.setup_validation_split(
-                    val_frac=val_frac,
-                    validation_seed=validation_seed,
-                )
-                marginal.fit(
-                    **kwargs,
-                    verbose=verbose,
-                    val_frac=val_frac,
-                    min_epochs=min_epochs,
-                    loss_tol=loss_tol,
-                    patience=patience,
-                    validation_seed=validation_seed,
-                )
+            marginal.fit(
+                **kwargs,
+                verbose=verbose,
+                val_frac=val_frac,
+                min_epochs=min_epochs,
+                loss_tol=loss_tol,
+                patience=patience,
+                validation_seed=validation_seed,
+            )
 
             # prepare formula for copula loader
             f = marginal.formula

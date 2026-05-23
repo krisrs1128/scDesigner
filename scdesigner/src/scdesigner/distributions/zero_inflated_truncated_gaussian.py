@@ -100,6 +100,7 @@ class ZeroInflatedTruncatedGaussian(Marginal):
             device=self.device,
         )
 
+    def _initialize_parameters(self, **kwargs):
         mean_init, log_sdev_init, logit_pi_init = _initialize_zitg_intercepts(
             self._active_train_loader(), self.n_outcomes
         )

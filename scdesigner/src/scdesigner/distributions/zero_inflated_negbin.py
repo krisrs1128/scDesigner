@@ -67,6 +67,7 @@ class ZeroInflatedNegBin(Marginal):
             device=self.device,
         )
 
+    def _initialize_parameters(self, **kwargs):
         beta, gamma = initialize_parameters(
             self._active_train_loader(),
             self.n_outcomes,
