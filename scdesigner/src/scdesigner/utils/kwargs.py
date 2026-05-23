@@ -18,7 +18,7 @@ DEFAULT_ALLOWED_KWARGS = {
         'chunk_size', 'batch_size', 'shuffle', 'num_workers', 'device'
     },
     'optimizer': {
-        'lr', 'learning_rate', 'momentum', 'weight_decay', 'eps', 'betas',
+        'lr', 'momentum', 'weight_decay', 'eps', 'betas',
         'amsgrad', 'dampening', 'nesterov', 'alpha',
         'T_max', 'eta_min', 'step_size', 'gamma', 'milestones', 'last_epoch',
         'verbose', 'patience', 'threshold', 'cooldown',

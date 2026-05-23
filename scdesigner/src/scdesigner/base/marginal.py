@@ -602,10 +602,6 @@ class GLMPredictor(nn.Module):
         self.to(get_device(device))
 
         optimizer_kwargs = dict(optimizer_kwargs or {})
-        if "learning_rate" in optimizer_kwargs and "lr" not in optimizer_kwargs:
-            optimizer_kwargs["lr"] = optimizer_kwargs.pop("learning_rate")
-        else:
-            optimizer_kwargs.pop("learning_rate", None)
         optimizer_kwargs.setdefault("lr", 0.005)
         filtered_kwargs = _filter_kwargs(
             optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer']
