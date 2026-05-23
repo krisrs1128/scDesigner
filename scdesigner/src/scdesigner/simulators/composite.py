@@ -96,6 +96,11 @@ class CompositeCopula(SCD3Simulator):
         self,
         adata: AnnData,
         verbose: bool = True,
+        val_frac: float = 0.1,
+        min_epochs: int = 10,
+        loss_tol: float = 0.01,
+        patience: int = 6,
+        validation_seed: int = 0,
         **kwargs,):
         """Fit all marginals and then fit the copula on merged uniforms.
 
@@ -103,12 +108,23 @@ class CompositeCopula(SCD3Simulator):
         ----------
         adata : AnnData
             Training dataset.
+        verbose : bool, optional
+            Whether to print verbose output.
+        val_frac : float
+            Fraction of observations held out for each marginal validation
+            split. Set to 0 to disable early stopping.
+        min_epochs : int
+            Minimum number of marginal epochs before early stopping is allowed.
+        loss_tol : float
+            Required validation-loss decrease to reset patience.
+        patience : int
+            Number of non-improving validation epochs allowed after warmup.
+        validation_seed : int
+            Seed controlling deterministic marginal validation splits.
         **kwargs
             Additional keyword arguments forwarded to marginal setup/fit methods
             and to the copula's ``setup_data`` / ``fit`` calls (e.g.
             ``batch_size``).
-        verbose : bool, optional
-            Whether to print verbose output.
         """
         self.template = adata
         merged_formula = {}
@@ -116,8 +132,20 @@ class CompositeCopula(SCD3Simulator):
         # fit each marginal model
         for m in range(len(self.marginals)):
             self.marginals[m][1].setup_data(adata[:, self.marginals[m][0]], **kwargs)
+            self.marginals[m][1].setup_validation_split(
+                val_frac=val_frac,
+                validation_seed=validation_seed,
+            )
             self.marginals[m][1].setup_optimizer(**kwargs)
-            self.marginals[m][1].fit(**kwargs, verbose=verbose)
+            self.marginals[m][1].fit(
+                **kwargs,
+                verbose=verbose,
+                val_frac=val_frac,
+                min_epochs=min_epochs,
+                loss_tol=loss_tol,
+                patience=patience,
+                validation_seed=validation_seed,
+            )
 
             # prepare formula for copula loader
             f = self.marginals[m][1].formula

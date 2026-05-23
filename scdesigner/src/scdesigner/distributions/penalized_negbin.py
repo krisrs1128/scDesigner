@@ -99,7 +99,7 @@ class PenalizedNegBin(NegBin):
         lam = self._lam
         lam_d = self._lam_disp
 
-        def nll(batch):
+        def penalized_nll(batch):
             ll = -self.likelihood(batch).sum()
 
             # Mean penalty: lam * (1/mean_j) * Σ_k d_k β_kj²
@@ -125,7 +125,7 @@ class PenalizedNegBin(NegBin):
         self.predict = GLMPredictor(
             n_outcomes=self.n_outcomes,
             feature_dims=self.feature_dims,
-            loss_fn=nll,
+            loss_fn=penalized_nll,
             optimizer_class=optimizer_class,
             optimizer_kwargs=optimizer_kwargs,
             device=self.device,

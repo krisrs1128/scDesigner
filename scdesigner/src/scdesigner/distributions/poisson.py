@@ -57,11 +57,15 @@ class Poisson(Marginal):
             feature_dims=self.feature_dims,
             loss_fn=nll,
             optimizer_class=optimizer_class,
-            optimizer_kwargs=optimizer_kwargs
+            optimizer_kwargs=optimizer_kwargs,
+            device=self.device,
         )
 
         beta, _ = initialize_parameters(
-            self.loader, self.n_outcomes, self.feature_dims["mean"], p_disp=1
+            self._active_train_loader(),
+            self.n_outcomes,
+            self.feature_dims["mean"],
+            p_disp=1,
         )
         self.predict.coefs["mean"].data.copy_(beta)
 

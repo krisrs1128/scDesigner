@@ -2,6 +2,10 @@ from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from ..data.loader import adata_loader, get_device
 from anndata import AnnData
 from typing import Union, Dict, Optional, Tuple
+from torch.utils.data import DataLoader, RandomSampler, Subset
+import copy
+import inspect
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -57,13 +61,24 @@ class Marginal(ABC):
 
     loader : torch.utils.data.DataLoader
         A torch DataLoader object that returns batches of data for use during
-        training. This loader is constructed internally within the
-        setup_optimizer method. Enumerating this loader returns a tuple: the
+        training. This loader is constructed internally within the setup_data
+        method. Enumerating this loader returns a tuple: the
         first element contains a tensor of feature measurements (y), and the
         second element is a dictionary of tensors containing predictors to use
         for each parameter (x, for each parameter theta(x)). This design is
         useful because the design matrices may differ between parameters of the
         marginal model, y | x ~ F_(theta(x))(y)
+
+    train_loader : torch.utils.data.DataLoader
+        Loader used for marginal optimization. With early stopping enabled,
+        this is a subset of :attr:`loader`; otherwise it points to
+        :attr:`loader`.
+
+    validation_loader : torch.utils.data.DataLoader or None
+        Held-out loader used to monitor unpenalized validation likelihood.
+
+    fit_history : list of dict
+        Per-epoch training and validation losses, with best/stop indicators.
 
     n_outcomes : int
         The number of features modeled by this marginal model. For example,
@@ -122,6 +137,15 @@ class Marginal(ABC):
         self.formula = formula
         self.feature_dims = None
         self.loader = None
+        self.train_loader = None
+        self.validation_loader = None
+        self.fit_history = []
+        self.train_indices = None
+        self.validation_indices = None
+        self._validation_split_config = None
+        self.best_epoch = None
+        self.best_validation_loss = None
+        self.stopped_epoch = None
         self.n_outcomes = None
         self.predict = None
         self.predictor_names = None
@@ -164,8 +188,134 @@ class Marginal(ABC):
         self.n_outcomes = X_batch.shape[1]
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
         self.predictor_names = self.loader.dataset.predictor_names
+        self.train_loader = self.loader
+        self.validation_loader = None
+        self.fit_history = []
+        self.train_indices = np.arange(len(self.loader.dataset))
+        self.validation_indices = np.array([], dtype=int)
+        self._validation_split_config = None
+        self.best_epoch = None
+        self.best_validation_loss = None
+        self.stopped_epoch = None
 
-    def fit(self, max_epochs: int = 50, verbose: bool = True, log_dir: Optional[str] = None, **kwargs):
+    def setup_validation_split(
+        self,
+        val_frac: float = 0.1,
+        validation_seed: int = 0,
+    ) -> None:
+        """Create train and validation loaders that share the full dataset.
+
+        The full-data loader remains available as :attr:`loader` for downstream
+        workflows such as copula fitting. When validation is disabled or the
+        dataset is too small to split, :attr:`train_loader` points to
+        :attr:`loader` and :attr:`validation_loader` is ``None``.
+        """
+        if self.loader is None:
+            raise RuntimeError("self.loader is not set (call setup_data first)")
+        if not 0 <= val_frac < 1:
+            raise ValueError("val_frac must satisfy 0 <= val_frac < 1")
+
+        split_config = (float(val_frac), int(validation_seed))
+        if (
+            self._validation_split_config == split_config
+            and self.train_loader is not None
+        ):
+            return
+
+        n_obs = len(self.loader.dataset)
+        if val_frac == 0 or n_obs < 2:
+            self.train_loader = self.loader
+            self.validation_loader = None
+            self.train_indices = np.arange(n_obs)
+            self.validation_indices = np.array([], dtype=int)
+            self._validation_split_config = split_config
+            return
+
+        rng = np.random.default_rng(validation_seed)
+        indices = rng.permutation(n_obs)
+        n_validation = int(np.ceil(n_obs * val_frac))
+        n_validation = min(max(n_validation, 1), n_obs - 1)
+        validation_indices = indices[:n_validation]
+        train_indices = indices[n_validation:]
+
+        self.train_indices = train_indices
+        self.validation_indices = validation_indices
+        self.train_loader = self._subset_loader(train_indices, training=True)
+        self.validation_loader = self._subset_loader(validation_indices, training=False)
+        self._validation_split_config = split_config
+
+    def _subset_loader(self, indices: np.ndarray, training: bool) -> DataLoader:
+        sampler_is_random = isinstance(self.loader.sampler, RandomSampler)
+        return DataLoader(
+            Subset(self.loader.dataset, indices.tolist()),
+            batch_size=self.loader.batch_size,
+            shuffle=training and sampler_is_random,
+            num_workers=self.loader.num_workers,
+            collate_fn=self.loader.collate_fn,
+            drop_last=self.loader.drop_last,
+            pin_memory=self.loader.pin_memory,
+            timeout=self.loader.timeout,
+            worker_init_fn=self.loader.worker_init_fn,
+            multiprocessing_context=self.loader.multiprocessing_context,
+            generator=self.loader.generator,
+            prefetch_factor=self.loader.prefetch_factor,
+            persistent_workers=self.loader.persistent_workers,
+        )
+
+    def _active_train_loader(self) -> DataLoader:
+        return self.train_loader if self.train_loader is not None else self.loader
+
+    def _move_batch_to_device(self, batch):
+        y, x = batch
+        if y.device != self.device:
+            y = y.to(self.device)
+            x = {k: v.to(self.device) for k, v in x.items()}
+        return y, x
+
+    def _validation_loss(self) -> Optional[float]:
+        if self.validation_loader is None:
+            return None
+
+        was_training = self.predict.training
+        self.predict.eval()
+        total_loss = 0.0
+        total_entries = 0
+        with torch.no_grad():
+            for batch in self.validation_loader:
+                y, x = self._move_batch_to_device(batch)
+                total_loss += -self.likelihood((y, x)).sum().item()
+                total_entries += y.numel()
+        self.predict.train(was_training)
+
+        if total_entries == 0:
+            return None
+        return total_loss / total_entries
+
+    def _validate_early_stopping_args(
+        self,
+        min_epochs: int,
+        loss_tol: float,
+        patience: int,
+    ) -> None:
+        if min_epochs < 0:
+            raise ValueError("min_epochs must be nonnegative")
+        if loss_tol < 0:
+            raise ValueError("loss_tol must be nonnegative")
+        if patience < 0:
+            raise ValueError("patience must be nonnegative")
+
+    def fit(
+        self,
+        max_epochs: int = 500,
+        verbose: bool = True,
+        log_dir: Optional[str] = None,
+        val_frac: float = 0.1,
+        min_epochs: int = 10,
+        loss_tol: float = 0.01,
+        patience: int = 6,
+        validation_seed: int = 0,
+        **kwargs,
+    ):
         """Fit the marginal predictor using vanilla PyTorch training loop.
 
         This method runs stochastic gradient optimization using the template
@@ -186,6 +336,17 @@ class Marginal(ABC):
             through our cells in the dataset.
         verbose : bool
             Should we print intermediate training outputs?
+        val_frac : float
+            Fraction of observations held out for validation. Set to 0 to
+            disable early stopping and train on the full dataset.
+        min_epochs : int
+            Minimum number of completed epochs before early stopping is allowed.
+        loss_tol : float
+            Required decrease in validation loss to reset patience.
+        patience : int
+            Number of non-improving validation epochs allowed after warmup.
+        validation_seed : int
+            Seed controlling the deterministic validation split.
 
         Returns
         -------
@@ -193,6 +354,9 @@ class Marginal(ABC):
             This method doesn't return anything but modifies the self.parameters
             attribute with the trained model parameters.
         """
+        self._validate_early_stopping_args(min_epochs, loss_tol, patience)
+        self.setup_validation_split(val_frac=val_frac, validation_seed=validation_seed)
+
         if self.predict is None:
             self.setup_optimizer(**kwargs)
 
@@ -204,14 +368,22 @@ class Marginal(ABC):
         else:
             writer = None
 
-        for epoch in range(max_epochs):
-            epoch_loss, n_batches = 0.0, 0
+        self.fit_history = []
+        self.best_epoch = None
+        self.best_validation_loss = None
+        self.stopped_epoch = None
+        best_loss = float("inf")
+        best_state = None
+        wait = 0
 
-            for batch in self.loader:
-                y, x = batch
-                if y.device != self.device:
-                    y = y.to(self.device)
-                    x = {k: v.to(self.device) for k, v in x.items()}
+        train_loader = self._active_train_loader()
+        for epoch in range(1, max_epochs + 1):
+            epoch_loss = 0.0
+            n_entries = 0
+
+            self.predict.train()
+            for batch in train_loader:
+                y, x = self._move_batch_to_device(batch)
 
                 self.predict.optimizer.zero_grad()
                 loss = self.predict.loss_fn((y, x))
@@ -219,19 +391,56 @@ class Marginal(ABC):
                 self.predict.optimizer.step()
 
                 epoch_loss += loss.item()
-                n_batches += 1
+                n_entries += y.numel()
 
-            avg_loss = epoch_loss / n_batches
+            avg_loss = epoch_loss / n_entries if n_entries > 0 else float("nan")
+            val_loss = self._validation_loss()
+            is_best = False
+            stopped = False
+
+            if val_loss is not None:
+                if best_loss - val_loss >= loss_tol:
+                    best_loss = val_loss
+                    wait = 0
+                    best_state = copy.deepcopy(self.predict.state_dict())
+                    self.best_epoch = epoch
+                    self.best_validation_loss = best_loss
+                    is_best = True
+                else:
+                    wait += 1
+
+                if epoch >= min_epochs and wait >= patience:
+                    stopped = True
+                    self.stopped_epoch = epoch
+
+            self.fit_history.append(
+                {
+                    "epoch": epoch,
+                    "train_loss": avg_loss,
+                    "val_loss": val_loss,
+                    "best": is_best,
+                    "stopped": stopped,
+                }
+            )
             if writer is not None:
                 writer.add_scalar("loss/train", avg_loss, epoch)
+                if val_loss is not None:
+                    writer.add_scalar("loss/validation", val_loss, epoch)
             if verbose:
-                print(f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}", end='\r')
+                msg = f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}"
+                if val_loss is not None:
+                    msg += f", Val Loss: {val_loss:.4f}"
+                print(msg, end='\r')
+            if stopped:
+                break
         if verbose:
             print() # Maintain the loss output
 
         if writer is not None:
             writer.close()
-                
+
+        if best_state is not None:
+            self.predict.load_state_dict(best_state)
         self.parameters = self.format_parameters()
 
     def format_parameters(self):
@@ -385,8 +594,7 @@ class GLMPredictor(nn.Module):
         self.loss_fn = loss_fn
         self.to(get_device(device))
 
-        optimizer_kwargs = optimizer_kwargs or {}
-        filtered_kwargs = _filter_kwargs(optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])
+        filtered_kwargs = _prepare_optimizer_kwargs(optimizer_class, optimizer_kwargs)
         self.optimizer = optimizer_class(self.parameters(), **filtered_kwargs)
 
     def reset_parameters(self):
@@ -409,3 +617,30 @@ class GLMPredictor(nn.Module):
             link = self.link_fns.get(name, torch.exp)
             out[name] = link(x_beta)
         return out
+
+
+def _prepare_optimizer_kwargs(optimizer_class, optimizer_kwargs: Optional[Dict]) -> Dict:
+    optimizer_kwargs = dict(optimizer_kwargs or {})
+    filtered_kwargs = _filter_kwargs(optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])
+    if "learning_rate" in filtered_kwargs:
+        learning_rate = filtered_kwargs.pop("learning_rate")
+        filtered_kwargs.setdefault("lr", learning_rate)
+    filtered_kwargs.setdefault("lr", 0.005)
+
+    try:
+        signature = inspect.signature(optimizer_class.__init__)
+    except (TypeError, ValueError, AttributeError):
+        return filtered_kwargs
+
+    params = signature.parameters
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return filtered_kwargs
+
+    accepted = {
+        name
+        for name, param in params.items()
+        if name not in {"self", "params"}
+        and param.kind
+        in {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
+    }
+    return {k: v for k, v in filtered_kwargs.items() if k in accepted}

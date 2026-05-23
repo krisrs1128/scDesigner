@@ -1,4 +1,5 @@
 import torch
+import copy
 from .negbin import NegBin
 from .negbin_irls_funs import initialize_parameters, step_stochastic_irls
 from ..data.formula import standardize_formula
@@ -16,15 +17,31 @@ class NegBinIRLS(NegBin):
         super().__init__(formula, device="cpu")
 
 
-    def fit(self, max_epochs=10, tol=1e-4, eta=0.1, verbose=True,
-            log_dir: Optional[str] = None, disp_ridge=1e-4, **kwargs):
+    def fit(
+        self,
+        max_epochs: int = 500,
+        tol=1e-4,
+        eta=0.1,
+        verbose=True,
+        log_dir: Optional[str] = None,
+        disp_ridge=1e-4,
+        val_frac: float = 0.1,
+        min_epochs: int = 10,
+        loss_tol: float = 0.01,
+        patience: int = 6,
+        validation_seed: int = 0,
+        **kwargs,
+    ):
+        self._validate_early_stopping_args(min_epochs, loss_tol, patience)
+        self.setup_validation_split(val_frac=val_frac, validation_seed=validation_seed)
+
         if self.predict is None:
-                self.setup_optimizer(**kwargs)
+            self.setup_optimizer(**kwargs)
 
         # 1. Initialization using poisson fit
         initialize_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['initialize'])
         beta_init, gamma_init = initialize_parameters(
-            self.loader, self.n_outcomes, self.feature_dims['mean'],
+            self._active_train_loader(), self.n_outcomes, self.feature_dims['mean'],
             self.feature_dims['dispersion'],
             **initialize_kwargs
         )
@@ -45,12 +62,23 @@ class NegBinIRLS(NegBin):
         else:
             writer = None
 
-        for epoch in range(max_epochs):
-            if not active_mask.any(): break
+        self.fit_history = []
+        self.best_epoch = None
+        self.best_validation_loss = None
+        self.stopped_epoch = None
+        best_loss = float("inf")
+        best_state = None
+        wait = 0
+        train_loader = self._active_train_loader()
+
+        for epoch in range(1, max_epochs + 1):
+            if not active_mask.any():
+                break
             ll, n_batches = 0.0, 0
 
             with torch.no_grad():
-                for y_batch, x_dict in self.loader:
+                for batch in train_loader:
+                    y_batch, x_dict = self._move_batch_to_device(batch)
 
                     # Slice active genes
                     idx = torch.where(active_mask)[0]
@@ -75,12 +103,49 @@ class NegBinIRLS(NegBin):
                     ll += ll_.sum().item()
                     n_batches += 1
 
-                if verbose and ((epoch + 1) % 10) == 0:
-                    print(f"Epoch {epoch+1}/{max_epochs} | Genes remaining: {active_mask.sum().item()} | Loss: {-ll / n_batches:.4f}", end='\r')
+                train_loss = -ll / n_batches if n_batches > 0 else float("nan")
+                val_loss = self._validation_loss()
+                is_best = False
+                stopped = False
+                if val_loss is not None:
+                    if best_loss - val_loss >= loss_tol:
+                        best_loss = val_loss
+                        wait = 0
+                        best_state = copy.deepcopy(self.predict.state_dict())
+                        self.best_epoch = epoch
+                        self.best_validation_loss = best_loss
+                        is_best = True
+                    else:
+                        wait += 1
+
+                    if epoch >= min_epochs and wait >= patience:
+                        stopped = True
+                        self.stopped_epoch = epoch
+
+                self.fit_history.append(
+                    {
+                        "epoch": epoch,
+                        "train_loss": train_loss,
+                        "val_loss": val_loss,
+                        "best": is_best,
+                        "stopped": stopped,
+                    }
+                )
+
+                if verbose and (epoch % 10 == 0 or stopped):
+                    msg = (
+                        f"Epoch {epoch}/{max_epochs} | Genes remaining: "
+                        f"{active_mask.sum().item()} | Loss: {train_loss:.4f}"
+                    )
+                    if val_loss is not None:
+                        msg += f" | Val Loss: {val_loss:.4f}"
+                    print(msg, end='\r')
 
             if writer is not None:
-                writer.add_scalar("loss/train", -ll / n_batches if n_batches > 0 else 0, epoch)
-            if not active_mask.any():
+                writer.add_scalar("loss/train", train_loss if n_batches > 0 else 0, epoch)
+                if val_loss is not None:
+                    writer.add_scalar("loss/validation", val_loss, epoch)
+            if stopped or not active_mask.any():
                 break
 
         if verbose:
@@ -89,4 +154,6 @@ class NegBinIRLS(NegBin):
         if writer is not None:
             writer.close()
 
+        if best_state is not None:
+            self.predict.load_state_dict(best_state)
         self.parameters = self.format_parameters()
