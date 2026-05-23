@@ -98,7 +98,7 @@ class CompositeCopula(SCD3Simulator):
         verbose: bool = True,
         val_frac: float = 0.1,
         min_epochs: int = 10,
-        loss_tol: float = 0.01,
+        loss_tol: float = 1e-4,
         patience: int = 6,
         validation_seed: int = 0,
         **kwargs,):
@@ -116,7 +116,7 @@ class CompositeCopula(SCD3Simulator):
         min_epochs : int
             Minimum number of marginal epochs before early stopping is allowed.
         loss_tol : float
-            Required validation-loss decrease to reset patience.
+            Required relative validation-loss decrease to reset patience.
         patience : int
             Number of non-improving validation epochs allowed after warmup.
         validation_seed : int

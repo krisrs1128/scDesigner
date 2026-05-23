@@ -25,7 +25,7 @@ class NegBinIRLS(NegBin):
         disp_ridge=1e-4,
         val_frac: float = 0.1,
         min_epochs: int = 10,
-        loss_tol: float = 0.01,
+        loss_tol: float = 1e-4,
         patience: int = 6,
         validation_seed: int = 0,
         **kwargs,

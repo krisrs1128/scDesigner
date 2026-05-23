@@ -67,6 +67,18 @@ class RecordingInitializerMarginal(ConstantValidationMarginal):
         self.initializer_validation_size = len(self.validation_loader.dataset)
 
 
+class ScriptedValidationMarginal(ConstantValidationMarginal):
+    def __init__(self, validation_losses):
+        super().__init__()
+        self.validation_losses = list(validation_losses)
+
+    def _validation_loss(self):
+        if self.validation_loader is None:
+            return None
+        index = min(len(self.fit_history), len(self.validation_losses) - 1)
+        return self.validation_losses[index]
+
+
 def test_validation_split_keeps_full_loader_and_is_deterministic():
     adata = _adata(n_obs=12)
     model = ConstantValidationMarginal()
@@ -112,6 +124,24 @@ def test_early_stopping_waits_until_min_epochs():
     assert model.fit_history[-1]["stopped"]
     assert len(model.fit_history) == 5
     assert not any(row["stopped"] for row in model.fit_history[:-1])
+
+
+def test_loss_tol_is_relative_to_best_validation_loss():
+    model = ScriptedValidationMarginal([1.0, 0.99995, 0.9998])
+    model.setup_data(_adata(n_obs=20), batch_size=5, device="cpu")
+
+    model.fit(
+        max_epochs=3,
+        val_frac=0.25,
+        min_epochs=10,
+        patience=10,
+        validation_seed=0,
+        verbose=False,
+    )
+
+    assert [row["best"] for row in model.fit_history] == [True, False, True]
+    assert model.best_epoch == 3
+    assert model.best_validation_loss == pytest.approx(0.9998)
 
 
 def test_val_frac_zero_preserves_full_data_training():

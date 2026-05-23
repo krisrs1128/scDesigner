@@ -282,6 +282,20 @@ class Marginal(ABC):
             return None
         return total_loss / total_entries
 
+    @staticmethod
+    def _validation_improved(
+        val_loss: float,
+        best_loss: float,
+        loss_tol: float,
+    ) -> bool:
+        """Check whether validation loss improved by a relative tolerance."""
+        if not np.isfinite(val_loss):
+            return False
+        if not np.isfinite(best_loss):
+            return True
+        required_decrease = loss_tol * max(abs(best_loss), 1e-12)
+        return best_loss - val_loss >= required_decrease
+
     def _validate_early_stopping_args(
         self,
         min_epochs: int,
@@ -301,7 +315,7 @@ class Marginal(ABC):
         verbose: bool = True,
         val_frac: float = 0.1,
         min_epochs: int = 10,
-        loss_tol: float = 0.01,
+        loss_tol: float = 1e-4,
         patience: int = 6,
         validation_seed: int = 0,
         **kwargs,
@@ -332,7 +346,9 @@ class Marginal(ABC):
         min_epochs : int
             Minimum number of completed epochs before early stopping is allowed.
         loss_tol : float
-            Required decrease in validation loss to reset patience.
+            Required relative decrease in validation loss to reset patience.
+            For example, ``1e-4`` requires a 0.01% decrease from the current
+            best validation loss.
         patience : int
             Number of non-improving validation epochs allowed after warmup.
         validation_seed : int
@@ -380,7 +396,7 @@ class Marginal(ABC):
             stopped = False
 
             if val_loss is not None:
-                if best_loss - val_loss >= loss_tol:
+                if self._validation_improved(val_loss, best_loss, loss_tol):
                     best_loss = val_loss
                     wait = 0
                     best_state = copy.deepcopy(self.predict.state_dict())
