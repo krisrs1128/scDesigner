@@ -116,7 +116,7 @@ class NegBin(Marginal):
     def _initialize_parameters(self, **kwargs):
         initialize_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['initialize'])
         beta_init, gamma_init = initialize_parameters(
-            self._active_train_loader(), self.n_outcomes, self.feature_dims['mean'],
+            self.train_loader, self.n_outcomes, self.feature_dims['mean'],
             self.feature_dims['dispersion'],
             **initialize_kwargs
         )

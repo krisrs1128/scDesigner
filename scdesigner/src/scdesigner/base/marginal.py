@@ -79,6 +79,11 @@ class Marginal(ABC):
     fit_history : list of dict
         Per-epoch training and validation losses, with best/stop indicators.
 
+    _validation_split_config : tuple or None
+        Cached ``(val_frac, validation_seed)``, where ``val_frac`` is 
+        the fraction of observations held out for validation, and 
+        ``validation_seed`` controls the deterministic random split.
+
     n_outcomes : int
         The number of features modeled by this marginal model. For example,
         this corresponds to the number of genes being simulated.
@@ -198,7 +203,7 @@ class Marginal(ABC):
         val_frac: float = 0.1,
         validation_seed: int = 0,
     ) -> None:
-        """Create train and validation loaders that share the full dataset.
+        """Create train and validation loaders that split the full dataset.
 
         The full-data loader remains available as :attr:`loader` for downstream
         workflows such as copula fitting. When validation is disabled or the
@@ -253,9 +258,6 @@ class Marginal(ABC):
             persistent_workers=self.loader.persistent_workers,
         )
 
-    def _active_train_loader(self) -> DataLoader:
-        return self.train_loader if self.train_loader is not None else self.loader
-
     def _move_batch_to_device(self, batch):
         y, x = batch
         if y.device != self.device:
@@ -266,7 +268,8 @@ class Marginal(ABC):
     def _validation_loss(self) -> Optional[float]:
         if self.validation_loader is None:
             return None
-
+        
+        # save current mode of the model
         was_training = self.predict.training
         self.predict.eval()
         total_loss = 0.0
@@ -276,8 +279,11 @@ class Marginal(ABC):
                 y, x = self._move_batch_to_device(batch)
                 total_loss += -self.likelihood((y, x)).sum().item()
                 total_entries += y.numel()
+        # restore the original mode of the model
         self.predict.train(was_training)
 
+        # could happen when the drop_last option of the validation loader is True 
+        # and the validation set is smaller than the batch size
         if total_entries == 0:
             return None
         return total_loss / total_entries
@@ -350,7 +356,8 @@ class Marginal(ABC):
             For example, ``1e-4`` requires a 0.01% decrease from the current
             best validation loss.
         patience : int
-            Number of non-improving validation epochs allowed after warmup.
+            Number of non-improving validation epochs allowed after the model is 
+            trained for ``min_epochs``.
         validation_seed : int
             Seed controlling the deterministic validation split.
 
@@ -360,11 +367,13 @@ class Marginal(ABC):
             This method doesn't return anything but modifies the self.parameters
             attribute with the trained model parameters.
         """
+        # Set up validation split and model optimization state.
         self._validate_early_stopping_args(min_epochs, loss_tol, patience)
         self.setup_validation_split(val_frac=val_frac, validation_seed=validation_seed)
         self.setup_optimizer(**kwargs)
         self._initialize_parameters(**kwargs)
 
+        # Initialize validation tracking used for early stopping.
         self.fit_history = []
         self.best_epoch = None
         self.best_validation_loss = None
@@ -373,11 +382,12 @@ class Marginal(ABC):
         best_state = None
         wait = 0
 
-        train_loader = self._active_train_loader()
+        train_loader = self.train_loader
         for epoch in range(1, max_epochs + 1):
             epoch_loss = 0.0
             n_entries = 0
 
+            # Main training pass.
             self.predict.train()
             for batch in train_loader:
                 y, x = self._move_batch_to_device(batch)
@@ -395,6 +405,7 @@ class Marginal(ABC):
             is_best = False
             stopped = False
 
+            # Validation pass and early-stopping decision.
             if val_loss is not None:
                 if self._validation_improved(val_loss, best_loss, loss_tol):
                     best_loss = val_loss
@@ -429,6 +440,7 @@ class Marginal(ABC):
         if verbose:
             print() # Maintain the loss output
 
+        # Restore best validation checkpoint before formatting parameters.
         if best_state is not None:
             self.predict.load_state_dict(best_state)
         self.parameters = self.format_parameters()

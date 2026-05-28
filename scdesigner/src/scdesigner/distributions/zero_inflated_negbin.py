@@ -69,7 +69,7 @@ class ZeroInflatedNegBin(Marginal):
 
     def _initialize_parameters(self, **kwargs):
         beta, gamma = initialize_parameters(
-            self._active_train_loader(),
+            self.train_loader,
             self.n_outcomes,
             self.feature_dims["mean"],
             self.feature_dims["dispersion"],
@@ -78,7 +78,7 @@ class ZeroInflatedNegBin(Marginal):
         self.predict.coefs["dispersion"].data.copy_(gamma)
 
         logit_pi = _initialize_zi_intercept_nb(
-            self._active_train_loader(), beta, gamma, self.n_outcomes
+            self.train_loader, beta, gamma, self.n_outcomes
         )
         self.predict.coefs["zero_inflation"].data[0].copy_(logit_pi)
 

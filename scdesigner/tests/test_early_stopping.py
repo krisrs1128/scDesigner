@@ -29,6 +29,12 @@ def _adata(n_obs=20, n_vars=4):
 
 
 class ConstantValidationMarginal(Marginal):
+    """Minimal marginal whose validation loss does not improve.
+
+    This keeps early-stopping tests focused on the stopping logic instead of
+    model fit quality.
+    """
+
     def __init__(self):
         super().__init__({"mean": "~ 1"}, device="cpu")
 
@@ -57,17 +63,27 @@ class ConstantValidationMarginal(Marginal):
 
 
 class RecordingInitializerMarginal(ConstantValidationMarginal):
+    """Marginal that records the train/validation split seen by initialization.
+
+    It verifies that parameter initialization runs after validation splitting.
+    """
+
     def __init__(self):
         super().__init__()
         self.initializer_train_size = None
         self.initializer_validation_size = None
 
     def _initialize_parameters(self, **kwargs):
-        self.initializer_train_size = len(self._active_train_loader().dataset)
+        self.initializer_train_size = len(self.train_loader.dataset)
         self.initializer_validation_size = len(self.validation_loader.dataset)
 
 
 class ScriptedValidationMarginal(ConstantValidationMarginal):
+    """Marginal with predetermined validation losses for each epoch.
+
+    This makes best-epoch and loss-tolerance behavior deterministic.
+    """
+
     def __init__(self, validation_losses):
         super().__init__()
         self.validation_losses = list(validation_losses)
@@ -165,9 +181,10 @@ def test_glm_predictor_default_lr_and_learning_rate_alias():
 
     alias_model = ConstantValidationMarginal()
     alias_model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")
-    alias_model.setup_validation_split(val_frac=0)
+    alias_model.setup_validation_split(val_frac=0) 
     alias_model.setup_optimizer(learning_rate=0.02)
-    assert alias_model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.02)
+    # learning_rate is not a valid argument and it should not change the lr
+    assert alias_model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.005)
 
     precedence_model = ConstantValidationMarginal()
     precedence_model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")

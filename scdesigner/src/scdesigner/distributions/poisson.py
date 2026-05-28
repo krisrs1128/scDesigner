@@ -63,7 +63,7 @@ class Poisson(Marginal):
 
     def _initialize_parameters(self, **kwargs):
         beta, _ = initialize_parameters(
-            self._active_train_loader(),
+            self.train_loader,
             self.n_outcomes,
             self.feature_dims["mean"],
             p_disp=1,
