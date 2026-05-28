@@ -1,165 +1,162 @@
 import time
-import tracemalloc
 import inspect
 import numpy as np
 import pandas as pd
-import torch
 import anndata as ad
-from scdesigner.simulators import (
-    NegBinCopula, 
-    ZeroInflatedNegBinCopula,
-    BernoulliCopula,
-    GaussianCopula,
-    PoissonCopula, 
-    ZeroInflatedPoissonCopula,
-    NegBinIRLSCopula,
-)
+from scdesigner import simulators
+from scdesigner.base import Simulator
+import warnings
 
-FUNC_MAP = {
-    "nb": NegBinCopula,
-    "poisson": PoissonCopula,
-    "bernoulli": BernoulliCopula,
-    "gaussian": GaussianCopula,
-    "zinb": ZeroInflatedNegBinCopula,
-    "zip": ZeroInflatedPoissonCopula,
-    "nbirls": NegBinIRLSCopula,
-}
-
-def subsample(adata, ncell, ngene):
+def subsample(adata, n_cells, n_genes, seed=42):
     """Randomly subsample cells and genes from an AnnData object."""
-    cidx = np.random.choice(adata.n_obs, ncell, replace=False)
-    gidx = np.random.choice(adata.n_vars, ngene, replace=False)
+    rng = np.random.default_rng(seed)
+    cidx = rng.choice(adata.n_obs, n_cells, replace=False)
+    gidx = rng.choice(adata.n_vars, n_genes, replace=False)
     return adata.copy()[cidx, gidx]
 
-def prepare_formulas(formula_params, init_params):
-    """Prepare formulas for the simulator based on accepted parameters."""
-    valid_params = {}
-    used_formulas = {}
-    
-    for key, value in formula_params.items():
-        if key in init_params:
-            valid_params[key] = f"~ {value}" if value is not None else value
-            used_formulas[key] = value
+def prepare_formula_kwargs(formulas, simulator_class):
+    """Filter formulas to those accepted by a simulator.
+
+    Parameters
+    ----------
+    formulas : dict
+        Mapping from formula argument names to formula strings.
+    simulator_class : type
+        scDesigner simulator class whose constructor will receive formulas.
+
+    Returns
+    -------
+    dict
+        Formula keyword arguments accepted by ``simulator_class``.
+    """
+    init_params = inspect.signature(simulator_class.__init__).parameters
+    formula_kwargs = {}
+
+    for name, formula in formulas.items():
+        if name in init_params:
+            formula_kwargs[name] = formula
         else:
-            used_formulas[key] = None
-            
-    return valid_params, used_formulas
+            warnings.warn(
+                f"Warning: {name} is not a valid parameter for "
+                f"{simulator_class.__name__} and will be ignored.",
+                stacklevel=2
+            )
+    return formula_kwargs
 
 def simulate(
     adata,
-    ncell,
-    ngene,
-    mean_formula='1',
-    dispersion_formula='1',
-    zero_inflation_formula='1',
-    sdev_formula='1',
-    copula_formula='1',
-    model='zinb',
+    n_cells,
+    n_genes,
+    model: type[Simulator],
+    formulas=None,
     top_k=None,
-    lr=0.005,
-    epochs=500,
-    batch_size=1024,
-    chunk_size=5000,
+    subsample_seed=42,
+    **fit_kwargs,
 ):
-    """
-    Fit a scDesigner model and sample simulated data with resource monitoring.
-    Note: The peak RAM is not the total RAM used by the process, 
-    but the peak RAM used by python interpreter. 
-    The actual consumed RAM could be larger.
-    
-    Returns:
-        tuple: (real_data, sim_data, metrics_df, simulator)
-    """
-    real_data = subsample(adata, ncell, ngene)
-    
-    simulator_class = FUNC_MAP[model]
-    init_params = inspect.signature(simulator_class.__init__).parameters
-    
-    formula_params = {
-        'mean_formula': mean_formula,
-        'dispersion_formula': dispersion_formula,
-        'zero_inflation_formula': zero_inflation_formula,
-        'copula_formula': copula_formula,
-        'sdev_formula': sdev_formula,
-    }
-    
-    valid_params, used_formulas = prepare_formulas(formula_params, init_params)
-    
-    tracemalloc.start()
-    start_time = time.time()
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats()
+    """Fit a scDesigner model and sample simulated data.
 
-    simulator = simulator_class(**valid_params)
-    simulator.fit(
-        real_data, 
-        max_epochs=epochs, 
-        lr=lr, 
-        batch_size=batch_size, 
-        chunk_size=chunk_size, 
-        top_k=top_k,
-    )
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        Reference dataset used for fitting.
+    n_cells : int or None
+        Number of cells to subsample. If ``None``, no subsampling is applied.
+    n_genes : int or None
+        Number of genes to subsample. If ``None``, no subsampling is applied.
+    model : type[Simulator]
+        scDesigner simulator class to instantiate.
+    formulas : dict, optional
+        Formula keyword arguments passed to the simulator constructor.
+    top_k : int, optional
+        Number of genes used by the copula approximation.
+    **fit_kwargs
+        Additional keyword arguments passed to ``simulator.fit``.
+
+    Returns
+    -------
+    tuple
+        ``(real_data, sim_data, metrics_df, simulator)``.
+    """
+    if n_genes is None or n_cells is None:
+        real_data = adata
+    else:
+        real_data = subsample(adata, n_cells, n_genes, subsample_seed)
+
+    formulas = formulas or {}
+    formula_kwargs = prepare_formula_kwargs(formulas, model)
+    simulator = model(**formula_kwargs)
+
+    start_time = time.time()
+
+    simulator.fit(real_data, top_k=top_k, **fit_kwargs)
     sim_data = simulator.sample(real_data.obs)
 
-    current_mem, peak_mem = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
-    
-    if torch.cuda.is_available():
-        peak_gpu_mib = torch.cuda.max_memory_allocated() / 1024**2
-    else:
-        peak_gpu_mib = np.nan
-    
-    total_ram_mib = current_mem / 1024**2
-    peak_ram_mib = peak_mem / 1024**2
     runtime = time.time() - start_time
 
-    try: 
+    try:
         diagnose = simulator.complexity()
-        aic, bic = diagnose['aic'], diagnose['bic']
+        marginal_aic, marginal_bic = diagnose["marginal_aic"], diagnose["marginal_bic"]
+        copula_aic, copula_bic = diagnose["copula_aic"], diagnose["copula_bic"]
     except Exception as e:
         print(f"Error calculating complexity: {e}")
         aic, bic = np.nan, np.nan
 
     metrics = {
-        "ncell": ncell,
-        "ngene": ngene,
+        "n_cells": n_cells,
+        "n_genes": n_genes,
         "runtime": runtime,
-        "peak_RAM": peak_ram_mib, # The peak memory usage during the simulation.
-        "total_RAM": total_ram_mib, # The memory alloacted after running the simulation.
-        "peak_GPU": peak_gpu_mib,
-        "model": model,
+        "model": model.__name__,
         "simulator": "scdesigner",
-        "epochs": epochs,
-        "lr": lr,
-        "mu": used_formulas.get('mean_formula'),
-        "sigma": used_formulas.get('dispersion_formula'),
-        "zero_inflation": used_formulas.get('zero_inflation_formula'),
-        "copula": used_formulas.get('copula_formula'),
-        "sdev": used_formulas.get('sdev_formula'),
-        "aic": aic,
-        "bic": bic
+        "max_epochs": fit_kwargs.get("max_epochs"),
+        "lr": fit_kwargs.get("lr"),
+        "mean_formula": formula_kwargs.get("mean_formula"),
+        "dispersion_formula": formula_kwargs.get("dispersion_formula"),
+        "zero_inflation_formula": formula_kwargs.get("zero_inflation_formula"),
+        "copula_formula": formula_kwargs.get("copula_formula"),
+        "sdev_formula": formula_kwargs.get("sdev_formula"),
+        "marginal_aic": marginal_aic,
+        "marginal_bic": marginal_bic,
+        "copula_aic": copula_aic,
+        "copula_bic": copula_bic
     }
 
-    return real_data, sim_data, pd.DataFrame([metrics]), simulator
+    return real_data, sim_data, metrics, simulator
+
 
 if __name__ == "__main__":
 
-    n_genes = 2000
-    n_cells = 2000
 
-    # We test the performance up to 5 covariates for both mean and dispersion
-    mean_formula = "celltype + stage + theiler"
-    dispersion_formula = "celltype + stage + theiler"
-    
+    # read data
     data_dir = "../data/HVG_embryoatlas.h5ad"
     adata = ad.read_h5ad(data_dir)
+    
+    # specify the number of cells and genes to subsample from the data
+    # use the whole dataset if any of these is set to None
+    n_genes = 1000
+    n_cells = 2000
+    
+    # specify the simulator to test
+    model = simulators.NegBinCopula 
+    
+    # define formulas for the simulator
+    formulas = {
+        "mean_formula": "~ celltype + stage",
+        "dispersion_formula": "~ celltype + stage",
+        "copula_formula": "~ 1",
+        "sdev_formula": "~ 1"
+    }
 
-    _, _, metrics_df, _ = simulate(adata, 
-    ncell=n_cells, 
-    ngene=n_genes, 
-    mean_formula=mean_formula,
-    dispersion_formula=dispersion_formula,
-    top_k=None,
-    model='zinb',
-    epochs = 50)
-    print(metrics_df)
+    real_data, sim_data, metrics, _ = simulate(
+        adata,
+        n_cells=n_cells,
+        n_genes=n_genes,
+        model=model,
+        formulas=formulas,
+        top_k=None,
+        subsample_seed=42,
+        # training parameters below
+        max_epochs=500,
+        lr = 0.005
+    )
+
+    print(pd.DataFrame([metrics]).T)
