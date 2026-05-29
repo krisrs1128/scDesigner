@@ -79,7 +79,8 @@ class Gaussian(Marginal):
             link_fns=link_fns,
             loss_fn=nll,
             optimizer_class=optimizer_class,
-            optimizer_kwargs=optimizer_kwargs
+            optimizer_kwargs=optimizer_kwargs,
+            device=self.device,
         )
 
     def likelihood(self, batch) -> torch.Tensor:

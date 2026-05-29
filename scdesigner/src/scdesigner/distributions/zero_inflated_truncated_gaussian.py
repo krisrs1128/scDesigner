@@ -97,10 +97,12 @@ class ZeroInflatedTruncatedGaussian(Marginal):
             loss_fn=nll,
             optimizer_class=optimizer_class,
             optimizer_kwargs=optimizer_kwargs,
+            device=self.device,
         )
 
+    def _initialize_parameters(self, **kwargs):
         mean_init, log_sdev_init, logit_pi_init = _initialize_zitg_intercepts(
-            self.loader, self.n_outcomes
+            self.train_loader, self.n_outcomes
         )
         self.predict.coefs["mean"].data[0].copy_(mean_init)
         self.predict.coefs["sdev"].data[0].copy_(log_sdev_init)

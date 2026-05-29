@@ -63,15 +63,22 @@ class ZeroInflatedPoisson(Marginal):
             link_fns=link_funs,
             loss_fn=nll,
             optimizer_class=optimizer_class,
-            optimizer_kwargs=optimizer_kwargs
+            optimizer_kwargs=optimizer_kwargs,
+            device=self.device,
         )
 
+    def _initialize_parameters(self, **kwargs):
         beta, _ = initialize_parameters(
-            self.loader, self.n_outcomes, self.feature_dims["mean"], p_disp=1
+            self.train_loader,
+            self.n_outcomes,
+            self.feature_dims["mean"],
+            p_disp=1,
         )
         self.predict.coefs["mean"].data.copy_(beta)
 
-        logit_pi = _initialize_zi_intercept(self.loader, beta, self.n_outcomes)
+        logit_pi = _initialize_zi_intercept(
+            self.train_loader, beta, self.n_outcomes
+        )
         self.predict.coefs["zero_inflation"].data[0].copy_(logit_pi)
 
     def likelihood(self, batch) -> torch.Tensor:

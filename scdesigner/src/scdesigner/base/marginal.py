@@ -2,6 +2,9 @@ from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from ..data.loader import adata_loader, get_device
 from anndata import AnnData
 from typing import Union, Dict, Optional, Tuple
+from torch.utils.data import DataLoader, RandomSampler, Subset
+import copy
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -57,13 +60,29 @@ class Marginal(ABC):
 
     loader : torch.utils.data.DataLoader
         A torch DataLoader object that returns batches of data for use during
-        training. This loader is constructed internally within the
-        setup_optimizer method. Enumerating this loader returns a tuple: the
+        training. This loader is constructed internally within the setup_data
+        method. Enumerating this loader returns a tuple: the
         first element contains a tensor of feature measurements (y), and the
         second element is a dictionary of tensors containing predictors to use
         for each parameter (x, for each parameter theta(x)). This design is
         useful because the design matrices may differ between parameters of the
         marginal model, y | x ~ F_(theta(x))(y)
+
+    train_loader : torch.utils.data.DataLoader
+        Loader used for marginal optimization. With early stopping enabled,
+        this is a subset of :attr:`loader`; otherwise it points to
+        :attr:`loader`.
+
+    validation_loader : torch.utils.data.DataLoader or None
+        Held-out loader used to monitor unpenalized validation likelihood.
+
+    fit_history : list of dict
+        Per-epoch training and validation losses, with best/stop indicators.
+
+    _validation_split_config : tuple or None
+        Cached ``(val_frac, validation_seed)``, where ``val_frac`` is 
+        the fraction of observations held out for validation, and 
+        ``validation_seed`` controls the deterministic random split.
 
     n_outcomes : int
         The number of features modeled by this marginal model. For example,
@@ -122,6 +141,13 @@ class Marginal(ABC):
         self.formula = formula
         self.feature_dims = None
         self.loader = None
+        self.train_loader = None
+        self.validation_loader = None
+        self.fit_history = []
+        self._validation_split_config = None
+        self.best_epoch = None
+        self.best_validation_loss = None
+        self.stopped_epoch = None
         self.n_outcomes = None
         self.predict = None
         self.predictor_names = None
@@ -164,8 +190,142 @@ class Marginal(ABC):
         self.n_outcomes = X_batch.shape[1]
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
         self.predictor_names = self.loader.dataset.predictor_names
+        self.train_loader = self.loader
+        self.validation_loader = None
+        self.fit_history = []
+        self._validation_split_config = None
+        self.best_epoch = None
+        self.best_validation_loss = None
+        self.stopped_epoch = None
 
-    def fit(self, max_epochs: int = 50, verbose: bool = True, log_dir: Optional[str] = None, **kwargs):
+    def setup_validation_split(
+        self,
+        val_frac: float = 0.1,
+        validation_seed: int = 0,
+    ) -> None:
+        """Create train and validation loaders that split the full dataset.
+
+        The full-data loader remains available as :attr:`loader` for downstream
+        workflows such as copula fitting. When validation is disabled or the
+        dataset is too small to split, :attr:`train_loader` points to
+        :attr:`loader` and :attr:`validation_loader` is ``None``.
+        """
+        if self.loader is None:
+            raise RuntimeError("self.loader is not set (call setup_data first)")
+        if not 0 <= val_frac < 1:
+            raise ValueError("val_frac must satisfy 0 <= val_frac < 1")
+
+        split_config = (float(val_frac), int(validation_seed))
+        if (
+            self._validation_split_config == split_config
+            and self.train_loader is not None
+        ):
+            return
+
+        n_obs = len(self.loader.dataset)
+        if val_frac == 0 or n_obs < 2:
+            self.train_loader = self.loader
+            self.validation_loader = None
+            self._validation_split_config = split_config
+            return
+
+        rng = np.random.default_rng(validation_seed)
+        indices = rng.permutation(n_obs)
+        n_validation = int(np.ceil(n_obs * val_frac))
+        n_validation = min(max(n_validation, 1), n_obs - 1)
+        validation_indices = indices[:n_validation]
+        train_indices = indices[n_validation:]
+
+        self.train_loader = self._subset_loader(train_indices, training=True)
+        self.validation_loader = self._subset_loader(validation_indices, training=False)
+        self._validation_split_config = split_config
+
+    def _subset_loader(self, indices: np.ndarray, training: bool) -> DataLoader:
+        sampler_is_random = isinstance(self.loader.sampler, RandomSampler)
+        return DataLoader(
+            Subset(self.loader.dataset, indices.tolist()),
+            batch_size=self.loader.batch_size,
+            shuffle=training and sampler_is_random,
+            num_workers=self.loader.num_workers,
+            collate_fn=self.loader.collate_fn,
+            drop_last=self.loader.drop_last,
+            pin_memory=self.loader.pin_memory,
+            timeout=self.loader.timeout,
+            worker_init_fn=self.loader.worker_init_fn,
+            multiprocessing_context=self.loader.multiprocessing_context,
+            generator=self.loader.generator,
+            prefetch_factor=self.loader.prefetch_factor,
+            persistent_workers=self.loader.persistent_workers,
+        )
+
+    def _move_batch_to_device(self, batch):
+        y, x = batch
+        if y.device != self.device:
+            y = y.to(self.device)
+            x = {k: v.to(self.device) for k, v in x.items()}
+        return y, x
+
+    def _validation_loss(self) -> Optional[float]:
+        if self.validation_loader is None:
+            return None
+        
+        # save current mode of the model
+        was_training = self.predict.training
+        self.predict.eval()
+        total_loss = 0.0
+        total_entries = 0
+        with torch.no_grad():
+            for batch in self.validation_loader:
+                y, x = self._move_batch_to_device(batch)
+                total_loss += -self.likelihood((y, x)).sum().item()
+                total_entries += y.numel()
+        # restore the original mode of the model
+        self.predict.train(was_training)
+
+        # could happen when the drop_last option of the validation loader is True 
+        # and the validation set is smaller than the batch size
+        if total_entries == 0:
+            return None
+        return total_loss / total_entries
+
+    @staticmethod
+    def _validation_improved(
+        val_loss: float,
+        best_loss: float,
+        loss_tol: float,
+    ) -> bool:
+        """Check whether validation loss improved by a relative tolerance."""
+        if not np.isfinite(val_loss):
+            return False
+        if not np.isfinite(best_loss):
+            return True
+        required_decrease = loss_tol * max(abs(best_loss), 1e-12)
+        return best_loss - val_loss >= required_decrease
+
+    def _validate_early_stopping_args(
+        self,
+        min_epochs: int,
+        loss_tol: float,
+        patience: int,
+    ) -> None:
+        if min_epochs < 0:
+            raise ValueError("min_epochs must be nonnegative")
+        if loss_tol < 0:
+            raise ValueError("loss_tol must be nonnegative")
+        if patience < 0:
+            raise ValueError("patience must be nonnegative")
+
+    def fit(
+        self,
+        max_epochs: int = 500,
+        verbose: bool = True,
+        val_frac: float = 0.1,
+        min_epochs: int = 10,
+        loss_tol: float = 1e-4,
+        patience: int = 6,
+        validation_seed: int = 0,
+        **kwargs,
+    ):
         """Fit the marginal predictor using vanilla PyTorch training loop.
 
         This method runs stochastic gradient optimization using the template
@@ -186,6 +346,20 @@ class Marginal(ABC):
             through our cells in the dataset.
         verbose : bool
             Should we print intermediate training outputs?
+        val_frac : float
+            Fraction of observations held out for validation. Set to 0 to
+            disable early stopping and train on the full dataset.
+        min_epochs : int
+            Minimum number of completed epochs before early stopping is allowed.
+        loss_tol : float
+            Required relative decrease in validation loss to reset patience.
+            For example, ``1e-4`` requires a 0.01% decrease from the current
+            best validation loss.
+        patience : int
+            Number of non-improving validation epochs allowed after the model is 
+            trained for ``min_epochs``.
+        validation_seed : int
+            Seed controlling the deterministic validation split.
 
         Returns
         -------
@@ -193,25 +367,30 @@ class Marginal(ABC):
             This method doesn't return anything but modifies the self.parameters
             attribute with the trained model parameters.
         """
-        if self.predict is None:
-            self.setup_optimizer(**kwargs)
+        # Set up validation split and model optimization state.
+        self._validate_early_stopping_args(min_epochs, loss_tol, patience)
+        self.setup_validation_split(val_frac=val_frac, validation_seed=validation_seed)
+        self.setup_optimizer(**kwargs)
+        self._initialize_parameters(**kwargs)
 
-        if log_dir is not None:
-            import os
-            from torch.utils.tensorboard import SummaryWriter
-            os.makedirs(log_dir, exist_ok=True)
-            writer = SummaryWriter(log_dir)
-        else:
-            writer = None
+        # Initialize validation tracking used for early stopping.
+        self.fit_history = []
+        self.best_epoch = None
+        self.best_validation_loss = None
+        self.stopped_epoch = None
+        best_loss = float("inf")
+        best_state = None
+        wait = 0
 
-        for epoch in range(max_epochs):
-            epoch_loss, n_batches = 0.0, 0
+        train_loader = self.train_loader
+        for epoch in range(1, max_epochs + 1):
+            epoch_loss = 0.0
+            n_entries = 0
 
-            for batch in self.loader:
-                y, x = batch
-                if y.device != self.device:
-                    y = y.to(self.device)
-                    x = {k: v.to(self.device) for k, v in x.items()}
+            # Main training pass.
+            self.predict.train()
+            for batch in train_loader:
+                y, x = self._move_batch_to_device(batch)
 
                 self.predict.optimizer.zero_grad()
                 loss = self.predict.loss_fn((y, x))
@@ -219,20 +398,59 @@ class Marginal(ABC):
                 self.predict.optimizer.step()
 
                 epoch_loss += loss.item()
-                n_batches += 1
+                n_entries += y.numel()
 
-            avg_loss = epoch_loss / n_batches
-            if writer is not None:
-                writer.add_scalar("loss/train", avg_loss, epoch)
+            avg_loss = epoch_loss / n_entries if n_entries > 0 else float("nan")
+            val_loss = self._validation_loss()
+            is_best = False
+            stopped = False
+
+            # Validation pass and early-stopping decision.
+            if val_loss is not None:
+                if self._validation_improved(val_loss, best_loss, loss_tol):
+                    best_loss = val_loss
+                    wait = 0
+                    best_state = copy.deepcopy(self.predict.state_dict())
+                    self.best_epoch = epoch
+                    self.best_validation_loss = best_loss
+                    is_best = True
+                else:
+                    wait += 1
+
+                if epoch >= min_epochs and wait >= patience:
+                    stopped = True
+                    self.stopped_epoch = epoch
+
+            self.fit_history.append(
+                {
+                    "epoch": epoch,
+                    "train_loss": avg_loss,
+                    "val_loss": val_loss,
+                    "best": is_best,
+                    "stopped": stopped,
+                }
+            )
             if verbose:
-                print(f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}", end='\r')
+                msg = f"Epoch {epoch}/{max_epochs}, Loss: {avg_loss:.4f}"
+                if val_loss is not None:
+                    msg += f", Val Loss: {val_loss:.4f}"
+                print(msg, end='\r')
+            if stopped:
+                break
         if verbose:
             print() # Maintain the loss output
 
-        if writer is not None:
-            writer.close()
-                
+        # Restore best validation checkpoint before formatting parameters.
+        if best_state is not None:
+            self.predict.load_state_dict(best_state)
         self.parameters = self.format_parameters()
+        
+    @property
+    def fit_history_df(self) -> pd.DataFrame:
+        """Return the fit history as a pandas DataFrame."""
+        if len(self.fit_history) == 0:
+            raise ValueError("fit_history is empty. Call fit() before accessing fit_history_df.")
+        return pd.DataFrame(self.fit_history)
 
     def format_parameters(self):
         """Convert fitted coefficient tensors into pandas DataFrames.
@@ -269,6 +487,16 @@ class Marginal(ABC):
     @abstractmethod
     def setup_optimizer(self, **kwargs):
         raise NotImplementedError
+
+    def _initialize_parameters(self, **kwargs):
+        """Initialize fitted coefficients after train/validation loaders exist.
+
+        Distribution subclasses can override this hook when initialization
+        depends on the training data. The default GLM parameter initialization
+        from :class:`GLMPredictor` is sufficient for distributions that do not
+        need a data-dependent initializer.
+        """
+        return None
 
     @abstractmethod
     def likelihood(self, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
@@ -385,8 +613,11 @@ class GLMPredictor(nn.Module):
         self.loss_fn = loss_fn
         self.to(get_device(device))
 
-        optimizer_kwargs = optimizer_kwargs or {}
-        filtered_kwargs = _filter_kwargs(optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer'])
+        optimizer_kwargs = dict(optimizer_kwargs or {})
+        optimizer_kwargs.setdefault("lr", 0.005)
+        filtered_kwargs = _filter_kwargs(
+            optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer']
+        )
         self.optimizer = optimizer_class(self.parameters(), **filtered_kwargs)
 
     def reset_parameters(self):

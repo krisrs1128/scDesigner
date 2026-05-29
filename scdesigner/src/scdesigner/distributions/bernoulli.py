@@ -39,7 +39,7 @@ class Bernoulli(Marginal):
     """
     def __init__(self, formula: Union[Dict, str], **kwargs):
         formula = standardize_formula(formula, allowed_keys=['mean'])
-        super().__init__(formula)
+        super().__init__(formula, **kwargs)
 
     def setup_optimizer(
             self,
@@ -58,7 +58,8 @@ class Bernoulli(Marginal):
             link_fns=link_fns,
             loss_fn=nll,
             optimizer_class=optimizer_class,
-            optimizer_kwargs=optimizer_kwargs
+            optimizer_kwargs=optimizer_kwargs,
+            device=self.device,
         )
 
     def likelihood(self, batch) -> torch.Tensor:

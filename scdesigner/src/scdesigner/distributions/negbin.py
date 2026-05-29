@@ -113,19 +113,13 @@ class NegBin(Marginal):
             return _to_numpy(mu, r)
         return _to_numpy(mu, r, y)
 
-    def fit(self, max_epochs: int = 100, verbose: bool = True, log_dir: Optional[str] = None, **kwargs):
-        if self.predict is None:
-                self.setup_optimizer(**kwargs)
-
-        # initialize using a poisson fit
+    def _initialize_parameters(self, **kwargs):
         initialize_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['initialize'])
         beta_init, gamma_init = initialize_parameters(
-            self.loader, self.n_outcomes, self.feature_dims['mean'],
+            self.train_loader, self.n_outcomes, self.feature_dims['mean'],
             self.feature_dims['dispersion'],
             **initialize_kwargs
         )
         with torch.no_grad():
             self.predict.coefs['mean'].copy_(beta_init)
             self.predict.coefs['dispersion'].copy_(gamma_init)
-
-        return Marginal.fit(self, max_epochs, verbose, log_dir=log_dir, **kwargs)

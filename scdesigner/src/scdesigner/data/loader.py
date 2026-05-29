@@ -340,9 +340,9 @@ def code_levels(obs, categories):
 
     This ensures stable design-matrix columns across different chunks/batches.
     """
-    for k in obs.columns:
-        if str(obs[k].dtype) == "category":
-            obs[k] = obs[k].astype(pd.CategoricalDtype(categories[k]))
+    for k, levels in categories.items():
+        if k in obs.columns:
+            obs[k] = obs[k].astype(pd.CategoricalDtype(levels))
     return obs
 
 ###############################################################################

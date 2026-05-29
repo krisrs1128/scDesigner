@@ -63,16 +63,23 @@ class ZeroInflatedNegBin(Marginal):
             link_fns=link_funs,
             loss_fn=nll,
             optimizer_class=optimizer_class,
-            optimizer_kwargs=optimizer_kwargs
+            optimizer_kwargs=optimizer_kwargs,
+            device=self.device,
         )
 
+    def _initialize_parameters(self, **kwargs):
         beta, gamma = initialize_parameters(
-            self.loader, self.n_outcomes, self.feature_dims["mean"], self.feature_dims["dispersion"]
+            self.train_loader,
+            self.n_outcomes,
+            self.feature_dims["mean"],
+            self.feature_dims["dispersion"],
         )
         self.predict.coefs["mean"].data.copy_(beta)
         self.predict.coefs["dispersion"].data.copy_(gamma)
 
-        logit_pi = _initialize_zi_intercept_nb(self.loader, beta, gamma, self.n_outcomes)
+        logit_pi = _initialize_zi_intercept_nb(
+            self.train_loader, beta, gamma, self.n_outcomes
+        )
         self.predict.coefs["zero_inflation"].data[0].copy_(logit_pi)
 
     def likelihood(self, batch) -> torch.Tensor:

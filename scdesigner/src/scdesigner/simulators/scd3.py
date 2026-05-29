@@ -87,7 +87,16 @@ class SCD3Simulator(Simulator, ABC):
         self.template = None
         self.parameters = None
 
-    def fit(self, adata: AnnData, **kwargs):
+    def fit(
+        self,
+        adata: AnnData,
+        val_frac: float = 0.1,
+        min_epochs: int = 10,
+        loss_tol: float = 1e-4,
+        patience: int = 6,
+        validation_seed: int = 0,
+        **kwargs,
+    ):
         """Fit marginal and copula components to an AnnData object.
 
         Parameters
@@ -96,6 +105,17 @@ class SCD3Simulator(Simulator, ABC):
             Input dataset with cells in rows and features (e.g. genes) in
             columns. Both the marginal and copula components are fitted to
             this data.
+        val_frac : float
+            Fraction of observations held out for marginal validation. Set to
+            0 to disable early stopping.
+        min_epochs : int
+            Minimum number of marginal epochs before early stopping is allowed.
+        loss_tol : float
+            Required relative validation-loss decrease to reset patience.
+        patience : int
+            Number of non-improving validation epochs allowed after warmup.
+        validation_seed : int
+            Seed controlling the deterministic marginal validation split.
         **kwargs
             Additional keyword arguments forwarded to the marginal and copula
             fit routines (e.g. ``batch_size``, optimization settings).
@@ -107,8 +127,14 @@ class SCD3Simulator(Simulator, ABC):
         """
         self.template = adata
         self.marginal.setup_data(adata, **kwargs)
-        self.marginal.setup_optimizer(**kwargs)
-        self.marginal.fit(**kwargs)
+        self.marginal.fit(
+            val_frac=val_frac,
+            min_epochs=min_epochs,
+            loss_tol=loss_tol,
+            patience=patience,
+            validation_seed=validation_seed,
+            **kwargs,
+        )
 
         # copula simulator
         self.copula.setup_data(adata, self.marginal.formula, **kwargs)
