@@ -142,8 +142,7 @@ if __name__ == "__main__":
     formulas = {
         "mean_formula": "~ celltype + stage",
         "dispersion_formula": "~ celltype + stage",
-        "copula_formula": "~ 1",
-        "sdev_formula": "~ 1"
+        "copula_formula": "~ 1"
     }
 
     real_data, sim_data, metrics, _ = simulate(
