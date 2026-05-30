@@ -10,8 +10,16 @@ import warnings
 def subsample(adata, n_cells, n_genes, seed=42):
     """Randomly subsample cells and genes from an AnnData object."""
     rng = np.random.default_rng(seed)
-    cidx = rng.choice(adata.n_obs, n_cells, replace=False)
-    gidx = rng.choice(adata.n_vars, n_genes, replace=False)
+    cidx = (
+        slice(None)
+        if n_cells == adata.n_obs
+        else rng.choice(adata.n_obs, n_cells, replace=False)
+    )
+    gidx = (
+        slice(None)
+        if n_genes == adata.n_vars
+        else rng.choice(adata.n_vars, n_genes, replace=False)
+    )
     return adata.copy()[cidx, gidx]
 
 def prepare_formula_kwargs(formulas, simulator_class):
@@ -60,9 +68,9 @@ def simulate(
     adata : anndata.AnnData
         Reference dataset used for fitting.
     n_cells : int or None
-        Number of cells to subsample. If ``None``, no subsampling is applied.
+        Number of cells to subsample. If ``None``, all cells are used.
     n_genes : int or None
-        Number of genes to subsample. If ``None``, no subsampling is applied.
+        Number of genes to subsample. If ``None``, all genes are used.
     model : type[Simulator]
         scDesigner simulator class to instantiate.
     formulas : dict, optional
@@ -77,7 +85,10 @@ def simulate(
     tuple
         ``(real_data, sim_data, metrics_df, simulator)``.
     """
-    if n_genes is None or n_cells is None:
+    n_cells = adata.n_obs if n_cells is None else n_cells
+    n_genes = adata.n_vars if n_genes is None else n_genes
+
+    if n_cells == adata.n_obs and n_genes == adata.n_vars:
         real_data = adata
     else:
         real_data = subsample(adata, n_cells, n_genes, subsample_seed)
@@ -131,9 +142,9 @@ if __name__ == "__main__":
     adata = ad.read_h5ad(data_dir)
     
     # specify the number of cells and genes to subsample from the data
-    # use the whole dataset if any of these is set to None
+    # set either dimension to None to use all cells or all genes
     n_genes = 1000
-    n_cells = 2000
+    n_cells = None
     
     # specify the simulator to test
     model = simulators.NegBinCopula 
