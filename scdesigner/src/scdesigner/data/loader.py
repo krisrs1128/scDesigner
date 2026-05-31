@@ -275,6 +275,37 @@ def _preloaded_adata(adata: AnnData, formula: Dict[str, str], device: torch.devi
     predictor_names = {k: list(mat.columns) for k, mat in matrices.items()}
     return PreloadedDataset(y, x, predictor_names)
 
+def _validate_design_matrices(adata: AnnData, formula: Dict[str, str]) -> None:
+    """Raise a clear error when a formula produces a rank-deficient design.
+
+    The check uses only ``adata.obs`` and validates one formula at a time, so it
+    does not materialize the expression matrix for backed AnnData objects.
+    """
+    obs_levels, ref_levels = categories(adata.obs)
+
+    for key, f in formula.items():
+        obs = code_levels(adata.obs.copy(), obs_levels)
+        mat = drop_reference_columns(model_matrix(f, obs), ref_levels)
+        values = np.asarray(mat.values, dtype=np.float64)
+        n_rows, n_cols = values.shape
+
+        if n_cols == 0:
+            continue
+
+        rank = np.linalg.matrix_rank(values)
+
+        if rank == n_cols:
+            continue
+
+        raise ValueError(
+            "The design matrix for formula key "
+            f"'{key}' is rank deficient. Formula: {f!r}. "
+            f"Matrix shape is {n_rows} rows x {n_cols} columns, but rank is {rank}. "
+            "This means some predictors are linearly dependent, so the model "
+            "is not identifiable. Please remove redundant covariates "
+            "from this formula."
+        )
+
 ################################################################################
 ## Helper functions
 ################################################################################
