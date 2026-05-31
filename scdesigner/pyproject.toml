@@ -1,6 +1,6 @@
 [project]
 name = "scdesigner"
-version = "0.0.20"
+version = "0.0.21"
 authors = [
   { name="Kris Sankaran", email="ksankaran@wisc.edu" },
 ]
