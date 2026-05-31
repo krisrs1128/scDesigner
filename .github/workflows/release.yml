@@ -1,0 +1,73 @@
+name: Release
+
+# Auto-publish to PyPI when a push to main contains a bump keyword in its
+# commit message:
+#   [major]  ->  X.Y.Z -> (X+1).0.0
+#   [minor]  ->  X.Y.Z -> X.(Y+1).0
+#   [patch]  ->  X.Y.Z -> X.Y.(Z+1)
+# Pushes without a keyword are ignored (no release).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # to commit the bump and push the tag
+  id-token: write   # to authenticate to PyPI via Trusted Publishing (OIDC)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: pypi
+    defaults:
+      run:
+        working-directory: scdesigner   # pyproject.toml lives here
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect bump keyword
+        id: bump
+        run: |
+          msg=$(git log -1 --pretty=%B)
+          if   grep -q '\[major\]' <<<"$msg"; then echo "type=major" >>"$GITHUB_OUTPUT"
+          elif grep -q '\[minor\]' <<<"$msg"; then echo "type=minor" >>"$GITHUB_OUTPUT"
+          elif grep -q '\[patch\]' <<<"$msg"; then echo "type=patch" >>"$GITHUB_OUTPUT"
+          else echo "type=none" >>"$GITHUB_OUTPUT"; fi
+
+      - name: Set up Python
+        if: steps.bump.outputs.type != 'none'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Bump version in pyproject.toml
+        if: steps.bump.outputs.type != 'none'
+        id: ver
+        run: |
+          NEW=$(python ../.github/scripts/bump_version.py ${{ steps.bump.outputs.type }} pyproject.toml)
+          echo "new=$NEW" >>"$GITHUB_OUTPUT"
+          echo "Releasing version $NEW"
+
+      - name: Build distribution
+        if: steps.bump.outputs.type != 'none'
+        run: |
+          pip install build
+          python -m build
+
+      - name: Commit bump and tag
+        if: steps.bump.outputs.type != 'none'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "release v${{ steps.ver.outputs.new }} [skip ci]"
+          git tag "v${{ steps.ver.outputs.new }}"
+          git push
+          git push --tags
+
+      - name: Publish to PyPI
+        if: steps.bump.outputs.type != 'none'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: scdesigner/dist   # path is relative to repo root
