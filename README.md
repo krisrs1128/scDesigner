@@ -39,7 +39,7 @@ pip install -e scDesigner/scdesigner
 
 ## Quickstart
 
-After installation, you can import the package in Python:
+After installation, you can import the package with:
 
 ```python
 import scdesigner
