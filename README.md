@@ -2,6 +2,8 @@
 
 **scDesigner** is a Python Module for modeling and simulating single-cell data with various models built on top of PyTorch.
 
+[API References and Documentation](https://krisrs1128.github.io/scDesigner/)
+
 ## Features
 
 - **Flexible models**: Poisson / Negative Binomial / Zero-inflated variants (and more).
