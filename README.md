@@ -25,7 +25,7 @@ conda activate scdesigner
 Install:
 
 ```bash
-pip install scdesigner==0.0.6
+pip install scdesigner
 ```
 
 ### Option B: Install from source (this repository)
