@@ -1,5 +1,5 @@
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
-from ..data.loader import adata_loader, get_device
+from ..data.loader import adata_loader, get_device, _validate_design_matrices
 from anndata import AnnData
 from typing import Union, Dict, Optional, Tuple
 from torch.utils.data import DataLoader, RandomSampler, Subset
@@ -185,6 +185,7 @@ class Marginal(ABC):
         """
         # keep a reference to the AnnData for later use (e.g., var_names)
         self.adata = adata
+        _validate_design_matrices(adata, self.formula)
         self.loader = adata_loader(adata, self.formula, batch_size=batch_size, **kwargs)
         X_batch, obs_batch = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
