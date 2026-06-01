@@ -235,17 +235,15 @@ class StandardCopula(Copula):
             if len(ix) > 0:
                 z_modeled = z[ix][:, cov_struct.modeled_indices]
 
-                if self._is_singular(cov_struct.cov.values):
-                    self._warn_singular_correlation(group)
-                    ll[ix] = np.nan
-                else:
-                    ll_marginal = norm.logpdf(z_modeled).sum(axis=1)
-                    ll_modeled = multivariate_normal.logpdf(
-                        z_modeled,
-                        np.zeros(cov_struct.num_modeled_genes),
-                        cov_struct.cov.values,
-                    )
-                    ll[ix] = ll_modeled - ll_marginal
+                self._validate_correlation_matrix(cov_struct.cov.values, group)
+                ll_marginal = norm.logpdf(z_modeled).sum(axis=1)
+                ll_modeled = multivariate_normal.logpdf(
+                    z_modeled,
+                    np.zeros(cov_struct.num_modeled_genes),
+                    cov_struct.cov.values,
+                    allow_singular=False,
+                )
+                ll[ix] = ll_modeled - ll_marginal
         return ll
 
     def num_params(self, **kwargs):
@@ -408,18 +406,17 @@ class StandardCopula(Copula):
             mean = sums[g] / group_sizes[g]
             cov = second_moments[g] / group_sizes[g] - np.outer(mean, mean)
             corr = self._covariance_to_correlation(cov)
-            if self._is_singular(corr):
-                self._warn_singular_correlation(g)
-                self.copula_likelihood = np.nan
-            else:
-                z_g = np.vstack(modeled_z[g])
-                marginal_ll = norm.logpdf(z_g).sum()
-                ll = multivariate_normal.logpdf(
-                    z_g,
-                    np.zeros(len(modeled_indices)),
-                    corr,
-                ).sum()
-                self.copula_likelihood += ll - marginal_ll
+            self._validate_correlation_matrix(corr, g)
+
+            z_g = np.vstack(modeled_z[g])
+            marginal_ll = norm.logpdf(z_g).sum()
+            ll = multivariate_normal.logpdf(
+                z_g,
+                np.zeros(len(modeled_indices)),
+                corr,
+                allow_singular=False,
+            ).sum()
+            self.copula_likelihood += ll - marginal_ll
 
             covariance[g] = CovarianceStructure(
                 cov=corr,
@@ -445,25 +442,19 @@ class StandardCopula(Copula):
         np.fill_diagonal(corr, 1.0)
         return corr
 
-    def _is_singular(self, corr: np.ndarray) -> bool:
+    def _validate_correlation_matrix(self, corr: np.ndarray, group: Union[str, int]) -> None:
         """
-        Check whether a correlation matrix is numerically singular.
+        Validate that a correlation matrix can be used for Gaussian log-likelihood.
         """
-        return np.linalg.matrix_rank(corr) < corr.shape[0]
-
-    def _warn_singular_correlation(self, group: Union[str, int]):
-        """
-        Warn that the Gaussian copula likelihood is unavailable.
-        """
-        warnings.warn(
-            "The correlation matrix is singular for group "
-            f"'{group}'. A degenerate Gaussian distribution is used and "
-            "the copula likelihood is invalid. "
-            "Try setting a smaller top_k argument to estimate a nonsingular "
-            "copula correlation matrix. ",
-            RuntimeWarning,
-            stacklevel=2,
-        )
+        try:
+            np.linalg.cholesky(corr)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError(
+                "The copula correlation matrix is not positive "
+                f"definite for group '{group}'. Matrix shape is "
+                f"{corr.shape[0]} rows x {corr.shape[1]} columns. "
+                "Try setting a smaller top_k argument "
+            ) from exc
 
     def _normal_pseudo_obs(
         self, n_samples: int, cov_struct: CovarianceStructure

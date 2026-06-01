@@ -289,22 +289,14 @@ def _validate_design_matrices(adata: AnnData, formula: Dict[str, str]) -> None:
         values = np.asarray(mat.values, dtype=np.float64)
         n_rows, n_cols = values.shape
 
-        if n_cols == 0:
-            continue
-
-        rank = np.linalg.matrix_rank(values)
-
-        if rank == n_cols:
-            continue
-
-        raise ValueError(
-            "The design matrix for formula key "
-            f"'{key}' is rank deficient. Formula: {f!r}. "
-            f"Matrix shape is {n_rows} rows x {n_cols} columns, but rank is {rank}. "
-            "This means some predictors are linearly dependent, so the model "
-            "is not identifiable. Please remove redundant covariates "
-            "from this formula."
-        )
+        if n_cols and (rank := np.linalg.matrix_rank(values)) != n_cols:
+            raise ValueError(
+                "The design matrix for formula key "
+                f"'{key}' is rank deficient. Formula: {f!r}. "
+                f"Matrix shape is {n_rows} rows x {n_cols} columns, but rank is {rank}. "
+                "This means some predictors are linearly dependent, so the model "
+                "is not identifiable. Please remove redundant covariates from this formula."
+            )
 
 ################################################################################
 ## Helper functions
