@@ -37,9 +37,17 @@ def _make_loader(name: str):
     return loader
 
 
-pancreas    = _make_loader("pancreas")
-acinar      = _make_loader("acinar")
+pancreas = _make_loader("pancreas")
+acinar = _make_loader("acinar")
 granja_atac = _make_loader("granja_atac")
+cite = _make_loader("cite")
+embryo = _make_loader("embryo")
+marrow = _make_loader("marrow")
+mobsp = _make_loader("mobsp")
+ovarian = _make_loader("ovarian")
+scgemmeth = _make_loader("scgemmeth")
+scgemrna = _make_loader("scgemrna")
+visium = _make_loader("visium")
 
 __all__ = [
     "DATASETS",
@@ -47,4 +55,12 @@ __all__ = [
     "pancreas",
     "acinar",
     "granja_atac",
+    "cite",
+    "embryo",
+    "marrow",
+    "mobsp",
+    "ovarian",
+    "scgemmeth",
+    "scgemrna",
+    "visium",
 ]
