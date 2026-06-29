@@ -3,6 +3,9 @@ import numpy as np
 import pandas as pd
 import scipy.stats as ss
 
+# Enable PNG rendering for GitHub compatibility
+alt.renderers.enable('png')
+
 
 def cormat(X, projection):
     """
