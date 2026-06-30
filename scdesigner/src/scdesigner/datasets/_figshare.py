@@ -1,5 +1,12 @@
 """Low-level Figshare download helper. Caches files as ``.h5ad`` under
 ``$SCDESIGNER_DATA`` (or ``~/.scdesigner_data``).
+
+Datasets have been uploaded to this folder
+
+https://figshare.com/authors/Kris_Sankaran/15347602
+
+and were originally drawn from the links at supplementary table 2 from the
+scDesign3 paper.
 """
 
 from pathlib import Path
