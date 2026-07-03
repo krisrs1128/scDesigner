@@ -576,6 +576,9 @@ class NegBinIRLSCopula(SCD3Simulator):
 
     def predict(self, obs=None, batch_size: int = 8224, **kwargs):
         return super().predict(obs, batch_size, device="cpu", **kwargs)
+        
+    def complexity(self, adata: AnnData = None, device="cpu", **kwargs):
+        return super().complexity(adata, device=device, **kwargs)
 
 
 class PenalizedNegBinCopula(SCD3Simulator):
