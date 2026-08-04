@@ -16,9 +16,10 @@ from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from anndata import AnnData
 from formulaic import model_matrix
 from torch.utils.data import Dataset, DataLoader
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 import numpy as np
 import pandas as pd
+import re
 import scipy.sparse
 import torch
 
@@ -93,11 +94,13 @@ class AnnDataDataset(Dataset):
         Device used for caching tensors.
     """
     def __init__(self, adata: AnnData, formula: Dict[str, str], chunk_size: int,
-                 device: Optional[torch.device] = None):
+                 device: Optional[torch.device] = None,
+                 partition_keys: Optional[Set[str]] = None):
         self.adata = adata
         self.formula = formula
         self.chunk_size = chunk_size
         self.device = get_device(device)
+        self.partition_keys = partition_keys or set()
 
         # keeping track of covariate-related information
         self.obs_levels, self.ref_levels = categories(self.adata.obs)
@@ -152,7 +155,8 @@ class AnnDataDataset(Dataset):
             self.obs_matrices = {}
             predictor_names = {}
             for key, f in self.formula.items():
-                mat = drop_reference_columns(model_matrix(f, obs_coded_chunk), self.ref_levels)
+                mat = design_matrix(f, obs_coded_chunk, self.ref_levels,
+                                    partition=key in self.partition_keys)
                 predictor_names[key] = list(mat.columns)
                 self.obs_matrices[key] = torch.tensor(mat.values, dtype=torch.float32).to(self.device)
 
@@ -169,6 +173,7 @@ def adata_loader(
     shuffle: bool = False,
     num_workers: int = 0,
     device=None,
+    partition_keys: Optional[Set[str]] = None,
     **kwargs
 ) -> DataLoader:
     """Create a :class:`~torch.utils.data.DataLoader` over an AnnData dataset.
@@ -197,6 +202,10 @@ def adata_loader(
         Whether to shuffle observations each epoch.
     num_workers : int, optional
         Number of DataLoader workers.
+    partition_keys : set of str, optional
+        Formula keys whose design matrix should partition the observations --
+        every level kept, no intercept -- rather than being regression coded.
+        Used for copula groups; see :func:`design_matrix`.
     **kwargs
         Additional keyword arguments filtered via ``DEFAULT_ALLOWED_KWARGS["data"]``
         and forwarded to :class:`~torch.utils.data.DataLoader`.
@@ -211,9 +220,9 @@ def adata_loader(
 
     # separate chunked from non-chunked cases
     if not getattr(adata, 'isbacked', False):
-        dataset = _preloaded_adata(adata, formula, device)
+        dataset = _preloaded_adata(adata, formula, device, partition_keys)
     else:
-        dataset = AnnDataDataset(adata, formula, chunk_size or 5000, device)
+        dataset = AnnDataDataset(adata, formula, chunk_size or 5000, device, partition_keys)
 
     return DataLoader(
         dataset,
@@ -256,13 +265,15 @@ def obs_loader(obs: pd.DataFrame, marginal_formula, **kwargs):
 ## Extraction of in-memory AnnData to PreloadedDataset
 ################################################################################
 
-def _preloaded_adata(adata: AnnData, formula: Dict[str, str], device: torch.device) -> PreloadedDataset:
+def _preloaded_adata(adata: AnnData, formula: Dict[str, str], device: torch.device,
+                     partition_keys: Optional[Set[str]] = None) -> PreloadedDataset:
     """Materialize an in-memory AnnData into a :class:`PreloadedDataset`.
 
     This helper converts sparse matrices to dense, encodes categorical levels
     to ensure consistent model-matrix columns, builds the per-key design
     matrices, and moves everything to ``device``.
     """
+    partition_keys = partition_keys or set()
     X = adata.X
     if scipy.sparse.issparse(X):
         X = X.toarray()
@@ -270,7 +281,10 @@ def _preloaded_adata(adata: AnnData, formula: Dict[str, str], device: torch.devi
 
     obs_levels, ref_levels = categories(adata.obs)
     obs = code_levels(adata.obs.copy(), obs_levels)
-    matrices = {k: drop_reference_columns(model_matrix(f, obs), ref_levels) for k, f in formula.items()}
+    matrices = {
+        k: design_matrix(f, obs, ref_levels, partition=k in partition_keys)
+        for k, f in formula.items()
+    }
     x = {k: torch.tensor(mat.values, dtype=torch.float32).to(device) for k, mat in matrices.items()}
     predictor_names = {k: list(mat.columns) for k, mat in matrices.items()}
     return PreloadedDataset(y, x, predictor_names)
@@ -345,6 +359,77 @@ def categories(obs):
             levels[k] = counts.index.values
             references[k] = counts.index[0]
     return levels, references
+
+
+def design_matrix(formula: str, obs: pd.DataFrame, ref_levels: dict,
+                  partition: bool = False) -> pd.DataFrame:
+    """Build one design matrix, either regression-coded or as a partition.
+
+    Regression designs drop the reference level of each categorical to stay
+    identifiable. A *partition* design does the opposite: it keeps every level
+    and drops the intercept, so each row belongs to exactly one column. Copula
+    groups need the latter -- a cell must land in one and only one covariance
+    group.
+
+    Parameters
+    ----------
+    formula : str
+        Formula consumed by :func:`formulaic.model_matrix`.
+    obs : pandas.DataFrame
+        Observation table with categorical levels already coded.
+    ref_levels : dict
+        Reference level per categorical column.
+    partition : bool, optional
+        When ``True``, keep reference-level columns.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The design matrix.
+    """
+    mat = model_matrix(formula, obs)
+    if partition:
+        return mat
+    return drop_reference_columns(mat, ref_levels)
+
+
+def partition_formula(formula: str) -> str:
+    """Rewrite a formula so its design matrix partitions the observations.
+
+    Drops the intercept unless the formula has no other terms, so that
+    ``"~ cell_type"`` and ``"~ -1 + cell_type"`` both yield one indicator per
+    cell type and ``"~ 1"`` still yields a single all-ones group.
+
+    Parameters
+    ----------
+    formula : str
+        A copula group formula.
+
+    Returns
+    -------
+    str
+        The normalized formula.
+
+    Examples
+    --------
+    >>> partition_formula("~ cell_type")
+    '~ -1 + cell_type'
+    >>> partition_formula("~ -1 + cell_type")
+    '~ -1 + cell_type'
+    >>> partition_formula("~ 1")
+    '~ 1'
+    """
+    rhs = formula.split("~", 1)[-1]
+    terms = []
+    for raw_term in rhs.split("+"):
+
+        # strip out irrelevant whitespaces
+        term = re.sub(r"-\s*[01]\b", "", raw_term).strip()
+        if term and term not in {"0", "1"}:
+            terms.append(term)
+    if not terms:
+        return "~ 1"
+    return "~ -1 + " + " + ".join(terms)
 
 
 def drop_reference_columns(mat: pd.DataFrame, ref_levels: dict) -> pd.DataFrame:
