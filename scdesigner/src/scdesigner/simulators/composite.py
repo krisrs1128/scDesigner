@@ -2,12 +2,12 @@
 
 This module provides :class:`CompositeCopula`, a simulator that fits several
 marginal models and then couples their dependence structure with a 
-:class:`~scdesigner.copulas.standard_copula.StandardCopula`.
+:class:`~scdesigner.copulas.StandardCopula`.
 """
 
 from ..data.loader import obs_loader
 from .scd3 import SCD3Simulator
-from ..copulas.standard_copula import StandardCopula
+from ..copulas import StandardCopula
 from anndata import AnnData
 from typing import Dict, Optional, List
 import numpy as np
@@ -33,7 +33,7 @@ class CompositeCopula(SCD3Simulator):
     marginals : list
         List of ``(sel, marginal)`` pairs.
     copula_formula : str, optional
-        Formula passed to :class:`~scdesigner.copulas.standard_copula.StandardCopula`
+        Formula passed to :class:`~scdesigner.copulas.StandardCopula`
         to determine copula grouping structure (e.g. ``"group ~ 1"``). If
         ``None``, uses the copula's default.
 
@@ -76,7 +76,9 @@ class CompositeCopula(SCD3Simulator):
     >>> params = composite.predict(adata.obs.iloc[:3], batch_size=3)
     """
     def __init__(self, marginals: List,
-                 copula_formula: Optional[str] = None) -> None:
+                 copula_formula: Optional[str] = None,
+                 covariance=None,
+                 top_k: Optional[int] = None) -> None:
         """Create a composite simulator.
 
         Parameters
@@ -85,9 +87,17 @@ class CompositeCopula(SCD3Simulator):
             List of ``(sel, marginal)`` pairs. See class docstring for details.
         copula_formula : str, optional
             Copula grouping formula passed to :class:`StandardCopula`.
+        covariance : CovarianceEstimator, str, float, or None, optional
+            Covariance estimator for the copula. See :class:`StandardCopula`.
+        top_k : int, optional
+            Model only the ``top_k`` most expressed genes jointly.
         """
         self.marginals = marginals
-        self.copula = StandardCopula(copula_formula) if copula_formula is not None else StandardCopula()
+        self.copula = StandardCopula(
+            copula_formula if copula_formula is not None else "~ 1",
+            covariance=covariance,
+            top_k=top_k,
+        )
         self.template = None
         self.parameters = None
         self.merged_formula = None
