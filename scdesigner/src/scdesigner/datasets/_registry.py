@@ -28,6 +28,8 @@ DATASETS: dict[str, FigshareData] = {
     "mobsc": FigshareData(name="mobsc", file_id=66126281),
     "mobsp": FigshareData(name="mobsp", file_id=65594652),
     "mobspmix": FigshareData(name="mobspmix", file_id=66126278),
+    "mouse_cortex": FigshareData(name="mouse_cortex", file_id=67164080),
+    "mouse_visual": FigshareData(name="mouse_visual", file_id=67164077),
     "ovarian": FigshareData(name="ovarian", file_id=65593941),
     "pancreas": FigshareData(name="pancreas", file_id=60087086),
     "prostate": FigshareData(name="prostate", file_id=66126284),
@@ -39,4 +41,5 @@ DATASETS: dict[str, FigshareData] = {
     "seqfish": FigshareData(name="seqfish", file_id=66126272),
     "slide": FigshareData(name="slide", file_id=66126299),
     "visium": FigshareData(name="visium", file_id=65594991),
+    "zhengmix4": FigshareData(name="zhengmix4", file_id=67164083),
 }

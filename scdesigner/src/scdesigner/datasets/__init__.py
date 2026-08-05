@@ -49,6 +49,8 @@ marrow = _make_loader("marrow")
 mobsc = _make_loader("mobsc")
 mobsp = _make_loader("mobsp")
 mobspmix = _make_loader("mobspmix")
+mouse_cortex = _make_loader("mouse_cortex")
+mouse_visual = _make_loader("mouse_visual")
 ovarian = _make_loader("ovarian")
 pancreas = _make_loader("pancreas")
 prostate = _make_loader("prostate")
@@ -60,6 +62,7 @@ sciatac_fore = _make_loader("sciatac_fore")
 seqfish = _make_loader("seqfish")
 slide = _make_loader("slide")
 visium = _make_loader("visium")
+zhengmix4 = _make_loader("zhengmix4")
 
 __all__ = [
     "DATASETS",
@@ -76,6 +79,8 @@ __all__ = [
     "mobsc",
     "mobsp",
     "mobspmix",
+    "mouse_cortex",
+    "mouse_visual",
     "ovarian",
     "pancreas",
     "prostate",
@@ -87,4 +92,5 @@ __all__ = [
     "seqfish",
     "slide",
     "visium",
+    "zhengmix4",
 ]
