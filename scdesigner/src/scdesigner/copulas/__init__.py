@@ -5,4 +5,3 @@ from .standard_copula import StandardCopula
 __all__ = [
     "StandardCopula",
 ]
-
