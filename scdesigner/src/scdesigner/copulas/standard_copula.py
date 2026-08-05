@@ -2,8 +2,13 @@ from ..base.copula import Copula, CovarianceStructure
 from ..covariance import as_covariance_estimator
 from ..data.formula import standardize_formula
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
-from .correlation import covariance_to_correlation, factorize_correlation
-from .gaussian import batch_log_likelihood, group_log_likelihood, sample_pseudo_obs
+from .gaussian_copula_helpers import (
+    batch_log_likelihood,
+    covariance_to_correlation,
+    factorize_correlation,
+    group_log_likelihood,
+    sample_pseudo_obs,
+)
 from anndata import AnnData
 from scipy.stats import norm
 from tqdm import tqdm

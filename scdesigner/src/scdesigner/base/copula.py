@@ -1,11 +1,13 @@
 from typing import Dict, Callable, Tuple
 import torch
 from anndata import AnnData
-from ..data.loader import adata_loader
+from ..data.loader import adata_loader, partition_formula
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 from typing import Optional, Union
+
+PARTITION_KEYS = {"group"}
 
 
 class Copula(ABC):
@@ -94,10 +96,14 @@ class Copula(ABC):
             This method does not return anything but populates the self.adata,
             formula, loader, and n_outcomes attributes based on the provided
             adata input object.
-        """
+       """
         self.adata = adata
         self.formula = self.formula | marginal_formula #
-        self.loader = adata_loader(adata, self.formula, batch_size=batch_size, **kwargs)
+        self.formula["group"] = partition_formula(self.formula["group"])
+        self.loader = adata_loader(
+            adata, self.formula, batch_size=batch_size,
+            partition_keys=PARTITION_KEYS, **kwargs
+        )
         X_batch, _ = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
 
