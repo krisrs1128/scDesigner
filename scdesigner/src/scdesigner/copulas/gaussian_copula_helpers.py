@@ -1,5 +1,5 @@
 r"""
-Gaussian copula math: correlation factorization, log-likelihood, and sampling
+Sampling and likelihood helpers for the Gaussian copula
 
 The copula loglikelihood of an entry is the joint normal log-density minus the
 independent one,
@@ -9,9 +9,9 @@ independent one,
 
 For each entry, we use :func:`batch_log_likelihood` to compute the difference
 directly, then form the group total (:func:`group_log_likelihood`) using a
-trace formula documented in that function's docstring. Both rely on a
-Cholesky factor of the group's correlation matrix, produced once by
-:func:`factorize_correlation` and reused rather than recomputed.
+trace formula documented in that function's docstring. Also includes helpers for
+computing a Cholesky factorization, which can be shared for both likelihood
+calculation and sampling.
 """
 
 from typing import Optional, Tuple, Union
@@ -41,7 +41,7 @@ def covariance_to_correlation(cov: np.ndarray) -> np.ndarray:
 
 def cholesky_factor(corr: np.ndarray, group: Union[str, int]) -> np.ndarray:
     """
-    Cholesky factor of a correlation matrix, or an error naming the remedy.
+    Cholesky factor of a correlation matrix
     """
     try:
         return np.linalg.cholesky(corr)
