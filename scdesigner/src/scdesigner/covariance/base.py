@@ -215,7 +215,7 @@ def as_covariance_estimator(covariance) -> CovarianceEstimator:
 
     Parameters
     ----------
-    covariance : CovarianceEstimator, str, float, or None
+    covariance : CovarianceEstimator, str, or None
         This can be an existing estimator, a registered name
         e.g.``"ledoit_wolf"`, or ``None`` for the unregularized sample
         covariance.
@@ -247,8 +247,10 @@ def as_covariance_estimator(covariance) -> CovarianceEstimator:
         if name not in _ESTIMATORS:
             raise ValueError(
                 f"Unknown covariance estimator {covariance!r}. Expected one of "
-                f"{sorted(_ESTIMATORS)}, a float in [0, 1], a CovarianceEstimator "
-                "instance, or None."
+                f"{sorted(_ESTIMATORS)}, a CovarianceEstimator instance, or None."
             )
         return _ESTIMATORS[name]()
-    return _ESTIMATORS["fixed"](float(covariance))
+    raise ValueError(
+        f"Unsupported covariance value {covariance!r}. Expected one of "
+        f"{sorted(_ESTIMATORS)}, a CovarianceEstimator instance, or None."
+    )

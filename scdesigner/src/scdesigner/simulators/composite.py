@@ -87,7 +87,7 @@ class CompositeCopula(SCD3Simulator):
             List of ``(sel, marginal)`` pairs. See class docstring for details.
         copula_formula : str, optional
             Copula grouping formula passed to :class:`StandardCopula`.
-        covariance : CovarianceEstimator, str, float, or None, optional
+        covariance : CovarianceEstimator, str, or None, optional
             Covariance estimator for the copula. See :class:`StandardCopula`.
         top_k : int, optional
             Model only the ``top_k`` most expressed genes jointly.

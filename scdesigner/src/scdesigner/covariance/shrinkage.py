@@ -14,18 +14,6 @@ from .base import register_estimator
 from .moments import _MomentEstimator
 
 
-def validate_intensity(intensity) -> float:
-    """
-    Check that a fixed shrinkage intensity lies in ``[0, 1]``.
-    """
-    if isinstance(intensity, bool):
-        raise ValueError("A shrinkage intensity must be a float in [0, 1]")
-    value = float(intensity)
-    if not 0.0 <= value <= 1.0:
-        raise ValueError(f"A shrinkage intensity must lie in [0, 1], got {value}")
-    return value
-
-
 def shrink_covariance(cov: np.ndarray, intensity: float) -> np.ndarray:
     """
     Shrink a covariance matrix toward the (scaled) identity.
@@ -55,8 +43,8 @@ def oas_intensity(cov: np.ndarray, n_samples: int) -> float:
     """
     Oracle Approximating Shrinkage intensity
 
-    Based on ``sklearn.covariance.OAS`` (Chen et al. 2010, Eq. 23, dropping the
-    ``2 / p`` like in scikit-learn).
+    Based on ``sklearn.covariance.OAS`` (Chen et al. 2010, Eq. 23 and the
+    sklearn implementation).
 
     Parameters
     ----------
@@ -91,21 +79,18 @@ def ledoit_wolf_intensity(
     fourth_moments: np.ndarray,
 ) -> float:
     r"""
-    Ledoit-Wolf shrinkage from streaming sufficient statistics.
+    Ledoit-Wolf shrinkage from streaming statistics.
 
     ``sklearn.covariance.ledoit_wolf_shrinkage`` needs three quantities of the
     centered data ``X``: ``trace(C)``, ``delta_ = ||X^T X||_F^2 / n^2`` and
-    ``beta_ = sum_ij sum_k x_ki^2 x_kj^2``. The mean is unknown in advance, we
-    so merge the *raw* moments and center them. Set ``m = sum_z / n`` and
-    ``sum_k z_ki = n m_i``, then ``(z_ki - m_i)^2 (z_kj - m_j)^2`` collapses
-    into``-3 n m_i^2 m_j^2``:
+    ``beta_ = sum_ij sum_k x_ki^2 x_kj^2``. We center the data in a streaming
+    way. We take ``m = sum_z / n`` and ``sum_k z_ki = n m_i``, then
+    ``(z_ki - m_i)^2 (z_kj - m_j)^2`` collapses into``-3 n m_i^2 m_j^2``:
 
     .. math::
-
         M_{ij} = A_{ij} - 2 m_j B_{ij} - 2 m_i B_{ji}
                  + m_i^2 q_j + q_i m_j^2 + 4 m_i m_j S_{ij}
                  - 3 n m_i^2 m_j^2
-
     with ``beta_ = sum(M)``, and ``delta_ = ||C||_F^2`` because ``X^T X = n C``.
 
     Parameters
@@ -155,7 +140,7 @@ def ledoit_wolf_intensity(
 
 class _ShrinkageEstimator(_MomentEstimator):
     """
-    Shared base for estimators that shrink toward a scaled identity.
+    Parent class for shrinkage estimators
 
     Subclasses implement :meth:`_intensity`. The shrunk estimate is positive
     definite for any positive intensity, so :attr:`regularized` is ``True``.
@@ -181,32 +166,6 @@ class _ShrinkageEstimator(_MomentEstimator):
         return {"intensity": self.intensity_}
 
 
-class FixedShrinkage(_ShrinkageEstimator):
-    """
-    Shrinkage at a user-specified intensity.
-
-    Useful as a sensitivity check against the data-driven estimators, or to
-    apply one known intensity uniformly across groups of very different sizes.
-
-    Parameters
-    ----------
-    intensity : float
-        Shrinkage intensity in ``[0, 1]``.
-
-    Examples
-    --------
-    >>> from scdesigner.covariance import FixedShrinkage
-    >>> FixedShrinkage(0.25)
-    FixedShrinkage(intensity=0.25)
-    """
-
-    def __init__(self, intensity: float = 0.1):
-        self.intensity = validate_intensity(intensity)
-
-    def _intensity(self, cov: np.ndarray) -> float:
-        return float(self.intensity)
-
-
 class OAS(_ShrinkageEstimator):
     """
     Oracle Approximating Shrinkage (see also ``sklearn.covariance.OAS``)
@@ -224,7 +183,6 @@ class OAS(_ShrinkageEstimator):
     >>> np.linalg.cholesky(estimator.covariance_).shape  # positive definite
     (30, 30)
     """
-
     def _intensity(self, cov: np.ndarray) -> float:
         return oas_intensity(cov, self.n_samples_)
 
@@ -250,7 +208,6 @@ class LedoitWolf(_ShrinkageEstimator):
     >>> estimator.diagnostics()["intensity"] > 0
     True
     """
-
     def _start(self, n_features: int) -> None:
         super()._start(n_features)
         self._squared_sum = np.zeros(n_features)
@@ -281,6 +238,5 @@ class LedoitWolf(_ShrinkageEstimator):
         self._fourth = None
 
 
-register_estimator("fixed", FixedShrinkage)
 register_estimator("oas", OAS)
 register_estimator("ledoit_wolf", LedoitWolf)
