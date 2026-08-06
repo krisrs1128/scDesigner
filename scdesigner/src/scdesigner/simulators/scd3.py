@@ -303,11 +303,10 @@ class NegBinCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental
         or biological conditions (e.g. ``"~ group"``).If ``None``,
         a default intercept-only formula is used.
-    covariance : CovarianceEstimator, str, float, or None, optional
+    covariance : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
-        and "oas" for regularized covariance estimation. If a float is passed,
-        shrinks the covariance by that fixed amount. If None, defaults to the
-        sample covariance.
+        and "oas" for regularized covariance estimation. If None, defaults to
+        the sample covariance.
     top_k : int, optional
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
@@ -355,11 +354,10 @@ class ZeroInflatedNegBinCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, float, or None, optional
+    covariance : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
-        and "oas" for regularized covariance estimation. If a float is passed,
-        shrinks the covariance by that fixed amount. If None, defaults to the
-        sample covariance.
+        and "oas" for regularized covariance estimation. If None, defaults to
+        the sample covariance.
     top_k : int, optional
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
@@ -405,11 +403,10 @@ class BernoulliCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, float, or None, optional
+    covariance : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
-        and "oas" for regularized covariance estimation. If a float is passed,
-        shrinks the covariance by that fixed amount. If None, defaults to the
-        sample covariance.
+        and "oas" for regularized covariance estimation. If None, defaults to
+        the sample covariance.
     top_k : int, optional
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
@@ -450,11 +447,10 @@ class GaussianCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, float, or None, optional
+    covariance : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
-        and "oas" for regularized covariance estimation. If a float is passed,
-        shrinks the covariance by that fixed amount. If None, defaults to the
-        sample covariance.
+        and "oas" for regularized covariance estimation. If None, defaults to
+        the sample covariance.
     top_k : int, optional
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
@@ -493,11 +489,10 @@ class PoissonCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, float, or None, optional
+    covariance : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
-        and "oas" for regularized covariance estimation. If a float is passed,
-        shrinks the covariance by that fixed amount. If None, defaults to the
-        sample covariance.
+        and "oas" for regularized covariance estimation. If None, defaults to
+        the sample covariance.
     top_k : int, optional
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
@@ -546,11 +541,10 @@ class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, float, or None, optional
+    covariance : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
-        and "oas" for regularized covariance estimation. If a float is passed,
-        shrinks the covariance by that fixed amount. If None, defaults to the
-        sample covariance.
+        and "oas" for regularized covariance estimation. If None, defaults to
+        the sample covariance.
     top_k : int, optional
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
@@ -604,11 +598,10 @@ class ZeroInflatedPoissonCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, float, or None, optional
+    covariance : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
-        and "oas" for regularized covariance estimation. If a float is passed,
-        shrinks the covariance by that fixed amount. If None, defaults to the
-        sample covariance.
+        and "oas" for regularized covariance estimation. If None, defaults to
+        the sample covariance.
     top_k : int, optional
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
@@ -652,11 +645,10 @@ class NegBinIRLSCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental
         or biological conditions (e.g. ``"~ group"``).If ``None``,
         a default intercept-only formula is used.
-    covariance : CovarianceEstimator, str, float, or None, optional
+    covariance : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
-        and "oas" for regularized covariance estimation. If a float is passed,
-        shrinks the covariance by that fixed amount. If None, defaults to the
-        sample covariance.
+        and "oas" for regularized covariance estimation. If None, defaults to
+        the sample covariance.
     top_k : int, optional
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
@@ -790,11 +782,10 @@ class SpatialNegBinCopula(SCD3Simulator):
         when set. If a single string is provided, it will be converted to a list.
     copula_formula : str
         Gaussian copula formula.
-    covariance : CovarianceEstimator, str, float, or None, optional
+    covariance : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
-        and "oas" for regularized covariance estimation. If a float is passed,
-        shrinks the covariance by that fixed amount. If None, defaults to the
-        sample covariance.
+        and "oas" for regularized covariance estimation. If None, defaults to
+        the sample covariance.
     top_k : int, optional
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify

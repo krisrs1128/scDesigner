@@ -1,15 +1,15 @@
 """Data loading utilities for scDesigner models.
 
-The core entry point is :func:`adata_loader`, which builds a PyTorch
-:class:`~torch.utils.data.DataLoader` that yields mini-batches of:
+The main function is `:func:`adata_loader`, which builds a
+:class:`~torch.utils.data.DataLoader` that returns minibatches of,
 
-- **X**: expression/count matrix rows (cells × genes), returned as a float tensor
-- **obs**: a dict mapping formula keys to design-matrix tensors produced from
-  ``adata.obs`` via :func:`formulaic.model_matrix`
+- **X**: expression matrix rows (cells × genes) as a float tensor
+- **obs**: a dict with formulas as keys and design matrices (stored as tensors)
+  made from the formula, ``adata.obs`` and :func:`formulaic.model_matrix`
 
-This module supports both in-memory and backed :class:`~anndata.AnnData`
-objects. For backed AnnData, a chunk cache is used to avoid loading all rows
-into memory at once.
+We support both in-memory and backed :class:`~anndata.AnnData` objects. For
+backed AnnData, a chunk cache is used to avoid loading all rows into memory at
+once.
 """
 
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
@@ -203,9 +203,10 @@ def adata_loader(
     num_workers : int, optional
         Number of DataLoader workers.
     partition_keys : set of str, optional
-        Formula keys whose design matrix should partition the observations --
-        every level kept, no intercept -- rather than being regression coded.
-        Used for copula groups; see :func:`design_matrix`.
+        Formula used to partition observations, usually used for copula
+        covariance groups. It's important not to have a column of all ones,
+        because this gets interpreted as a group with all cells.  See
+        :func:`design_matrix`.
     **kwargs
         Additional keyword arguments filtered via ``DEFAULT_ALLOWED_KWARGS["data"]``
         and forwarded to :class:`~torch.utils.data.DataLoader`.
@@ -394,11 +395,11 @@ def design_matrix(formula: str, obs: pd.DataFrame, ref_levels: dict,
 
 
 def partition_formula(formula: str) -> str:
-    """Rewrite a formula so its design matrix partitions the observations.
+    """Modify a formula to partition observations.
 
-    Drops the intercept unless the formula has no other terms, so that
-    ``"~ cell_type"`` and ``"~ -1 + cell_type"`` both yield one indicator per
-    cell type and ``"~ 1"`` still yields a single all-ones group.
+    Drops the intercept unless the formula has no other terms, so that ``"~
+    cell_type"`` is a proper indicator across cell types (and there is no
+    intercept-like column equal to 1 across all cells).
 
     Parameters
     ----------
@@ -414,10 +415,6 @@ def partition_formula(formula: str) -> str:
     --------
     >>> partition_formula("~ cell_type")
     '~ -1 + cell_type'
-    >>> partition_formula("~ -1 + cell_type")
-    '~ -1 + cell_type'
-    >>> partition_formula("~ 1")
-    '~ 1'
     """
     rhs = formula.split("~", 1)[-1]
     terms = []
