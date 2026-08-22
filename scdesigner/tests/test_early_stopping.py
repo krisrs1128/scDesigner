@@ -224,7 +224,7 @@ def test_object_covariates_keep_stable_chunk_design_columns():
 
 def test_poisson_copula_smoke_fit_with_early_stopping():
     adata = _adata(n_obs=30, n_vars=4)
-    sim = PoissonCopula(mean_formula="~ group", copula_formula="~ 1")
+    sim = PoissonCopula(mean_formula="~ group", copula_formula="~ 1", top_k=2)
 
     sim.fit(
         adata,
@@ -237,7 +237,6 @@ def test_poisson_copula_smoke_fit_with_early_stopping():
         loss_tol=1e9,
         validation_seed=1,
         verbose=False,
-        top_k=2,
     )
 
     assert sim.marginal.stopped_epoch == 2
@@ -253,6 +252,7 @@ def test_negbin_copula_smoke_fit_with_early_stopping():
         mean_formula="~ group",
         dispersion_formula="~ 1",
         copula_formula="~ 1",
+        top_k=2,
     )
 
     sim.fit(
@@ -266,7 +266,6 @@ def test_negbin_copula_smoke_fit_with_early_stopping():
         loss_tol=1e9,
         validation_seed=2,
         verbose=False,
-        top_k=2,
     )
 
     assert sim.marginal.stopped_epoch == 2
@@ -280,6 +279,7 @@ def test_negbin_irls_copula_uses_full_data_without_validation_stopping():
         mean_formula="~ group",
         dispersion_formula="~ 1",
         copula_formula="~ 1",
+        top_k=2,
     )
 
     sim.fit(
@@ -292,7 +292,6 @@ def test_negbin_irls_copula_uses_full_data_without_validation_stopping():
         loss_tol=1e9,
         validation_seed=2,
         verbose=False,
-        top_k=2,
     )
 
     assert sim.marginal.train_loader is sim.marginal.loader
@@ -318,6 +317,7 @@ def test_composite_copula_smoke_fit_with_early_stopping():
             (["g2", "g3"], Bernoulli("~ group", device="cpu")),
         ],
         copula_formula="~ 1",
+        top_k=2,
     )
 
     sim.fit(
@@ -331,7 +331,6 @@ def test_composite_copula_smoke_fit_with_early_stopping():
         loss_tol=1e9,
         validation_seed=2,
         verbose=False,
-        top_k=2,
     )
 
     assert [marginal.stopped_epoch for _, marginal in sim.marginals] == [2, 2]
