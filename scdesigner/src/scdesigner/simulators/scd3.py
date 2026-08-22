@@ -132,8 +132,10 @@ class SCD3Simulator(Simulator, ABC):
         validation_seed : int
             Seed controlling the deterministic marginal validation split.
         **kwargs
-            Additional keyword arguments forwarded to the marginal and copula
-            fit routines (e.g. ``batch_size``, optimization settings).
+            Additional keyword arguments forwarded to the marginal fit routine
+            and to both components' data setup (e.g. ``batch_size``,
+            optimization settings). Copula settings like ``estimator`` and
+            ``top_k`` are given when the simulator is constructed, not here.
 
         Notes
         -----
@@ -153,7 +155,7 @@ class SCD3Simulator(Simulator, ABC):
 
         # copula simulator
         self.copula.setup_data(adata, self.marginal.formula, **kwargs)
-        self.copula.fit(self.marginal.uniformize, **kwargs)
+        self.copula.fit(self.marginal.uniformize)
         self.parameters = {
             "marginal": self.marginal.parameters,
             "copula": self.copula.parameters,
