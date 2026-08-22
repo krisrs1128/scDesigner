@@ -77,7 +77,7 @@ class CompositeCopula(SCD3Simulator):
     """
     def __init__(self, marginals: List,
                  copula_formula: Optional[str] = None,
-                 covariance=None,
+                 estimator=None,
                  top_k: Optional[int] = None) -> None:
         """Create a composite simulator.
 
@@ -87,7 +87,7 @@ class CompositeCopula(SCD3Simulator):
             List of ``(sel, marginal)`` pairs. See class docstring for details.
         copula_formula : str, optional
             Copula grouping formula passed to :class:`StandardCopula`.
-        covariance : CovarianceEstimator, str, or None, optional
+        estimator : CovarianceEstimator, str, or None, optional
             Covariance estimator for the copula. See :class:`StandardCopula`.
         top_k : int, optional
             Model only the ``top_k`` most expressed genes jointly.
@@ -95,7 +95,7 @@ class CompositeCopula(SCD3Simulator):
         self.marginals = marginals
         self.copula = StandardCopula(
             copula_formula if copula_formula is not None else "~ 1",
-            covariance=covariance,
+            estimator=estimator,
             top_k=top_k,
         )
         self.template = None

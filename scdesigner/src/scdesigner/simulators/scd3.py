@@ -91,7 +91,7 @@ class SCD3Simulator(Simulator, ABC):
         >>>
         >>> sim = SCD3Simulator(
         ...     NegBin({"mean": "~ cell_type", "dispersion": "~ 1"}),
-        ...     StandardCopula("~ cell_type", covariance=LedoitWolf()),
+        ...     StandardCopula("~ cell_type", estimator=LedoitWolf()),
         ... )
         >>> sim.fit(adata, batch_size=256, max_epochs=10) # doctest: +SKIP
     """
@@ -303,7 +303,7 @@ class NegBinCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental
         or biological conditions (e.g. ``"~ group"``).If ``None``,
         a default intercept-only formula is used.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
         the sample covariance.
@@ -324,11 +324,11 @@ class NegBinCopula(SCD3Simulator):
         mean_formula: Optional[str] = "~ 1",
         dispersion_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
     ) -> None:
         marginal = NegBin({"mean": mean_formula, "dispersion": dispersion_formula})
-        copula = StandardCopula(copula_formula, covariance=covariance, top_k=top_k)
+        copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
 
@@ -354,7 +354,7 @@ class ZeroInflatedNegBinCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
         the sample covariance.
@@ -376,7 +376,7 @@ class ZeroInflatedNegBinCopula(SCD3Simulator):
         dispersion_formula: Optional[str] = "~ 1",
         zero_inflation_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
     ) -> None:
         marginal = ZeroInflatedNegBin(
@@ -386,7 +386,7 @@ class ZeroInflatedNegBinCopula(SCD3Simulator):
                 "zero_inflation": zero_inflation_formula,
             }
         )
-        copula = StandardCopula(copula_formula, covariance=covariance, top_k=top_k)
+        copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
 
@@ -403,7 +403,7 @@ class BernoulliCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
         the sample covariance.
@@ -423,11 +423,11 @@ class BernoulliCopula(SCD3Simulator):
         self,
         mean_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
     ) -> None:
         marginal = Bernoulli({"mean": mean_formula})
-        copula = StandardCopula(copula_formula, covariance=covariance, top_k=top_k)
+        copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
 
@@ -447,7 +447,7 @@ class GaussianCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
         the sample covariance.
@@ -468,11 +468,11 @@ class GaussianCopula(SCD3Simulator):
         mean_formula: Optional[str] = "~ 1",
         sdev_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
     ) -> None:
         marginal = Gaussian({"mean": mean_formula, "sdev": sdev_formula})
-        copula = StandardCopula(copula_formula, covariance=covariance, top_k=top_k)
+        copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
 
@@ -489,7 +489,7 @@ class PoissonCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
         the sample covariance.
@@ -509,11 +509,11 @@ class PoissonCopula(SCD3Simulator):
         self,
         mean_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
     ) -> None:
         marginal = Poisson({"mean": mean_formula})
-        copula = StandardCopula(copula_formula, covariance=covariance, top_k=top_k)
+        copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
 
@@ -541,7 +541,7 @@ class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
         the sample covariance.
@@ -566,7 +566,7 @@ class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
         sdev_formula: Optional[str] = "~ 1",
         zero_inflation_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
         prior_alpha: float = 1.1,
     ) -> None:
@@ -578,7 +578,7 @@ class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
             },
             prior_alpha=prior_alpha,
         )
-        copula = StandardCopula(copula_formula, covariance=covariance, top_k=top_k)
+        copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
 
@@ -598,7 +598,7 @@ class ZeroInflatedPoissonCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
         the sample covariance.
@@ -619,13 +619,13 @@ class ZeroInflatedPoissonCopula(SCD3Simulator):
         mean_formula: Optional[str] = "~ 1",
         zero_inflation_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
     ) -> None:
         marginal = ZeroInflatedPoisson(
             {"mean": mean_formula, "zero_inflation": zero_inflation_formula}
         )
-        copula = StandardCopula(copula_formula, covariance=covariance, top_k=top_k)
+        copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
 class NegBinIRLSCopula(SCD3Simulator):
@@ -645,7 +645,7 @@ class NegBinIRLSCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental
         or biological conditions (e.g. ``"~ group"``).If ``None``,
         a default intercept-only formula is used.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
         the sample covariance.
@@ -666,11 +666,11 @@ class NegBinIRLSCopula(SCD3Simulator):
         mean_formula: Optional[str] = "~ 1",
         dispersion_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
     ) -> None:
         marginal = NegBinIRLS({"mean": mean_formula, "dispersion": dispersion_formula})
-        copula = StandardCopula(copula_formula, covariance=covariance, top_k=top_k)
+        copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
     def fit(self, adata: AnnData, batch_size: int = 8224, device="cpu", **kwargs):
@@ -692,7 +692,7 @@ class PenalizedNegBinCopula(SCD3Simulator):
 
     Parameters
     ----------
-    mean_formula, dispersion_formula, copula_formula, covariance, top_k
+    mean_formula, dispersion_formula, copula_formula, estimator, top_k
         As in NegBinCopula.
     mean_penalty_diag : np.ndarray or None
         Diagonal of the penalty matrix for mean spatial coefficients.
@@ -717,7 +717,7 @@ class PenalizedNegBinCopula(SCD3Simulator):
         mean_formula="~ 1",
         dispersion_formula="~ 1",
         copula_formula="~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
         mean_penalty_diag=None,
         disp_penalty_diag=None,
@@ -743,7 +743,7 @@ class PenalizedNegBinCopula(SCD3Simulator):
             lam_disp=lam_disp,
             gene_means=gene_means,
         )
-        copula = StandardCopula(copula_formula, covariance=covariance, top_k=top_k)
+        copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
     def fit(self, adata, **kwargs):
@@ -782,7 +782,7 @@ class SpatialNegBinCopula(SCD3Simulator):
         when set. If a single string is provided, it will be converted to a list.
     copula_formula : str
         Gaussian copula formula.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
         the sample covariance.
@@ -812,7 +812,7 @@ class SpatialNegBinCopula(SCD3Simulator):
         mean_extra_terms: Optional[list] = None,
         disp_extra_terms: Optional[list] = None,
         copula_formula: str = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
         lam: float = 1.0,
         lam_disp: float = 1.0,
@@ -908,7 +908,7 @@ class SpatialNegBinCopula(SCD3Simulator):
             gene_means=gene_means,
         )
         self.copula = StandardCopula(
-            cfg["copula_formula"], covariance=cfg["covariance"], top_k=cfg["top_k"]
+            cfg["copula_formula"], estimator=cfg["estimator"], top_k=cfg["top_k"]
         )
         SCD3Simulator.fit(self, adata, **kwargs)
 

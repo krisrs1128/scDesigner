@@ -30,7 +30,7 @@ class StandardCopula(Copula):
     formula : str or dict, optional
         How the copula depends on experimental or biological conditions.
         Defaults to ``"~ 1"``, a single group.
-    covariance : CovarianceEstimator, str, or None, optional
+    estimator : CovarianceEstimator, str, or None, optional
         An estimator, a registered name such as ``"ledoit_wolf"`` or ``"oas"``,
         or ``None`` for the ordinary sample covariance.
     top_k : int, optional
@@ -57,7 +57,7 @@ class StandardCopula(Copula):
     >>> from scdesigner.copulas import StandardCopula
     >>> from scdesigner.covariance import LedoitWolf
     >>>
-    >>> copula = StandardCopula("~ cell_type", covariance=LedoitWolf())
+    >>> copula = StandardCopula("~ cell_type", estimator=LedoitWolf())
     >>> copula.formula
     {'group': '~ cell_type'}
 
@@ -69,15 +69,15 @@ class StandardCopula(Copula):
     def __init__(
         self,
         formula: Union[str, dict] = "~ 1",
-        covariance=None,
+        estimator=None,
         top_k: Optional[int] = None,
     ):
         formula = standardize_formula(formula, allowed_keys=["group"])
         super().__init__(formula)
 
         # convert string name to an estimator object
-        as_covariance_estimator(covariance)
-        self.covariance = covariance
+        as_covariance_estimator(estimator)
+        self.estimator = estimator
         self.top_k = top_k
 
         self.groups = None
@@ -125,7 +125,7 @@ class StandardCopula(Copula):
         **kwargs
             Additional arguments controlling the fit.
         """
-        prototype = as_covariance_estimator(self.covariance)
+        prototype = as_covariance_estimator(self.estimator)
         modeled_indices, remaining_indices = self._gene_partitions(self.top_k)
 
         self.copula_likelihood = 0
