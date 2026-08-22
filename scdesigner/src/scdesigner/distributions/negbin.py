@@ -9,6 +9,22 @@ import numpy as np
 import torch
 
 
+def nb_loglik(y: torch.Tensor, mu: torch.Tensor, r: torch.Tensor) -> torch.Tensor:
+    """Negative-binomial log likelihood.
+
+    This is a negative binomial density using the mean-size parameterization:
+    Var(y) = mu + mu^2 / r
+    """
+    return (
+        torch.lgamma(y + r)
+        - torch.lgamma(r)
+        - torch.lgamma(y + 1.0)
+        + r * torch.log(r)
+        + y * torch.log(mu)
+        - (r + y) * torch.log(r + mu)
+    )
+
+
 class NegBin(Marginal):
     """Negative-binomial marginal estimator with poisson initialization
 
@@ -67,16 +83,7 @@ class NegBin(Marginal):
         """Compute the log-likelihood"""
         y, x = batch
         params = self.predict(x)
-        mu = params.get('mean')
-        r = params.get('dispersion')
-        return (
-            torch.lgamma(y + r)
-            - torch.lgamma(r)
-            - torch.lgamma(y + 1.0)
-            + r * torch.log(r)
-            + y * torch.log(mu)
-            - (r + y) * torch.log(r + mu)
-        )
+        return nb_loglik(y, params.get('mean'), params.get('dispersion'))
 
     def invert(self, u: torch.Tensor, x: Dict[str, torch.Tensor],
                r_min: float = 1e-3, r_max: float = 1e3, mu_min: float = 1e-5,
