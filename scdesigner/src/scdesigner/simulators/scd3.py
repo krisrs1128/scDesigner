@@ -543,6 +543,9 @@ class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
         Copula formula describing how copula depends on experimental or
         biological conditions (e.g. ``"~ group"``). If ``None``, a default
         intercept-only formula is used.
+    prior_alpha : float, default=1.1
+        Alpha for Beta(alpha, alpha) prior on zero-inflation probabilities.
+        Values > 1 discourage extreme π, improving generalization for sparse genes.
     estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
@@ -551,9 +554,6 @@ class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
         estimation in high-dimensional settings.
-    prior_alpha : float, default=1.1
-        Alpha for Beta(alpha, alpha) prior on zero-inflation probabilities.
-        Values > 1 discourage extreme π, improving generalization for sparse genes.
 
     See Also
     --------
@@ -568,9 +568,9 @@ class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
         sdev_formula: Optional[str] = "~ 1",
         zero_inflation_formula: Optional[str] = "~ 1",
         copula_formula: Optional[str] = "~ 1",
+        prior_alpha: float = 1.1,
         estimator=None,
         top_k: Optional[int] = None,
-        prior_alpha: float = 1.1,
     ) -> None:
         marginal = ZeroInflatedTruncatedGaussian(
             {
@@ -694,7 +694,7 @@ class PenalizedNegBinCopula(SCD3Simulator):
 
     Parameters
     ----------
-    mean_formula, dispersion_formula, copula_formula, estimator, top_k
+    mean_formula, dispersion_formula, copula_formula
         As in NegBinCopula.
     mean_penalty_diag : np.ndarray or None
         Diagonal of the penalty matrix for mean spatial coefficients.
@@ -712,6 +712,8 @@ class PenalizedNegBinCopula(SCD3Simulator):
         Per-gene mean expression for adaptive penalty scaling (1/mean_j).
     cap_at_observed_max : bool
         If True, clip simulated counts to the per-gene observed maximum.
+    estimator, top_k
+        As in NegBinCopula.
     """
 
     def __init__(
@@ -719,8 +721,6 @@ class PenalizedNegBinCopula(SCD3Simulator):
         mean_formula="~ 1",
         dispersion_formula="~ 1",
         copula_formula="~ 1",
-        estimator=None,
-        top_k: Optional[int] = None,
         mean_penalty_diag=None,
         disp_penalty_diag=None,
         mean_basis_cols=None,
@@ -729,6 +729,8 @@ class PenalizedNegBinCopula(SCD3Simulator):
         lam_disp=1.0,
         gene_means=None,
         cap_at_observed_max=True,
+        estimator=None,
+        top_k: Optional[int] = None,
     ):
         self._lam = lam
         self._lam_disp = lam_disp
@@ -784,6 +786,12 @@ class SpatialNegBinCopula(SCD3Simulator):
         when set. If a single string is provided, it will be converted to a list.
     copula_formula : str
         Gaussian copula formula.
+    lam, lam_disp : float
+        Penalty strengths for mean and dispersion coefficients.
+    cap_at_observed_max : bool
+        Clip simulated counts to per-gene observed max.
+    spatial_cols : tuple of str
+        Coordinate column names in ``adata.obs``.
     estimator : CovarianceEstimator, str, or None, optional
         How to estimate each copula group's covariance. Supports "ledoit_wolf"
         and "oas" for regularized covariance estimation. If None, defaults to
@@ -792,12 +800,6 @@ class SpatialNegBinCopula(SCD3Simulator):
         Model correlation for only the ``top_k`` most highly expressed genes.
         The remaining are modeled independently. This can be used to simplify
         estimation in high-dimensional settings.
-    lam, lam_disp : float
-        Penalty strengths for mean and dispersion coefficients.
-    cap_at_observed_max : bool
-        Clip simulated counts to per-gene observed max.
-    spatial_cols : tuple of str
-        Coordinate column names in ``adata.obs``.
     **basis_kwargs
         Forwarded to the chosen :class:`SpatialBasis` subclass
         (e.g. ``n_landmarks``, ``length_scale``).
@@ -814,12 +816,12 @@ class SpatialNegBinCopula(SCD3Simulator):
         mean_extra_terms: Optional[list] = None,
         disp_extra_terms: Optional[list] = None,
         copula_formula: str = "~ 1",
-        estimator=None,
-        top_k: Optional[int] = None,
         lam: float = 1.0,
         lam_disp: float = 1.0,
         cap_at_observed_max: bool = True,
         spatial_cols: tuple = ("spatial1", "spatial2"),
+        estimator=None,
+        top_k: Optional[int] = None,
         **basis_kwargs,
     ):
         if basis not in self._BASIS_CLASSES:
