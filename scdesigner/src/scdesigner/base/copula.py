@@ -178,7 +178,7 @@ class Copula(ABC):
                 self.parameters[g].correlate(row_pattern, col_pattern, factor)
 
     @abstractmethod
-    def fit(self, uniformizer: Callable, **kwargs):
+    def fit(self, uniformizer: Callable):
         """
         Fit a Copula
 
@@ -186,13 +186,14 @@ class Copula(ABC):
         [0, 1] space of percentiles. See the .invert() method within class
         Marginal.
 
+        Any settings controlling the fit belong to the copula itself: they are
+        given either at construction or to .setup_data().
+
         Parameters
         ----------
         uniformizer : Callable
             Function to transform data to uniform marginals. See .invert()
             within class Marginal for an example.
-        **kwargs
-            Additional keyword arguments.
         """
         raise NotImplementedError
 

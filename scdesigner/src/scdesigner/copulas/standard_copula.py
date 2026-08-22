@@ -110,35 +110,38 @@ class StandardCopula(Copula):
     # ------------------------------------------------------------------
     # fitting
     # ------------------------------------------------------------------
-    def fit(self, uniformizer: Callable, **kwargs):
+    def fit(self, uniformizer: Callable):
         r"""
         Estimate a correlation matrix for each group.
 
         The data are first gaussianized using the estimated marginals then we
         stream across batches to estimate the covariance.
 
+        The fit is controlled entirely by the copula's construction: ``estimator``
+        and ``top_k`` are set in :meth:`__init__`, and the batching is set in
+        :meth:`setup_data`.
+
         Parameters
         ----------
         uniformizer : callable
             ``uniformizer(y, x_dict) -> np.ndarray`` mapping expression data to
             uniform \([0, 1]\) values.
-        **kwargs
-            Additional arguments controlling the fit.
         """
         prototype = as_covariance_estimator(self.estimator)
-        modeled_indices, remaining_indices = self._gene_partitions(self.top_k)
+        modeled_indices, remaining_indices = self._gene_partitions()
 
         self.copula_likelihood = 0
         self.estimators_ = self._fit_estimators(prototype, uniformizer, modeled_indices)
         self.parameters = self._build_covariances(modeled_indices, remaining_indices)
 
-    def _gene_partitions(self, top_k: Optional[int]) -> Tuple[np.ndarray, np.ndarray]:
+    def _gene_partitions(self) -> Tuple[np.ndarray, np.ndarray]:
         """
         Split genes into those modeled jointly and those left independent.
 
         Genes are ranked by total expression and the top_k are modeled jointly.
         The rest are modeled independently.
         """
+        top_k = self.top_k
         if top_k is None:
             return np.arange(self.n_outcomes), np.array([], dtype=int)
 

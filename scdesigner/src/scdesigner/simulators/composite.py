@@ -133,8 +133,9 @@ class CompositeCopula(SCD3Simulator):
             Seed controlling deterministic marginal validation splits.
         **kwargs
             Additional keyword arguments forwarded to marginal setup/fit methods
-            and to the copula's ``setup_data`` / ``fit`` calls (e.g.
-            ``batch_size``).
+            and to the copula's ``setup_data`` call (e.g. ``batch_size``).
+            Copula settings like ``estimator`` and ``top_k`` are given when the
+            simulator is constructed, not here.
         """
         self.template = adata
         merged_formula = {}
@@ -161,7 +162,7 @@ class CompositeCopula(SCD3Simulator):
         # copula simulator
         self.merged_formula = merged_formula
         self.copula.setup_data(adata, merged_formula, **kwargs)
-        self.copula.fit(self.merged_uniformize, **kwargs)
+        self.copula.fit(self.merged_uniformize)
         self.parameters = {
             "marginal": [m[1].parameters for m in self.marginals],
             "copula": self.copula.parameters
