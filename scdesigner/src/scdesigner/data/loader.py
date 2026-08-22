@@ -67,6 +67,15 @@ class PreloadedDataset(Dataset):
     def __getitem__(self, idx):
         return self.y[idx], {k: v[idx] for k, v in self.x.items()}
 
+    def __getitems__(self, indices):
+        """Fetch a whole batch with one indexing operation per tensor.
+
+        On a GPU, this is fast alternative to __getitem__ that allows us to skip
+        extracting batch_size separate slices and then stacking them.
+        """
+        idx = torch.as_tensor(indices, device=self.y.device)
+        return self.y[idx], {k: v[idx] for k, v in self.x.items()}
+
 class AnnDataDataset(Dataset):
     """PyTorch dataset over an AnnData object, with optional chunk caching.
 
@@ -305,7 +314,13 @@ def _validate_design_matrices(adata: AnnData, formula: Dict[str, str]) -> None:
 def dict_collate_fn(batch):
     """
     Custom collate function for handling dictionary obs tensors.
+
+    If batch comes from a PreloadedDataset, we can immediately return the batch
+    without stacking (see __getitems__).
     """
+    if isinstance(batch, tuple):
+        return batch
+
     X_batch = torch.stack([item[0] for item in batch])
     obs_batch = [item[1] for item in batch]
 
