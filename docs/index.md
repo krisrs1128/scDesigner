@@ -43,7 +43,7 @@ After installation, you can import the package in Python:
 import scdesigner
 ```
 
-You may refer to [`quickstart.ipynb`](https://github.com/krisrs1128/scDesigner/blob/main/examples/quickstart.ipynb) for basic usage of the package.
+You may refer to [`01-quickstart.ipynb`](https://github.com/krisrs1128/scDesigner/blob/main/examples/01-quickstart.ipynb) for basic usage of the package.
 
 ## Contributing
 
