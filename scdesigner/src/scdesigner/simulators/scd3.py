@@ -10,6 +10,7 @@ import scipy.sparse as sp
 import torch
 from ..distributions import (
     NegBin,
+    NegBinEQTL,
     NegBinIRLS,
     PenalizedNegBin,
     ZeroInflatedNegBin,
@@ -301,6 +302,131 @@ class NegBinCopula(SCD3Simulator):
         super().__init__(marginal, covariance)
 
 
+class NegBinEQTLCopula(SCD3Simulator):
+    """NB simulator for single-cell eQTL data
+
+    eQTL data present a challenge for our usual negative binomial copula
+    simulators. Since every gene is regulated by its own set of SNPs, we can no
+    longer rely on sharing the same design matrix across all response genes.
+    Further, since gene expression profiles tend to vary from individual to
+    individual, it is important to include some sort of patient-level (random)
+    intercept.
+
+    Our approach is as follows. For cell :math:`i`, gene :math:`j`, and donor
+    :math:`k(i)`, fit the marginal model,
+
+    .. math::
+       Y_{ij}\mid u_{k(i),j} \sim \operatorname{NB}(\mu_{ij}, r_{ij}),\qquad
+       \operatorname{Var}(Y_{ij}\mid u)=\mu_{ij}+\mu_{ij}^2/r_{ij},
+
+       \log\mu_{ij}
+         = W_i^\top\theta_j + u_{k(i),j}
+         + \sum_m D_{k(i),jm}
+           \left(\beta_{jm}+V_i^\top\zeta_{jm}\right),\qquad
+       \log r_{ij}=Z_i^\top\psi_j,\quad
+       u_{kj}\sim N(0,\sigma_j^2).
+
+    :math:`W_i` and :math:`Z_i` are cell-level design matrices shared across all
+    genes and :math:D is a :math:`D \in R^{K x J x M}` is a donor x gene x
+    maximum number of SNPs per gene matrix storing the "dosage" (0, 1, 2) of the
+    variant in the gene for that donor. Notice that M indexes different SNPs for
+    each gene, The specific mapping is stored in snp_map. :math:`zeta` It allows
+    for interaction between the genotype and cell-level features like cell type.
+    The matrix U stores a donor-level intercept.
+
+    The coefficients and the donor-level intercepts are estimated using a ridge
+    regularized negative binomial likelihood. The variance of the random effects
+    u is updated after each epoch using the posterior moments described in
+    donor_moments.py.
+
+    Once this marginal model is estimated, the copula proceeds as usual.
+
+    Parameters
+    ----------
+    mean_formula : str
+        Specifies the formula relating cell-level characteristics with the
+        response gene expression. We separately model the genotypic variation
+        through the dosage and snp_map parameters.
+    dispersion_formula : str
+        An elegance of a mean formula, but for the dispersion. Our default "~ 1"
+        matches the scDesignPop constant dispersion per gene.
+    interaction_formula : str or None
+        Allow varying genotype effects as a function of these interaction terms.
+        For example, we can support cell-type-specific eQTLs using `~ 0 +
+        C(cell_type)` and the dynamic eQTLs using `~ bs(pseudotime, df=5)`.
+    copula_formula : str
+        Groups to divide the copula estimation in two
+    donor_col : str
+        Column name of the ADATA.ops storing the donor IDs
+    dosage : pandas.DataFrame
+        A donor-by-SNP table giving the genotypes {0, 1, 2} of each individual
+    snp_map : dict[str, list[str]]
+        Gene name -> SNP columns regulating that gene
+    **marginal_kwargs
+        Additional keyword arguments that are passed to `NegBinEQTL`
+
+    See Also
+    --------
+    :class:`SCD3Simulator`
+    :class:`NegBinEQTL`
+    :class:`StandardCopula`
+    """
+
+    def __init__(
+        self,
+        mean_formula: Optional[str] = "~ 1",
+        dispersion_formula: Optional[str] = "~ 1",
+        interaction_formula: Optional[str] = None,
+        copula_formula: Optional[str] = "~ 1",
+        *,
+        donor_col: str,
+        dosage,
+        snp_map,
+        **marginal_kwargs,
+    ) -> None:
+        formula = {"mean": mean_formula, "dispersion": dispersion_formula}
+        if interaction_formula is not None:
+            formula["interaction"] = interaction_formula
+
+        marginal = NegBinEQTL(
+            formula,
+            donor_col=donor_col,
+            dosage=dosage,
+            snp_map=snp_map,
+            **marginal_kwargs,
+        )
+        super().__init__(marginal, StandardCopula(copula_formula))
+
+    def _augment_adata(self, adata: AnnData) -> AnnData:
+        """Return a view of ``adata`` with the donor IDs"""
+        return AnnData(
+            X=adata.X, obs=self.marginal._augment_obs(adata.obs), var=adata.var
+        )
+
+    def _with_device(self, kwargs: dict) -> dict:
+        """Match the loader device with the marginal's."""
+        kwargs.setdefault("device", self.marginal.device)
+        return kwargs
+
+    def fit(self, adata: AnnData, **kwargs):
+        return super().fit(self._augment_adata(adata), **self._with_device(kwargs))
+
+    def predict(self, obs=None, **kwargs):
+        if obs is not None:
+            obs = self.marginal._augment_obs(obs)
+        return super().predict(obs=obs, **self._with_device(kwargs))
+
+    def sample(self, obs=None, **kwargs):
+        if obs is not None:
+            obs = self.marginal._augment_obs(obs)
+        return super().sample(obs=obs, **self._with_device(kwargs))
+
+    def complexity(self, adata: AnnData = None, **kwargs):
+        if adata is not None:
+            adata = self._augment_adata(adata)
+        return super().complexity(adata, **self._with_device(kwargs))
+
+
 class ZeroInflatedNegBinCopula(SCD3Simulator):
     """Simulator using zero-inflated negative binomial marginals with
     a Gaussian copula.
@@ -576,7 +702,7 @@ class NegBinIRLSCopula(SCD3Simulator):
 
     def predict(self, obs=None, batch_size: int = 8224, **kwargs):
         return super().predict(obs, batch_size, device="cpu", **kwargs)
-        
+
     def complexity(self, adata: AnnData = None, device="cpu", **kwargs):
         return super().complexity(adata, device=device, **kwargs)
 
