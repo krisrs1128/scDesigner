@@ -45,7 +45,7 @@ After installation, you can import the package with:
 import scdesigner
 ```
 
-You may refer to `examples/quickstart.ipynb` for basic usage of the package.
+You may refer to `examples/01-quickstart.ipynb` for basic usage of the package.
 
 ## Repository Structure
 

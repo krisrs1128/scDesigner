@@ -76,7 +76,8 @@ def simulate(
     formulas : dict, optional
         Formula keyword arguments passed to the simulator constructor.
     top_k : int, optional
-        Number of genes used by the copula approximation.
+        Number of genes used by the copula approximation. Passed to the
+        simulator constructor.
     **fit_kwargs
         Additional keyword arguments passed to ``simulator.fit``.
 
@@ -94,12 +95,14 @@ def simulate(
         real_data = subsample(adata, n_cells, n_genes, subsample_seed)
 
     formulas = formulas or {}
-    formula_kwargs = prepare_formula_kwargs(formulas, model)
-    simulator = model(**formula_kwargs)
+    init_kwargs = prepare_formula_kwargs(formulas, model)
+    if top_k is not None:
+        init_kwargs["top_k"] = top_k
+    simulator = model(**init_kwargs)
 
     start_time = time.time()
 
-    simulator.fit(real_data, top_k=top_k, **fit_kwargs)
+    simulator.fit(real_data, **fit_kwargs)
     sim_data = simulator.sample(real_data.obs)
 
     runtime = time.time() - start_time
