@@ -80,8 +80,8 @@ class Marginal(ABC):
         Per-epoch training and validation losses, with best/stop indicators.
 
     _validation_split_config : tuple or None
-        Cached ``(val_frac, validation_seed)``, where ``val_frac`` is 
-        the fraction of observations held out for validation, and 
+        Cached ``(val_frac, validation_seed)``, where ``val_frac`` is
+        the fraction of observations held out for validation, and
         ``validation_seed`` controls the deterministic random split.
 
     n_outcomes : int
@@ -269,7 +269,7 @@ class Marginal(ABC):
     def _validation_loss(self) -> Optional[float]:
         if self.validation_loader is None:
             return None
-        
+
         # save current mode of the model
         was_training = self.predict.training
         self.predict.eval()
@@ -283,7 +283,7 @@ class Marginal(ABC):
         # restore the original mode of the model
         self.predict.train(was_training)
 
-        # could happen when the drop_last option of the validation loader is True 
+        # could happen when the drop_last option of the validation loader is True
         # and the validation set is smaller than the batch size
         if total_entries == 0:
             return None
@@ -357,7 +357,7 @@ class Marginal(ABC):
             For example, ``1e-4`` requires a 0.01% decrease from the current
             best validation loss.
         patience : int
-            Number of non-improving validation epochs allowed after the model is 
+            Number of non-improving validation epochs allowed after the model is
             trained for ``min_epochs``.
         validation_seed : int
             Seed controlling the deterministic validation split.
@@ -400,6 +400,7 @@ class Marginal(ABC):
 
                 epoch_loss += loss.item()
                 n_entries += y.numel()
+            self._on_epoch_end(epoch)
 
             avg_loss = epoch_loss / n_entries if n_entries > 0 else float("nan")
             val_loss = self._validation_loss()
@@ -445,7 +446,7 @@ class Marginal(ABC):
         if best_state is not None:
             self.predict.load_state_dict(best_state)
         self.parameters = self.format_parameters()
-        
+
     @property
     def fit_history_df(self) -> pd.DataFrame:
         """Return the fit history as a pandas DataFrame."""
@@ -496,6 +497,15 @@ class Marginal(ABC):
         depends on the training data. The default GLM parameter initialization
         from :class:`GLMPredictor` is sufficient for distributions that do not
         need a data-dependent initializer.
+        """
+        return None
+
+    def _on_epoch_end(self, epoch: int):
+        """Run after training but validation for each epoch.
+
+        By default, nothing happens, but for some models, we might want to have
+        an estimation step after intermediate parameter updates. For example,
+        this can be used to define an E-step in an EM algorithm.
         """
         return None
 
@@ -641,3 +651,148 @@ class GLMPredictor(nn.Module):
             link = self.link_fns.get(name, torch.exp)
             out[name] = link(x_beta)
         return out
+
+
+class EQTLPredictor(nn.Module):
+    """Predictor for eQTL models.
+
+    The challenge with eQTL analysis is that the SNF predictors can vary from
+    gene to gene and that we must support donor-level effects as well as
+    cell-level features. This requires a different form of forward function to
+    keep us from running separate regressions across genes or copying the same
+    patient-level information across all cells. For modeling the mean, the basic
+    structure is
+
+        eta = W @ coefs["mean"]                     # shared block
+            + U[donor_idx]                           # per-individual random intercept
+            + gather(einsum('kjm,jm->kj', D, beta))  # genotype main effect
+            + gather(einsum('kjm,jml->kjl', D, zeta)) # genotype interaction
+
+    Args:
+        n_outcomes: number of genes (J)
+        feature_dims: mapping with keys "mean" and "dispersion" -> number of
+            shared covariate columns for each
+        dosage: (K, J, K_max) individual x gene x SNP position tensor tracking
+            genotypes
+        mask: (J, K_max) indicator for valid SNP entries per gene. The issue is
+            that some genes might only be located close to a small number of SNPs.
+        interaction_dim: number of columns (L) in the genotype-interaction
+            design. 0 means no interactions.
+        accumulator_names: Names of additional statistical summary statistics to
+            store while accumulating each epoch. These are necessary for our
+            posterior moment updates described in donor_moments.py. Appropriate
+            values are,
+
+                score = +l'       observed = -l''
+                third = -l'''     fourth   = -l''''
+    """
+
+    def __init__(
+        self,
+        n_outcomes: int,
+        feature_dims: Dict[str, int],
+        dosage: torch.Tensor,
+        mask: torch.Tensor,
+        interaction_dim: int,
+        accumulator_names: Tuple[str, ...] = (),
+        loss_fn: Optional[callable] = None,
+        optimizer_class: Optional[callable] = torch.optim.AdamW,
+        optimizer_kwargs: Optional[Dict] = None,
+        device: Optional[torch.device] = None,
+    ):
+        super().__init__()
+        self.n_outcomes = int(n_outcomes)
+        self.feature_dims = dict(feature_dims)
+        n_individuals, _, k_max = dosage.shape
+
+        # Initialize the learnable parameters.
+        self.coefs = nn.ParameterDict()
+        for key in ("mean", "dispersion"):
+            self.coefs[key] = nn.Parameter(torch.zeros(self.feature_dims[key], self.n_outcomes))
+        self.beta = nn.Parameter(torch.zeros(self.n_outcomes, k_max))
+        self.zeta = nn.Parameter(torch.zeros(self.n_outcomes, k_max, interaction_dim))
+        self.U = nn.Parameter(torch.zeros(n_individuals, self.n_outcomes))
+        self.reset_parameters()
+
+        self.register_buffer("D", dosage)
+        self.register_buffer("mask", mask)
+        self.register_buffer("lam", torch.ones(self.n_outcomes))
+
+        # Summary statistics used when defining the EM updates.
+        valid_accumulators = ("score", "observed", "third", "fourth")
+        requested = set(accumulator_names)
+        self.accumulator_names = tuple(
+            name for name in valid_accumulators if name in requested
+        )
+        for name in self.accumulator_names:
+            self.register_buffer(
+                f"{name}_accum", torch.zeros(n_individuals, self.n_outcomes)
+            )
+
+        # Summary statistics used to assess the convergence of the EN step
+        self.register_buffer("mode_gap", torch.zeros(self.n_outcomes))
+        self.register_buffer("invalid_variances", torch.zeros((), dtype=torch.long))
+        self.interaction_dim = int(interaction_dim)
+
+        # Only used when simulating new donors. Off by default.
+        self.register_buffer("U_sim", torch.zeros(n_individuals, self.n_outcomes))
+        self.use_simulated_donor_effects = False
+
+        self.loss_fn = loss_fn
+        self.to(get_device(device))
+
+        optimizer_kwargs = dict(optimizer_kwargs or {})
+        optimizer_kwargs.setdefault("lr", 0.005)
+        filtered_kwargs = _filter_kwargs(
+            optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer']
+        )
+        self.optimizer = optimizer_class(self.parameters(), **filtered_kwargs)
+
+    @property
+    def accumulators(self) -> Dict[str, torch.Tensor]:
+        """Return the epoch accumulators as a dictionary keyed by derivative."""
+        return {
+            name: getattr(self, f"{name}_accum")
+            for name in self.accumulator_names
+        }
+
+    def zero_accumulators(self):
+        """Reset all per-epoch accumulators."""
+        with torch.no_grad():
+            for accumulator in self.accumulators.values():
+                accumulator.zero_()
+
+    def reset_parameters(self):
+        for p in self.coefs.values():
+            nn.init.normal_(p, mean=0.0, std=1e-4)
+
+    def forward(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """Forward pass to assemble mean prediction
+
+        obs_dict must contain:
+            "mean": (B, p) shared mean design
+            "dispersion": (B, p_disp) shared dispersion design
+            "genotype": (B, 1) integer-valued donor code column
+            "interaction": (B, L) genotype-interaction design (only read when
+                interaction_dim > 0)
+        """
+        donor_idx = obs_dict["genotype"][:, 0].long()
+
+        # Introduce the donor-level random intercepts.
+        eta = obs_dict["mean"] @ self.coefs["mean"]
+        donor_effects = self.U_sim if self.use_simulated_donor_effects else self.U
+        eta = eta + donor_effects[donor_idx]
+
+        # Construct the genotype effects.
+        donors, inverse = torch.unique(donor_idx, return_inverse=True)
+        D_masked = self.D[donors] * self.mask.unsqueeze(0)
+        M = torch.einsum("kjm,jm->kj", D_masked, self.beta)
+        eta = eta + M[inverse]
+
+        if self.interaction_dim > 0:
+            V = obs_dict["interaction"]
+            A = torch.einsum("kjm,jml->kjl", D_masked, self.zeta)
+            eta = eta + torch.einsum("bjl,bl->bj", A[inverse], V)
+
+        disp = obs_dict["dispersion"] @ self.coefs["dispersion"]
+        return {"mean": torch.exp(eta), "dispersion": torch.exp(disp)}
