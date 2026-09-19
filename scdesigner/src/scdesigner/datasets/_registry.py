@@ -25,7 +25,7 @@ DATASETS: dict[str, FigshareData] = {
     "hvg_embryo_atlas": FigshareData(name="hvg_embryo_atlas", file_id=66126275),
     "ifnb": FigshareData(name="ifnb", file_id=66126296),
     "marrow": FigshareData(name="marrow", file_id=65593950),
-    "mobsc": FigshareData(name="mobsc", file_id=66126281),
+    "mobsc": FigshareData(name="mobsc", file_id=69105670),
     "mobsp": FigshareData(name="mobsp", file_id=65594652),
     "mobspmix": FigshareData(name="mobspmix", file_id=66126278),
     "mouse_cortex": FigshareData(name="mouse_cortex", file_id=67164080),
