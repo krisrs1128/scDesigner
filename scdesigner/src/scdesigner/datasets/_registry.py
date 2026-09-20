@@ -33,6 +33,7 @@ DATASETS: dict[str, FigshareData] = {
     "ovarian": FigshareData(name="ovarian", file_id=65593941),
     "pancreas": FigshareData(name="pancreas", file_id=60087086),
     "prostate": FigshareData(name="prostate", file_id=66126284),
+    "pseudotime_example": FigshareData(name="pseudotime_Example", file_id=69154696),
     "scgemmeth": FigshareData(name="scgemmeth", file_id=65594694),
     "scgemrna": FigshareData(name="scgemrna", file_id=65594697),
     "sciatac": FigshareData(name="sciatac", file_id=66126290),
@@ -41,5 +42,5 @@ DATASETS: dict[str, FigshareData] = {
     "seqfish": FigshareData(name="seqfish", file_id=66126272),
     "slide": FigshareData(name="slide", file_id=66126299),
     "visium": FigshareData(name="visium", file_id=65594991),
-    "zhengmix4": FigshareData(name="zhengmix4", file_id=67164083),
+    "zhengmix4": FigshareData(name="zhengmix4", file_id=69154762)
 }
