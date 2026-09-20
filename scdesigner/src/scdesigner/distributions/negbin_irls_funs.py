@@ -31,7 +31,7 @@ def solve_weighted_least_squares(X, weights, responses):
     X_outer = torch.einsum("ni,nj->nij", X, X)  # (n × p × p)
 
     # Compute weighted normal equations: (X'WX) for all m responses at once
-    eye = torch.eye(X.shape[1]).unsqueeze(0)
+    eye = torch.eye(X.shape[1], device=X.device).unsqueeze(0)
     weighted_XX = torch.einsum("nm,nij->mij", weights, X_outer)  # (m × p × p)
     weighted_XX = weighted_XX + 1e-5 * eye
 
@@ -137,7 +137,7 @@ def update_dispersion_coefficients(Z, counts, mean, gamma, clip: float = 50.0,
     Wz = weights * linear_pred + dispersion * score  # (n × m)
     sample_outer = torch.einsum("ni,nj->nij", Z, Z)  # (n × q × q), {zₙzₙᵀ} for n
     ZtWZ = torch.einsum("nm,nij->mij", weights, sample_outer)  # (m × q × q)
-    I = torch.eye(Z.shape[1]).unsqueeze(0)
+    I = torch.eye(Z.shape[1], device=Z.device).unsqueeze(0)
     normal_lhs = ZtWZ + disp_ridge * I
     normal_rhs = torch.einsum("ni,nm->mi", Z, Wz)  # (m × q), Z'(Wz)
 
@@ -173,15 +173,15 @@ def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clip = 5):
     weighted_Xy : torch.Tensor
         Accumulated X'Wz (p_mean × n_genes)
     """
-    weighted_XX = torch.zeros((n_genes, p_mean, p_mean))
-    weighted_Xy = torch.zeros((p_mean, n_genes))
+    weighted_XX = torch.zeros((n_genes, p_mean, p_mean), device=beta.device)
+    weighted_Xy = torch.zeros((p_mean, n_genes), device=beta.device)
 
     for y_batch, x_dict in loader:
-        X = x_dict['mean'].to("cpu")
+        X = x_dict['mean']
 
         linear_pred = torch.clip(X @ beta, min=-clip, max=clip)
         mean = torch.exp(linear_pred)
-        adjustment = torch.clamp((y_batch.to("cpu") - mean) / mean, min=-clip, max=clip)
+        adjustment = torch.clamp((y_batch - mean) / mean, min=-clip, max=clip)
         working_response = linear_pred + adjustment
 
         X_outer = torch.einsum("ni,nj->nij", X, X)
@@ -218,19 +218,19 @@ def accumulate_dispersion_statistics(loader, beta, clip = 5):
         Total number of observations
     """
     n_genes = beta.shape[1]
-    sum_mu = torch.zeros(n_genes)
-    sum_mu2 = torch.zeros(n_genes)
-    sum_sq_resid = torch.zeros(n_genes)
+    sum_mu = torch.zeros(n_genes, device=beta.device)
+    sum_mu2 = torch.zeros(n_genes, device=beta.device)
+    sum_sq_resid = torch.zeros(n_genes, device=beta.device)
     n_total = 0
 
     for y_batch, x_dict in loader:
-        X = x_dict['mean'].to('cpu')
+        X = x_dict['mean']
         linear_pred = torch.clip(X @ beta, min=-clip, max=clip)
         mean_batch = torch.exp(linear_pred)
 
         sum_mu += mean_batch.sum(dim=0)
         sum_mu2 += (mean_batch ** 2).sum(dim=0)
-        sum_sq_resid += ((y_batch.to('cpu') - mean_batch) ** 2).sum(dim=0)
+        sum_sq_resid += ((y_batch - mean_batch) ** 2).sum(dim=0)
         n_total += y_batch.shape[0]
 
     return sum_mu, sum_mu2, sum_sq_resid, n_total
@@ -248,18 +248,19 @@ def _initialize_beta_intercept(loader, n_genes, p_mean):
     gene mean. When the model has no intercept (checked by looking at the first
     column of the first batch), we return zeros without any initialization.
     """
-    beta = torch.zeros((p_mean, n_genes))
     _, x_peek = next(iter(loader))
-    if not _is_intercept_column(x_peek["mean"][:, 0].to("cpu")):
+    device = x_peek["mean"].device
+    beta = torch.zeros((p_mean, n_genes), device=device)
+    if not _is_intercept_column(x_peek["mean"][:, 0]):
         return beta
 
-    gene_sums = torch.zeros(n_genes)
+    gene_sums = torch.zeros(n_genes, device=device)
     intercept_sum = 0.0
     n_total = 0
 
     for y_batch, x_dict in loader:
-        gene_sums += y_batch.to("cpu").sum(dim=0)
-        intercept_sum += x_dict["mean"][:, 0].to("cpu").sum()
+        gene_sums += y_batch.sum(dim=0)
+        intercept_sum += x_dict["mean"][:, 0].sum()
         n_total += y_batch.shape[0]
 
     gene_means = torch.clamp(gene_sums / n_total, min=1e-3)
@@ -316,7 +317,7 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
             loader, beta, n_genes, p_mean, clip
         )
 
-        eye = torch.eye(p_mean).unsqueeze(0)
+        eye = torch.eye(p_mean, device=beta.device).unsqueeze(0)
         weighted_XX_reg = weighted_XX + 1e-6 * eye
         beta_target = torch.linalg.solve(
             weighted_XX_reg, weighted_Xy.T.unsqueeze(-1)
@@ -334,7 +335,7 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
     )
     dispersion = sum_mu2 / torch.clamp(sum_sq_resid - sum_mu, min=0.1)
 
-    gamma = torch.zeros((p_disp, n_genes))
+    gamma = torch.zeros((p_disp, n_genes), device=beta.device)
     gamma[0, :] = torch.log(torch.clamp(dispersion, min=1e-3))
     return beta, gamma
 
