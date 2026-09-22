@@ -42,5 +42,5 @@ DATASETS: dict[str, FigshareData] = {
     "seqfish": FigshareData(name="seqfish", file_id=66126272),
     "slide": FigshareData(name="slide", file_id=66126299),
     "visium": FigshareData(name="visium", file_id=65594991),
-    "zhengmix4": FigshareData(name="zhengmix4", file_id=69154762)
+    "zhengmix4": FigshareData(name="zhengmix4", file_id=69207655)
 }
