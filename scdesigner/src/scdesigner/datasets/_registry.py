@@ -22,7 +22,7 @@ DATASETS: dict[str, FigshareData] = {
     "embryo": FigshareData(name="embryo", file_id=65593671),
     "granja_atac": FigshareData(name="granja_atac", file_id=64418073),
     "gyrus": FigshareData(name="gyrus", file_id=66126302),
-    "hvg_embryo_atlas": FigshareData(name="hvg_embryo_atlas", file_id=66126275),
+    "hvg_embryo_atlas": FigshareData(name="hvg_embryo_atlas", file_id=69475206),
     "ifnb": FigshareData(name="ifnb", file_id=66126296),
     "marrow": FigshareData(name="marrow", file_id=65593950),
     "mobsc": FigshareData(name="mobsc", file_id=69105670),
