@@ -45,6 +45,7 @@ granja_atac = _make_loader("granja_atac")
 gyrus = _make_loader("gyrus")
 hvg_embryo_atlas = _make_loader("hvg_embryo_atlas")
 ifnb = _make_loader("ifnb")
+lps = _make_loader("lps")
 marrow = _make_loader("marrow")
 mobsc = _make_loader("mobsc")
 mobsp = _make_loader("mobsp")
@@ -75,6 +76,7 @@ __all__ = [
     "gyrus",
     "hvg_embryo_atlas",
     "ifnb",
+    "lps",
     "marrow",
     "mobsc",
     "mobsp",
