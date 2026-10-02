@@ -328,11 +328,7 @@ def _validate_design_matrices(adata: AnnData, formula: Dict[str, str]) -> None:
 ################################################################################
 
 def dict_collate_fn(batch):
-    """
-    Custom collate function for handling dictionary obs tensors.
-
-    If batch comes from a PreloadedDataset, we can immediately return the batch
-    without stacking (see __getitems__).
+    """Custom collate function for handling dictionary obs tensors.
     """
     if isinstance(batch, tuple):
         return batch
