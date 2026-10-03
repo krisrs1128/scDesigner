@@ -55,6 +55,7 @@ mouse_visual = _make_loader("mouse_visual")
 ovarian = _make_loader("ovarian")
 pancreas = _make_loader("pancreas")
 prostate = _make_loader("prostate")
+pseudotime_example = _make_loader("pseudotime_example")
 scgemmeth = _make_loader("scgemmeth")
 scgemrna = _make_loader("scgemrna")
 sciatac = _make_loader("sciatac")
@@ -86,6 +87,7 @@ __all__ = [
     "ovarian",
     "pancreas",
     "prostate",
+    "pseudotime_example",
     "scgemmeth",
     "scgemrna",
     "sciatac",
