@@ -68,6 +68,16 @@ class PreloadedDataset(Dataset):
     def __getitem__(self, idx):
         return self.y[idx], {k: v[idx] for k, v in self.x.items()}
 
+    def __getitems__(self, indices):
+        """Faster alternative to __getitem__
+
+        On MPS, using ordinary __getitem__ is slow, because it requires us to
+        read batch_size different slices and then stack. We can bypass that
+        expensive read/concat by using __getitems__.
+        """
+        idx = torch.as_tensor(indices, device=self.y.device)
+        return self.y[idx], {k: v[idx] for k, v in self.x.items()}
+
 class AnnDataDataset(Dataset):
     """PyTorch dataset over an AnnData object, with optional chunk caching.
 
@@ -318,9 +328,11 @@ def _validate_design_matrices(adata: AnnData, formula: Dict[str, str]) -> None:
 ################################################################################
 
 def dict_collate_fn(batch):
+    """Custom collate function for handling dictionary obs tensors.
     """
-    Custom collate function for handling dictionary obs tensors.
-    """
+    if isinstance(batch, tuple):
+        return batch
+
     X_batch = torch.stack([item[0] for item in batch])
     obs_batch = [item[1] for item in batch]
 
