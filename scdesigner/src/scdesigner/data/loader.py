@@ -73,7 +73,8 @@ class PreloadedDataset(Dataset):
 
         On MPS, using ordinary __getitem__ is slow, because it requires us to
         read batch_size different slices and then stack. We can bypass that
-        expensive read/concat by using __getitems__.
+        expensive read/concat by using __getitems__. See 
+	`examples/validation/loader_benchmark.ipynb` for a precise comparison.
         """
         idx = torch.as_tensor(indices, device=self.y.device)
         return self.y[idx], {k: v[idx] for k, v in self.x.items()}
