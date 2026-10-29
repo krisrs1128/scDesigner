@@ -40,6 +40,7 @@ def _make_loader(name: str):
 acinar = _make_loader("acinar")
 batch = _make_loader("batch")
 cite = _make_loader("cite")
+dong_eqtl = _make_loader("dong_eqtl")
 embryo = _make_loader("embryo")
 granja_atac = _make_loader("granja_atac")
 gyrus = _make_loader("gyrus")
@@ -70,6 +71,7 @@ __all__ = [
     "acinar",
     "batch",
     "cite",
+    "dong_eqtl",
     "embryo",
     "granja_atac",
     "gyrus",
