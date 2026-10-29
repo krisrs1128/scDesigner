@@ -69,10 +69,12 @@ class PreloadedDataset(Dataset):
         return self.y[idx], {k: v[idx] for k, v in self.x.items()}
 
     def __getitems__(self, indices):
-        """Fetch a whole batch with one indexing operation per tensor.
+        """Faster alternative to __getitem__
 
-        On a GPU, this is fast alternative to __getitem__ that allows us to skip
-        extracting batch_size separate slices and then stacking them.
+        On MPS, using ordinary __getitem__ is slow, because it requires us to
+        read batch_size different slices and then stack. We can bypass that
+        expensive read/concat by using __getitems__. See
+	`examples/validation/loader_benchmark.ipynb` for a precise comparison.
         """
         idx = torch.as_tensor(indices, device=self.y.device)
         return self.y[idx], {k: v[idx] for k, v in self.x.items()}
@@ -327,11 +329,7 @@ def _validate_design_matrices(adata: AnnData, formula: Dict[str, str]) -> None:
 ################################################################################
 
 def dict_collate_fn(batch):
-    """
-    Custom collate function for handling dictionary obs tensors.
-
-    If batch comes from a PreloadedDataset, we can immediately return the batch
-    without stacking (see __getitems__).
+    """Custom collate function for handling dictionary obs tensors.
     """
     if isinstance(batch, tuple):
         return batch

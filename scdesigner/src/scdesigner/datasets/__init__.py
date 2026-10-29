@@ -46,6 +46,7 @@ granja_atac = _make_loader("granja_atac")
 gyrus = _make_loader("gyrus")
 hvg_embryo_atlas = _make_loader("hvg_embryo_atlas")
 ifnb = _make_loader("ifnb")
+lps = _make_loader("lps")
 marrow = _make_loader("marrow")
 mobsc = _make_loader("mobsc")
 mobsp = _make_loader("mobsp")
@@ -55,6 +56,7 @@ mouse_visual = _make_loader("mouse_visual")
 ovarian = _make_loader("ovarian")
 pancreas = _make_loader("pancreas")
 prostate = _make_loader("prostate")
+pseudotime_example = _make_loader("pseudotime_example")
 scgemmeth = _make_loader("scgemmeth")
 scgemrna = _make_loader("scgemrna")
 sciatac = _make_loader("sciatac")
@@ -77,6 +79,7 @@ __all__ = [
     "gyrus",
     "hvg_embryo_atlas",
     "ifnb",
+    "lps",
     "marrow",
     "mobsc",
     "mobsp",
@@ -86,6 +89,7 @@ __all__ = [
     "ovarian",
     "pancreas",
     "prostate",
+    "pseudotime_example",
     "scgemmeth",
     "scgemrna",
     "sciatac",
