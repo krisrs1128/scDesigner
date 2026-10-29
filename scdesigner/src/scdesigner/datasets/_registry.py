@@ -19,6 +19,7 @@ DATASETS: dict[str, FigshareData] = {
     "acinar": FigshareData(name="acinar", file_id=64417734),
     "batch": FigshareData(name="batch", file_id=66053981),
     "cite": FigshareData(name="cite", file_id=65593449),
+    "dong_eqtl": FigshareData(name="dong_eqtl", file_id=70840578),
     "embryo": FigshareData(name="embryo", file_id=65593671),
     "granja_atac": FigshareData(name="granja_atac", file_id=64418073),
     "gyrus": FigshareData(name="gyrus", file_id=66126302),
