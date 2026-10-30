@@ -4,6 +4,7 @@ from .loader import obs_loader, adata_loader
 from .formula import standardize_formula
 from .basis import basis_formula, GPBasis, SpatialBasis, TPSBasis
 from .preprocessing import AnnDataStandardScaler
+from .spatial import SpatialTerm
 
 __all__ = [
     "adata_loader",
@@ -12,6 +13,7 @@ __all__ = [
     "GPBasis",
     "obs_loader",
     "SpatialBasis",
+    "SpatialTerm",
     "standardize_formula",
     "TPSBasis",
 ]
