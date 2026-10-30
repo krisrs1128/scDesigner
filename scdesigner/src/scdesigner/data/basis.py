@@ -191,37 +191,3 @@ class GPBasis(SpatialBasis):
 
     def _regularize(self, K_mm, landmarks):
         return K_mm + self.eps * np.eye(len(landmarks))
-
-
-def basis_formula(basis_cols, extra_terms=None):
-    """Build a formula string referencing pre-computed basis columns.
-
-    When ``extra_terms`` is provided the intercept is suppressed (``~ 0``) so
-    that ``extra_terms`` can supply their own reference levels; otherwise a
-    standard intercept is included (``~ 1``).
-
-    Parameters
-    ----------
-    basis_cols : list of str
-        Names of the basis columns (e.g. from :func:`add_spatial_basis`).
-    extra_terms : list of str or None
-        Additional covariate terms inserted after the intercept/zero term and
-        before the basis columns. ``None`` adds no extra terms.
-
-    Returns
-    -------
-    formula : str
-        Formula string that can be used in formulaic.
-
-    Examples
-    --------
-    >>> basis_formula(["sp_basis_0", "sp_basis_1"])
-    '~ 1 + sp_basis_0 + sp_basis_1'
-    >>> basis_formula(["sp_basis_0"], extra_terms=["condition"])
-    '~ 0 + condition + sp_basis_0'
-    """
-    parts = ["~ 0"] if extra_terms else ["~ 1"]
-    if extra_terms:
-        parts.extend(extra_terms)
-    parts.extend(basis_cols)
-    return " + ".join(parts)
