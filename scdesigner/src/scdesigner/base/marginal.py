@@ -1,7 +1,8 @@
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
+from ..data.feature_summary import summarize_features
 from ..data.loader import adata_loader, get_device, _validate_design_matrices
 from anndata import AnnData
-from typing import Union, Dict, Optional, Tuple
+from typing import Union, Dict, Optional, Sequence, Tuple
 from torch.utils.data import DataLoader, RandomSampler, Subset
 import copy
 import numpy as np
@@ -39,6 +40,9 @@ class Marginal(ABC):
         each key should correspond to a parameter. The string values should be
         in a format that can be parsed by the formulaic package.  For example,
         '~ x' will ensure that the parameter varies linearly with X.
+    penalties : sequence of CoefficientPenalty
+        Penalties ``P`` (:mod:`scdesigner.distributions.penalties`) added to
+        the training minibatch losses.
 
     Attributes
     ----------
@@ -51,6 +55,8 @@ class Marginal(ABC):
         each key should correspond to a parameter. The string values should be
         in a format that can be parsed by the formulaic package.  For example,
         '~ x' will ensure that the parameter varies linearly with X.
+
+    penalties : tuple of CoefficientPenalty
 
     feature_dims : dict
         A dictionary containing the number of predictors associated with each
@@ -137,8 +143,16 @@ class Marginal(ABC):
     >>> model = DummyModel("~ cell_type")
     >>> model.fit()
     """
-    def __init__(self, formula: Union[Dict, str], device: Optional[torch.device]=None):
+    def __init__(
+        self,
+        formula: Union[Dict, str],
+        device: Optional[torch.device] = None,
+        *,
+        penalties: Sequence = (),
+    ):
         self.formula = formula
+        self.penalties = tuple(penalties)
+        self._bound_penalties = ()
         self.feature_dims = None
         self.loader = None
         self.train_loader = None
@@ -198,6 +212,7 @@ class Marginal(ABC):
         self.best_epoch = None
         self.best_validation_loss = None
         self.stopped_epoch = None
+        self._bound_penalties = ()
 
     def setup_validation_split(
         self,
@@ -369,10 +384,12 @@ class Marginal(ABC):
             attribute with the trained model parameters.
         """
         # Set up validation split and model optimization state.
+        self._bound_penalties = ()
         self._validate_early_stopping_args(min_epochs, loss_tol, patience)
         self.setup_validation_split(val_frac=val_frac, validation_seed=validation_seed)
         self.setup_optimizer(**kwargs)
         self._initialize_parameters(**kwargs)
+        self._bind_penalties()
 
         # Initialize validation tracking used for early stopping.
         self.fit_history = []
@@ -394,7 +411,7 @@ class Marginal(ABC):
                 y, x = self._move_batch_to_device(batch)
 
                 self.predict.optimizer.zero_grad()
-                loss = self.predict.loss_fn((y, x))
+                loss = self._training_loss((y, x))
                 loss.backward()
                 self.predict.optimizer.step()
 
@@ -446,6 +463,30 @@ class Marginal(ABC):
         if best_state is not None:
             self.predict.load_state_dict(best_state)
         self.parameters = self.format_parameters()
+
+    def _bind_penalties(self) -> None:
+        """Bind :attr:`penalties` to the current predictor's coefficients.
+
+        Some of the penalties need to look over the gene-level means (these are
+        the penalities with .uses_feature_means). We check that this is actually
+        needed before computing it.
+        """
+        feature_means = None
+        if any(spec.uses_feature_means for spec in self.penalties):
+            feature_means = summarize_features(self.adata).mean
+        self._bound_penalties = tuple(
+            spec.bind(self.predictor_names, self.predict.coefs, feature_means)
+            for spec in self.penalties
+        )
+
+    def _training_loss(
+        self, batch: Tuple[torch.Tensor, Dict[str, torch.Tensor]]
+    ) -> torch.Tensor:
+        """``predict.loss_fn(batch)`` plus each bound penalty ``P``."""
+        loss = self.predict.loss_fn(batch)
+        for penalty in self._bound_penalties:
+            loss = loss + penalty.value()
+        return loss
 
     @property
     def fit_history_df(self) -> pd.DataFrame:
