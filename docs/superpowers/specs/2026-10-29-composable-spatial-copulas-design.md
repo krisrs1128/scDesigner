@@ -1,6 +1,6 @@
 # Composable spatial copulas
 
-Status: draft for user approval. No implementation is authorized by this document yet.
+Status: architecture approved; delivery split into three separately reviewed merge requests. MR 1 planning is authorized; implementation awaits review of its plan.
 
 ## Intent
 
@@ -20,6 +20,26 @@ The user selected explicit spatial terms plus a `spatial_copula` composition fun
 - Do not redesign basis algorithms, covariance estimators, NB initialization, or optimizer defaults. Do not generalize the recipe to every marginal family in this change.
 
 Use the existing Python >=3.10 stack (AnnData, NumPy/SciPy, Formulaic, PyTorch); no new dependencies are needed.
+
+## Delivery and review milestones
+
+Implement and merge these in order. Each merge request has its own implementation plan, code review, and explicit human merge approval. Start the next MR from the merged predecessor; do not implement all milestones on one branch. The sections below describe the final design; this milestone breakdown determines when each requirement applies.
+
+### MR 1: Composition and the NB recipe
+
+Extract distribution-independent penalties, introduce `SpatialTerm` and `spatial_copula`, and replace NB convenience implementations with thin factories. Support independent parameter formulas, spatial mean with constant dispersion, fitted-basis reuse, and refitting without shared state. Preserve NB initialization and existing penalty scaling. Add task-level reviews after penalty extraction/training integration and after spatial composition, followed by a whole-MR review.
+
+This MR supports the new composed spatial recipe on in-memory dense/sparse AnnData. It may retain full-response materialization for summaries and the temporary AnnData wrapper used for augmented observations. Keep these operations isolated for replacement in MR 2; clearly reject backed input in new paths that cannot yet handle it. Existing nonspatial paths without the new components retain their current data support. Do not change loader chunk selection, copula `top_k` reductions, or Bernoulli behavior here.
+
+### MR 2: Chunked response access
+
+Replace summary materialization with bounded row reads; preserve backed storage while supplying augmented observations; honor explicit chunking for in-memory inputs. Verify the entire response-access path, including initialization, copula `top_k`, and NB capping. Add instrumented bounded-read tests for dense/sparse storage and partial final chunks. Remove MR 1's temporary backed-input restrictions. Observation metadata, basis matrices, and returned outputs remain outside the bounded-response-read guarantee.
+
+### MR 3: Bernoulli recipes
+
+Add `PenalizedBernoulli` and `SpatialBernoulliCopula` through MR 1's components and MR 2's data handling. Apply inverse-prevalence weighting, binary-input validation, and a stable Bernoulli likelihood. Review that no distribution-specific training loop or penalty implementation was duplicated, and test saturated probabilities and constant binary features.
+
+Only MR 1 receives a detailed implementation plan now. Plan subsequent MRs after predecessor review/merge, using the interfaces that actually ship.
 
 ## Approaches considered
 
@@ -74,20 +94,17 @@ nb = SpatialNegBinCopula(
     dispersion_formula="~ batch",
 )
 
-# Spatial effects on both parameters, with separately configured bases/penalties.
-nb = SpatialNegBinCopula(
-    dispersion_term=SpatialTerm(
-        GPBasis(df=5, standardize=True),
-        QuadraticPenalty(lam=1.0, weighting="inverse_mean"),
-    ),
-)
+# Spatial effects on both parameters: TPS bases of rank 15 (mean) and 5 (dispersion).
+nb = SpatialNegBinCopula(basis="tps", mean_df=15, disp_df=5)
 
 binary = SpatialBernoulliCopula(mean_formula="~ cell_type")
 ```
 
-Both constructors accept an explicit `mean_term`; when omitted they create a fresh GP basis with `df=15`, `standardize=True`, and an inverse-mean quadratic penalty with `lam=1.0`. NB defaults `dispersion_term=None` and `dispersion_formula="~ 1"`. Both default `mean_formula="~ 1"`, `copula_formula="~ 1"`, and `spatial_cols=("spatial1", "spatial2")`. Expose existing `estimator` and `top_k` choices when constructing the standard copula. NB defaults observed-maximum capping to true; Bernoulli has no capping argument. TPS and independent basis settings are available through explicit terms.
+The predefined constructors take scalar settings and build their `SpatialTerm`s internally; they do not accept `SpatialTerm` objects. Per-parameter bases, unpenalized terms, other weightings, and custom basis classes use `spatial_copula` directly.
 
-**Assistant proposal:** these PascalCase names are thin factory functions returning configured `SCD3Simulator` instances. They preserve familiar construction syntax without another class hierarchy. Class identity, legacy argument names, and legacy import paths need not be preserved. If distinct public class identities are wanted, that should be settled before planning.
+NB arguments: `mean_formula`, `dispersion_formula`, and `copula_formula` (each default `"~ 1"`); `mean_df=15`; `disp_df=None`, where `None` gives the dispersion no spatial term; `basis="gp"` (`"gp"` or `"tps"`), shared by both terms; `standardize=True`; `lam=1.0` and `lam_disp=1.0`, the strengths of inverse-mean quadratic penalties; `spatial_cols=("spatial1", "spatial2")`; `cap_at_observed_max=True`; `estimator` and `top_k` for the standard copula; `device`; and `**basis_kwargs` (for example `n_landmarks`, `length_scale`) passed to both bases. Bernoulli mirrors the mean-side arguments and has no capping argument.
+
+These PascalCase names are thin factory functions returning configured `SCD3Simulator` instances. They preserve familiar construction syntax without another class hierarchy. Class identity, legacy argument names, and legacy import paths need not be preserved.
 
 `PenalizedNegBin` and new `PenalizedBernoulli` are likewise convenience factories over the ordinary marginals plus coefficient-penalty specifications. They do not override `setup_optimizer`. Ordinary `NegBin` and `Bernoulli` also accept penalty components directly, so these convenience names are optional.
 
@@ -117,7 +134,7 @@ Resolve coefficient rows by exact design-column names, not by assuming that spat
 
 The marginal training loop adds bound penalties to the existing predictor loss. Binding happens after the marginal creates its own predictor; the penalty does not rebuild it, change its link functions, initialize its coefficients, or own an optimizer. Validate that the predictor exposes the requested coefficient matrices. Without penalties, the training path is unchanged. Construct penalty tensors on the coefficient device and dtype.
 
-**Assistant proposal:** preserve the current objective convention: summed negative log-likelihood plus the full penalty on each minibatch. `batch_size` therefore retains its current influence on effective regularization; `chunk_size` controls I/O and does not rescale penalties. Changing penalty normalization is outside this work. Early stopping and reported likelihood/AIC/BIC remain based on unpenalized likelihood, as today.
+Preserve the current objective convention: summed negative log-likelihood plus the full penalty on each minibatch. `batch_size` therefore retains its current influence on effective regularization; `chunk_size` controls I/O and does not rescale penalties. Changing penalty normalization is outside this work. Early stopping and reported likelihood/AIC/BIC remain based on unpenalized likelihood, as today.
 
 ### Bernoulli behavior
 
@@ -160,9 +177,9 @@ The implementation plan may choose exact internal filenames, binding types, and 
 - Fresh-coordinate prediction, sampling, and external-data complexity evaluation reuse fitted bases without mutating user data. Refitting and separate recipes do not share stale state.
 - Existing nonspatial fitting and early-stopping tests continue passing. CPU tests are mandatory; device-sensitive tests run when CUDA/MPS is available.
 
-## Decisions to review
+## Accepted design defaults
 
-These are assistant proposals, not requirements previously supplied by the user:
+These were assistant proposals accepted with the overall design:
 
 - Make spatial mean plus constant dispersion the NB convenience default.
 - Keep familiar predefined constructor names as thin factory functions, rather than preserving separate class identities.
