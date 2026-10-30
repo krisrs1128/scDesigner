@@ -2,14 +2,13 @@
 
 from .loader import obs_loader, adata_loader
 from .formula import standardize_formula
-from .basis import basis_formula, GPBasis, SpatialBasis, TPSBasis
+from .basis import GPBasis, SpatialBasis, TPSBasis
 from .preprocessing import AnnDataStandardScaler
 from .spatial import SpatialTerm
 
 __all__ = [
     "adata_loader",
     "AnnDataStandardScaler",
-    "basis_formula",
     "GPBasis",
     "obs_loader",
     "SpatialBasis",
