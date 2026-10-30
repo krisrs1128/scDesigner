@@ -21,7 +21,10 @@ from ..distributions import (
     Bernoulli,
 )
 from ..copulas import StandardCopula
+from ..data.spatial import SpatialDesign
+from .output import ObservedMaxCap
 from typing import Optional
+import pandas as pd
 from abc import ABC
 
 
@@ -42,6 +45,14 @@ class SCD3Simulator(Simulator, ABC):
     copula : Copula
         Copula object that captures dependence between features and shares
         the same covariate structure as the marginal model.
+    observation_transform : SpatialDesign, optional
+        For some problems, we want to transform the cell-level `obs` data in the
+        anndata object to provide additional features for the model. For
+        example, when we use SpatialDesign, we will expand the `obs` data to
+        include a spatial basis matrix.
+    output_transform : ObservedMaxCap, optional
+        Apply transformation to the sampled values. For example, ObservedMaxCap
+        clips any samples at the maximum value observed in the training data.
 
     Attributes
     ----------
@@ -49,6 +60,8 @@ class SCD3Simulator(Simulator, ABC):
         The marginal model instance used for fitting and simulation.
     copula : Copula
         The copula instance used to model dependence between features.
+    observation_transform : SpatialDesign or None
+    output_transform : ObservedMaxCap or None
     template : AnnData or None
         Reference dataset used to define the observed covariate space and
         feature set for simulation. Set during :meth:`fit`.
@@ -97,11 +110,21 @@ class SCD3Simulator(Simulator, ABC):
         >>> sim.fit(adata, batch_size=256, max_epochs=10) # doctest: +SKIP
     """
 
-    def __init__(self, marginal: Marginal, copula: Copula):
+    def __init__(
+        self,
+        marginal: Marginal,
+        copula: Copula,
+        *,
+        observation_transform: Optional[SpatialDesign] = None,
+        output_transform: Optional[ObservedMaxCap] = None,
+    ):
         self.marginal = marginal
         self.copula = copula
+        self.observation_transform = observation_transform
+        self.output_transform = output_transform
         self.template = None
         self.parameters = None
+        self._base_penalties = tuple(marginal.penalties)
 
     def fit(
         self,
@@ -144,7 +167,18 @@ class SCD3Simulator(Simulator, ABC):
         stores fitted parameters in :attr:`parameters`.
         """
         self.template = adata
-        self.marginal.setup_data(adata, **kwargs)
+        data = adata
+
+        # create a design matrix from a transformation
+        transform = getattr(self, "observation_transform", None)
+        if transform is not None:
+            obs = transform.fit_transform(adata.obs)
+            self.marginal.formula = dict(transform.formula)
+            self.marginal.penalties = self._base_penalties + transform.penalties
+            data = self._data_with_obs(adata, obs)
+
+        # define a dataloader on the design and fit
+        self.marginal.setup_data(data, **kwargs)
         self.marginal.fit(
             val_frac=val_frac,
             min_epochs=min_epochs,
@@ -155,12 +189,31 @@ class SCD3Simulator(Simulator, ABC):
         )
 
         # copula simulator
-        self.copula.setup_data(adata, self.marginal.formula, **kwargs)
+        self.copula.setup_data(data, self.marginal.formula, **kwargs)
         self.copula.fit(self.marginal.uniformize)
+
+        # transform the outputs if needed
+        output_transform = getattr(self, "output_transform", None)
+        if output_transform is not None:
+            output_transform.fit(adata)
+
         self.parameters = {
             "marginal": self.marginal.parameters,
             "copula": self.copula.parameters,
         }
+
+    def _transform_obs(self, obs: pd.DataFrame) -> pd.DataFrame:
+        """``obs`` under the fitted observation transform, if any."""
+        transform = getattr(self, "observation_transform", None)
+        return obs if transform is None else transform.transform(obs)
+
+    def _data_with_obs(self, adata: AnnData, obs: pd.DataFrame) -> AnnData:
+        """``adata`` with its observations replaced by ``obs``."""
+        if getattr(self, "observation_transform", None) is None:
+            return adata
+        if adata.isbacked:
+            raise NotImplementedError("Observation transforms require in-memory AnnData.")
+        return AnnData(X=adata.X, obs=obs, var=adata.var)
 
     def predict(self, obs=None, batch_size: int = 1000, **kwargs):
         """Predict marginal parameters for given covariates.
@@ -185,7 +238,9 @@ class SCD3Simulator(Simulator, ABC):
         # prepare an internal data loader for this obs
         if obs is None:
             obs = self.template.obs
-        loader = obs_loader(obs, self.marginal.formula, batch_size=batch_size, **kwargs)
+        loader = obs_loader(
+            self._transform_obs(obs), self.marginal.formula, batch_size=batch_size, **kwargs
+        )
 
         # get predictions across batches
         local_parameters = []
@@ -222,7 +277,7 @@ class SCD3Simulator(Simulator, ABC):
         if obs is None:
             obs = self.template.obs
         loader = obs_loader(
-            obs,
+            self._transform_obs(obs),
             self.copula.formula | self.marginal.formula,
             batch_size=batch_size,
             partition_keys=PARTITION_KEYS,
@@ -236,6 +291,9 @@ class SCD3Simulator(Simulator, ABC):
             u = torch.from_numpy(u)
             samples.append(self.marginal.invert(u, x_dict))
         samples = torch.cat(samples).detach().cpu().numpy()
+        output_transform = getattr(self, "output_transform", None)
+        if output_transform is not None:
+            samples = output_transform.transform(samples)
         return AnnData(X=samples, obs=obs, var=self.template.var)
 
     def complexity(self, adata: AnnData = None, **kwargs):
@@ -259,6 +317,7 @@ class SCD3Simulator(Simulator, ABC):
         if adata is None:
             use_template_ll = True
             adata = self.template
+        adata = self._data_with_obs(adata, self._transform_obs(adata.obs))
 
         N, marginal_ll, copula_ll = 0, 0, 0
         loader = adata_loader(
