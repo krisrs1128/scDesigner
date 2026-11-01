@@ -4,22 +4,21 @@ The main function is `:func:`adata_loader`, which builds a
 :class:`~torch.utils.data.DataLoader` that returns minibatches of,
 
 - **X**: expression matrix rows (cells × genes) as a float tensor
-- **obs**: a dict with formulas as keys and design matrices (stored as tensors)
-  made from the formula, ``adata.obs`` and :func:`formulaic.model_matrix`
+- **obs**: a dict with formula keys and design matrices from a fitted
+  :class:`~scdesigner.data.design.Design`
 
 We support both in-memory and backed :class:`~anndata.AnnData` objects. For
-backed AnnData, a chunk cache is used to avoid loading all rows into memory at
-once.
+backed anndata, we read ``chunk_size`` rows at a time. See :func:`adata_loader`.
 """
 
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
+from .design import Design, fit_design
+from .response import DEFAULT_CHUNK_SIZE, read_response_rows
 from anndata import AnnData
-from formulaic import model_matrix
 from torch.utils.data import Dataset, DataLoader
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Union
 import numpy as np
 import pandas as pd
-import re
 import scipy.sparse
 import torch
 
@@ -80,105 +79,101 @@ class PreloadedDataset(Dataset):
         return self.y[idx], {k: v[idx] for k, v in self.x.items()}
 
 class AnnDataDataset(Dataset):
-    """PyTorch dataset over an AnnData object, with optional chunk caching.
+    """PyTorch dataset over AnnData rows, reading one chunk of rows at a time.
 
-    This dataset exposes AnnData rows as samples and returns a tuple
-    ``(X_row, obs_dict)`` where ``obs_dict`` contains (one-row) design matrices
-    computed from ``adata.obs`` according to the provided ``formula`` mapping.
+    Returns ``(X_row, obs_dict)`` as items, where ``obs_dict`` has one
+    design-matrix row per key in the ``design``. Responses Y come from
+    :func:`~scdesigner.data.response.read_response_rows` and designs run
+    ``design`` to create X on the corresponding rows.
 
     Parameters
     ----------
     adata : AnnData
-        Input dataset.
-    formula : dict[str, str]
-        Mapping from key to a formula string used to build a design matrix from
-        ``adata.obs`` via :func:`formulaic.model_matrix`.
+        In memory or backed.
+    design : Design
+        Fitted on the complete observation table.
     chunk_size : int
-        Number of contiguous rows to cache at once (used when chunking is enabled).
+        Number of contiguous rows to cache at once.
 
     Attributes
     ----------
-    predictor_names : dict[str, list[str]] or None
-        Names of the design-matrix columns per formula key. Populated after the
-        first chunk is loaded.
+    predictor_names : dict[str, list[str]]
+        Names of the design-matrix columns per key.
     device : torch.device
         Device used for caching tensors.
     """
-    def __init__(self, adata: AnnData, formula: Dict[str, str], chunk_size: int,
-                 device: Optional[torch.device] = None,
-                 partition_keys: Optional[Set[str]] = None):
+    def __init__(self, adata: AnnData, design: Design, chunk_size: int,
+                 device: Optional[torch.device] = None):
         self.adata = adata
-        self.formula = formula
+        self.design = design
         self.chunk_size = chunk_size
         self.device = get_device(device)
-        self.partition_keys = partition_keys or set()
-
-        # keeping track of covariate-related information
-        self.obs_levels, self.ref_levels = categories(self.adata.obs)
+        self.predictor_names = design.predictor_names
         self.obs_matrices = {}
-        self.predictor_names = None
 
-        # Internal cache for the currently loaded chunk
-        self._chunk: AnnData | None = None
+        # Rows [_chunk_start, _chunk_stop) are cached.
         self._chunk_X = None
-        self._chunk_start = 0
+        self._chunk_start = self._chunk_stop = 0
 
     def __len__(self):
-        return len(self.adata)
+        return self.adata.n_obs
 
     def __getitem__(self, idx):
-        """Returns (X, obs) for the given index.
-
-        If `chunk_size` was specified the dataset will load a chunk
-        containing `idx` into memory (if not already cached) and
-        index into that chunk.
-        """
+        """Returns ``(X_row, obs_dict)`` for the given index."""
         self._ensure_chunk_loaded(idx)
         local_idx = idx - self._chunk_start
-
-        # Get obs data from GPU-cached matrices
-        obs_dict = {}
-        for key in self.formula.keys():
-            obs_dict[key] = self.obs_matrices[key][local_idx]
+        obs_dict = {key: matrix[local_idx] for key, matrix in self.obs_matrices.items()}
         return self._chunk_X[local_idx], obs_dict
 
+    def __getitems__(self, indices):
+        """Fetch a minibatch from an existing chunk."""
+        indices = np.asarray(indices, dtype=np.int64)
+        breaks = np.flatnonzero(np.diff(indices // self.chunk_size)) + 1
+        responses = []
+
+        # create designs for each parameter
+        designs = {key: [] for key in self.predictor_names}
+        for group in np.split(indices, breaks):
+            self._ensure_chunk_loaded(int(group[0]))
+            local = torch.as_tensor(group - self._chunk_start, device=self.device)
+            responses.append(self._chunk_X.index_select(0, local))
+            for key, matrix in self.obs_matrices.items():
+                designs[key].append(matrix.index_select(0, local))
+
+        if len(responses) == 1:
+            return responses[0], {key: parts[0] for key, parts in designs.items()}
+
+        return (
+            torch.cat(responses, dim=0),
+            {key: torch.cat(parts, dim=0) for key, parts in designs.items()},
+        )
+
     def _ensure_chunk_loaded(self, idx: int) -> None:
-        """Load the chunk that contains `idx` into the internal cache."""
+        """Cache the chunk that contains ``idx``."""
+        if self._chunk_start <= idx < self._chunk_stop:
+            return
         start = (idx // self.chunk_size) * self.chunk_size
-        end = min(start + self.chunk_size, len(self.adata))
+        stop = min(start + self.chunk_size, len(self))
 
-        if (self._chunk is None) or not (self._chunk_start <= idx < self._chunk_start + len(self._chunk)):
-            # load the next chunk into memory
-            chunk = self.adata[start:end]
-            if getattr(chunk, 'isbacked', False):
-                chunk = chunk.to_memory()
-            self._chunk = chunk
-            self._chunk_start = start
+        X = read_response_rows(self.adata, start, stop)
+        self._chunk_X = torch.tensor(X, dtype=torch.float32).to(self.device)
+        self.obs_matrices = {
+            key: torch.tensor(mat.values, dtype=torch.float32).to(self.device)
+            for key, mat in self.design.matrices(self.adata.obs.iloc[start:stop]).items()
+        }
+        self._chunk_start, self._chunk_stop = start, stop
 
-            # Move chunk to GPU
-            X = chunk.X
-            if hasattr(X, 'toarray'):
-                X = X.toarray()
-            self._chunk_X = torch.tensor(X, dtype=torch.float32).to(self.device)
 
-            # Compute model matrices for this chunk's `obs` and move to GPU
-            obs_coded_chunk = code_levels(self._chunk.obs.copy(), self.obs_levels)
-            self.obs_matrices = {}
-            predictor_names = {}
-            for key, f in self.formula.items():
-                mat = design_matrix(f, obs_coded_chunk, self.ref_levels,
-                                    partition=key in self.partition_keys)
-                predictor_names[key] = list(mat.columns)
-                self.obs_matrices[key] = torch.tensor(mat.values, dtype=torch.float32).to(self.device)
-
-            # Capture predictor (column) names from the model matrices once.
-            if self.predictor_names is None:
-                self.predictor_names = predictor_names
+def resolve_chunk_size(adata: AnnData, chunk_size: Optional[int]) -> Optional[int]:
+    """How many rows per chunk? Returns ``None`` for in-memory data."""
+    if chunk_size is None and not adata.isbacked:
+        return None
+    return DEFAULT_CHUNK_SIZE if chunk_size is None else chunk_size
 
 
 def adata_loader(
     adata: AnnData,
-    formula: Dict[str, str],
+    formula: Union[Dict[str, str], Design],
     chunk_size: int = None,
     batch_size: int = 1024,
     shuffle: bool = False,
@@ -192,32 +187,33 @@ def adata_loader(
     The resulting loader yields tuples ``(X_batch, obs_batch)`` where:
 
     - ``X_batch`` is a float tensor of shape (batch_size, n_genes)
-    - ``obs_batch`` is a dict mapping each key in ``formula`` to a float tensor
+    - ``obs_batch`` is a dict mapping each formula key to a float tensor
       of shape (batch_size, n_covariates) for that key's design matrix
 
     For backed AnnData objects, the underlying dataset uses chunk caching to
-    limit memory usage.
+    limit memory usage. Chunks are read in the order stored on disk.
 
     Parameters
     ----------
     adata : AnnData
         Input AnnData object.
-    formula : dict[str, str]
-        Mapping from key to a formula string consumed by
-        :func:`formulaic.model_matrix` (applied to ``adata.obs``).
+    formula : dict[str, str] or Design
+        A fitted :class:`~scdesigner.data.design.Design`, or associated formulas,
+        fitted on ``adata.obs`` with :func:`~scdesigner.data.design.fit_design`.
     chunk_size : int, optional
-        Chunk size used only for backed AnnData.
+        Rows per chunked read. ``None`` preloads in-memory data and reads
+        backed data in ``DEFAULT_CHUNK_SIZE``-row chunks.
     batch_size : int, optional
         Mini-batch size returned by the loader.
     shuffle : bool, optional
-        Whether to shuffle observations each epoch.
+        Whether to shuffle observations each epoch. Not allowed for backed
+        reads.
     num_workers : int, optional
         Number of DataLoader workers.
     partition_keys : set of str, optional
         Formula used to partition observations, usually used for copula
-        covariance groups. It's important not to have a column of all ones,
-        because this gets interpreted as a group with all cells.  See
-        :func:`design_matrix`.
+        covariance groups. Ignored when ``formula`` is a Design. See
+        :func:`~scdesigner.data.formula.partition_formula`.
     **kwargs
         Additional keyword arguments filtered via ``DEFAULT_ALLOWED_KWARGS["data"]``
         and forwarded to :class:`~torch.utils.data.DataLoader`.
@@ -229,12 +225,22 @@ def adata_loader(
     """
     data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['data'])
     device = get_device(device)
+    chunk_size = resolve_chunk_size(adata, chunk_size)
+    design = formula if isinstance(formula, Design) else fit_design(
+        adata.obs, formula, partition_keys=partition_keys or set(),
+        chunked=chunk_size is not None,
+    )
 
-    # separate chunked from non-chunked cases
-    if not getattr(adata, 'isbacked', False):
-        dataset = _preloaded_adata(adata, formula, device, partition_keys)
+    if chunk_size is None:
+        dataset = _preloaded_adata(adata, design, device)
     else:
-        dataset = AnnDataDataset(adata, formula, chunk_size or 5000, device, partition_keys)
+        if shuffle:
+            raise ValueError(
+                """Chunked loading does not support shuffle=True. We read chunks
+                consecutively and train in that order. If the data have sorted
+                rows, we recommend an initial permutation step."""
+            )
+        dataset = AnnDataDataset(adata, design, chunk_size, device)
 
     return DataLoader(
         dataset,
@@ -245,7 +251,7 @@ def adata_loader(
         **data_kwargs
     )
 
-def obs_loader(obs: pd.DataFrame, marginal_formula, **kwargs):
+def obs_loader(obs: pd.DataFrame, formula: Union[Dict[str, str], Design], **kwargs):
     """Create a loader that yields design matrices for an observation table.
 
     This is a convenience wrapper for prediction-time batching: it creates a
@@ -256,8 +262,9 @@ def obs_loader(obs: pd.DataFrame, marginal_formula, **kwargs):
     ----------
     obs : pandas.DataFrame
         Observation metadata used to build design matrices.
-    marginal_formula : dict[str, str]
-        Formula mapping used for :func:`formulaic.model_matrix`.
+    formula : dict[str, str] or Design
+        See :func:`adata_loader`. Using a Design from the training data ensures
+        that the same state (e.g., spline knots) is used across batches.
     **kwargs
         Forwarded to :func:`adata_loader` (e.g. ``batch_size``, device options).
 
@@ -267,62 +274,26 @@ def obs_loader(obs: pd.DataFrame, marginal_formula, **kwargs):
         Loader yielding ``(X_batch, obs_batch)`` where ``X_batch`` is dummy.
     """
     adata = AnnData(X=np.zeros((len(obs), 1)), obs=obs)
-    return adata_loader(
-        adata,
-        marginal_formula,
-        **kwargs
-    )
+    return adata_loader(adata, formula, **kwargs)
 
 ################################################################################
 ## Extraction of in-memory AnnData to PreloadedDataset
 ################################################################################
 
-def _preloaded_adata(adata: AnnData, formula: Dict[str, str], device: torch.device,
-                     partition_keys: Optional[Set[str]] = None) -> PreloadedDataset:
+def _preloaded_adata(adata: AnnData, design: Design, device: torch.device) -> PreloadedDataset:
     """Materialize an in-memory AnnData into a :class:`PreloadedDataset`.
 
-    This helper converts sparse matrices to dense, encodes categorical levels
-    to ensure consistent model-matrix columns, builds the per-key design
-    matrices, and moves everything to ``device``.
+    Evaluate a design on an ``adata.obs`` object.
     """
-    partition_keys = partition_keys or set()
     X = adata.X
     if scipy.sparse.issparse(X):
         X = X.toarray()
     y = torch.tensor(X, dtype=torch.float32).to(device)
-
-    obs_levels, ref_levels = categories(adata.obs)
-    obs = code_levels(adata.obs.copy(), obs_levels)
-    matrices = {
-        k: design_matrix(f, obs, ref_levels, partition=k in partition_keys)
-        for k, f in formula.items()
+    x = {
+        key: torch.tensor(mat.values, dtype=torch.float32).to(device)
+        for key, mat in design.matrices(adata.obs).items()
     }
-    x = {k: torch.tensor(mat.values, dtype=torch.float32).to(device) for k, mat in matrices.items()}
-    predictor_names = {k: list(mat.columns) for k, mat in matrices.items()}
-    return PreloadedDataset(y, x, predictor_names)
-
-def _validate_design_matrices(adata: AnnData, formula: Dict[str, str]) -> None:
-    """Raise a clear error when a formula produces a rank-deficient design.
-
-    The check uses only ``adata.obs`` and validates one formula at a time, so it
-    does not materialize the expression matrix for backed AnnData objects.
-    """
-    obs_levels, ref_levels = categories(adata.obs)
-
-    for key, f in formula.items():
-        obs = code_levels(adata.obs.copy(), obs_levels)
-        mat = drop_reference_columns(model_matrix(f, obs), ref_levels)
-        values = np.asarray(mat.values, dtype=np.float64)
-        n_rows, n_cols = values.shape
-
-        if n_cols and (rank := np.linalg.matrix_rank(values)) != n_cols:
-            raise ValueError(
-                "The design matrix for formula key "
-                f"'{key}' is rank deficient. Formula: {f!r}. "
-                f"Matrix shape is {n_rows} rows x {n_cols} columns, but rank is {rank}. "
-                "This means some predictors are linearly dependent, so the model "
-                "is not identifiable. Please remove redundant covariates from this formula."
-            )
+    return PreloadedDataset(y, x, design.predictor_names)
 
 ################################################################################
 ## Helper functions
@@ -353,115 +324,6 @@ def to_tensor(X):
             return t.view(1)
         return t
     return t.squeeze()
-
-def categories(obs):
-    """Collect levels and reference levels for categorical/object columns.
-
-    Returns
-    -------
-    levels : dict[str, np.ndarray]
-        Unique levels for each categorical/object column.
-    references : dict[str, str]
-        Most common level for each categorical/object column.
-    """
-    levels = {}
-    references = {}
-    for k in obs.columns:
-        obs_type = str(obs[k].dtype)
-        if obs_type in ["category", "object"]:
-            counts = obs[k].value_counts()
-            levels[k] = counts.index.values
-            references[k] = counts.index[0]
-    return levels, references
-
-
-def design_matrix(formula: str, obs: pd.DataFrame, ref_levels: dict,
-                  partition: bool = False) -> pd.DataFrame:
-    """Build one design matrix, either regression-coded or as a partition.
-
-    Regression designs drop the reference level of each categorical to stay
-    identifiable. A *partition* design does the opposite: it keeps every level
-    and drops the intercept, so each row belongs to exactly one column. Copula
-    groups need the latter -- a cell must land in one and only one covariance
-    group.
-
-    Parameters
-    ----------
-    formula : str
-        Formula consumed by :func:`formulaic.model_matrix`.
-    obs : pandas.DataFrame
-        Observation table with categorical levels already coded.
-    ref_levels : dict
-        Reference level per categorical column.
-    partition : bool, optional
-        When ``True``, keep reference-level columns.
-
-    Returns
-    -------
-    pandas.DataFrame
-        The design matrix.
-    """
-    mat = model_matrix(formula, obs)
-    if partition:
-        return mat
-    return drop_reference_columns(mat, ref_levels)
-
-
-def partition_formula(formula: str) -> str:
-    """Modify a formula to partition observations.
-
-    Drops the intercept unless the formula has no other terms, so that ``"~
-    cell_type"`` is a proper indicator across cell types (and there is no
-    intercept-like column equal to 1 across all cells).
-
-    Parameters
-    ----------
-    formula : str
-        A copula group formula.
-
-    Returns
-    -------
-    str
-        The normalized formula.
-
-    Examples
-    --------
-    >>> partition_formula("~ cell_type")
-    '~ -1 + cell_type'
-    """
-    rhs = formula.split("~", 1)[-1]
-    terms = []
-    for raw_term in rhs.split("+"):
-
-        # strip out irrelevant whitespaces
-        term = re.sub(r"-\s*[01]\b", "", raw_term).strip()
-        if term and term not in {"0", "1"}:
-            terms.append(term)
-    if not terms:
-        return "~ 1"
-    return "~ -1 + " + " + ".join(terms)
-
-
-def drop_reference_columns(mat: pd.DataFrame, ref_levels: dict) -> pd.DataFrame:
-    """Drop reference-level dummy columns to avoid collinearity.
-
-    For each categorical variable ``col`` with reference level ``ref``,
-    formulaic names the corresponding dummy ``col[ref]``.  If that column is
-    present, this function will drop it.
-    """
-    to_drop = [f"{col}[{ref}]" for col, ref in ref_levels.items() if f"{col}[{ref}]" in mat.columns]
-    return mat.drop(columns=to_drop)
-
-
-def code_levels(obs, categories):
-    """Cast categorical columns to a fixed set of categories.
-
-    This ensures stable design-matrix columns across different chunks/batches.
-    """
-    for k, levels in categories.items():
-        if k in obs.columns:
-            obs[k] = obs[k].astype(pd.CategoricalDtype(levels))
-    return obs
 
 ###############################################################################
 ## Misc. Helper functions
