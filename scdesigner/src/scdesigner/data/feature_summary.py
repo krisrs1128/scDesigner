@@ -2,10 +2,9 @@
 
 from dataclasses import dataclass
 from typing import Optional
-
 import numpy as np
-import scipy.sparse
 from anndata import AnnData
+from .response import iter_response_chunks
 
 
 @dataclass(frozen=True)
@@ -21,19 +20,29 @@ class FeatureSummary:
     maximum: Optional[np.ndarray]
 
 
-def summarize_features(adata: AnnData, *, include_max: bool = False) -> FeatureSummary:
-    """:class:`FeatureSummary` of ``adata.X`` across rows.
+def summarize_features(
+    adata: AnnData, *, include_max: bool = False, chunk_size: Optional[int] = None
+) -> FeatureSummary:
+    """:class:`FeatureSummary` of ``adata.X`
+
+    This computes the mean over columns, one chunk at a time, so that it scales
+    to large backed anndata objects.
 
     Parameters
     ----------
     adata : AnnData
-        In-memory dataset.
+        In memory or backed.
     include_max : bool
-        Whether to compute ``maximum``. Otherwise returns None.
+        Whether to compute ``maximum``. Otherwise it is None.
+    chunk_size : int, optional
+        Rows per read; see :func:`~scdesigner.data.response.iter_response_chunks`.
     """
-    if adata.isbacked:
-        raise NotImplementedError("Feature summaries require in-memory AnnData.")
-
-    X = adata.X.toarray() if scipy.sparse.issparse(adata.X) else np.asarray(adata.X)
-    maximum = X.max(axis=0).astype(np.float64) if include_max else None
-    return FeatureSummary(mean=X.mean(axis=0, dtype=np.float64), maximum=maximum)
+    total = np.zeros(adata.n_vars)
+    maximum = np.full(adata.n_vars, -np.inf) if include_max else None
+    n_rows = 0
+    for _, _, values in iter_response_chunks(adata, chunk_size):
+        total += values.sum(axis=0, dtype=np.float64)
+        n_rows += len(values)
+        if include_max:
+            np.maximum(maximum, values.max(axis=0), out=maximum)
+    return FeatureSummary(mean=total / n_rows, maximum=maximum)
