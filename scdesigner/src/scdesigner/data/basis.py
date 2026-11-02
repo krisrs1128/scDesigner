@@ -63,7 +63,8 @@ class SpatialBasis(ABC):
     landmark kernel before SVD). ``fit`` picks landmarks, stores the
     projection ``U_m[:, :df] / s_m[:df]``, training column std (if
     ``standardize``), and the penalty diagonal ``s_0 / s_j`` (capped).
-    ``transform`` reuses that state on new coordinates.
+    ``transform`` reuses that state on new coordinates. ``fit`` evaluates the
+    kernel on at most ``chunk_size`` coordinates at a time.
 
     Parameters
     ----------
@@ -109,7 +110,8 @@ class SpatialBasis(ABC):
         """Drop near-zero singular values before truncating to ``df``."""
         return U_m, s_m
 
-    def fit(self, coords):
+    def fit(self, coords, chunk_size=None):
+        """Fit on ``coords``; ``chunk_size=None`` evaluates all rows at once."""
         coords = np.asarray(coords)
         n = coords.shape[0]
         idx = np.random.choice(n, size=min(self.n_landmarks, n), replace=False)
@@ -130,10 +132,24 @@ class SpatialBasis(ABC):
         )
 
         if self.standardize:
-            basis = self._kernel(coords, landmarks) @ self.projection_
-            col_sd = basis.std(axis=0)
-            self.col_sd_ = np.maximum(col_sd, self.eps)
+            self.col_sd_ = np.maximum(self._column_sd(coords, chunk_size or n), self.eps)
         return self
+
+    def _column_sd(self, coords, chunk_size):
+        """Population standard deviation of the basis columns over ``coords``.
+
+        Merges per-chunk counts, means and squared deviations ``m2``. For one
+        chunk this is just ``basis.std(axis=0)``.
+        """
+        n, mean, m2 = 0, 0.0, 0.0
+        for start in range(0, len(coords), chunk_size):
+            basis = self._kernel(coords[start:start + chunk_size], self.landmarks_) @ self.projection_
+            k, chunk_mean = len(basis), basis.mean(axis=0)
+            delta = chunk_mean - mean
+            mean = mean + delta * (k / (n + k))
+            m2 = m2 + ((basis - chunk_mean) ** 2).sum(axis=0) + delta ** 2 * (n * k / (n + k))
+            n += k
+        return np.sqrt(m2 / n)
 
     def transform(self, coords):
         if self.landmarks_ is None:

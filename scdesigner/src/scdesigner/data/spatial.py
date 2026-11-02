@@ -3,7 +3,9 @@
 :class:`SpatialDesign` fits spatial bases for parameters with
 :class:`SpatialTerm`s, appends the ``K`` bases columns to the `.obs` as
 ``sp_<parameter>_0, ..., sp_<parameter>_<K-1>``, and adds them to the
-parameter's formula. A penalized term adds a
+parameter's formula. Basis columns are generated for the current chunk, so we
+don't have to create it on the entire (potentially large, backed) dataset.  For
+penalization, we add
 :class:`~scdesigner.distributions.penalties.CoefficientPenalty` to those columns
 with ``d = basis.penalty_diag``.
 """
@@ -75,16 +77,17 @@ class SpatialDesign:
     def is_fitted(self) -> bool:
         return self._columns is not None
 
-    def fit_transform(self, obs: pd.DataFrame) -> pd.DataFrame:
-        """Fit the spatial basis on coordinates in ``obs``.
+    def fit(self, obs: pd.DataFrame, chunk_size: Optional[int] = None) -> "SpatialDesign":
+        """Fit the spatial bases on coordinates in ``obs``.
 
-        Returns :meth:`transform` of ``obs``.
+        ``chunk_size`` control the number of considered per kernel evaluation.
+        See :meth:`~scdesigner.data.basis.SpatialBasis.fit`.
         """
         bases = {name: copy.deepcopy(term.basis) for name, term in self.terms.items()}
         if bases:
             coords = self._coords(obs)
             for basis in bases.values():
-                basis.fit(coords)
+                basis.fit(coords, chunk_size)
 
         # get the new column names
         columns = {
@@ -105,7 +108,7 @@ class SpatialDesign:
             if term.penalty is not None
         )
         self.bases, self._columns = bases, columns
-        return self.transform(obs)
+        return self
 
     def transform(self, obs: pd.DataFrame) -> pd.DataFrame:
         """Copy of ``obs`` with the fitted basis columns appended."""

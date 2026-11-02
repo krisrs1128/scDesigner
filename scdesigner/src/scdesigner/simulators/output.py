@@ -19,15 +19,17 @@ class ObservedMaxCap:
     def __init__(self):
         self.maximum: Optional[np.ndarray] = None
 
-    def fit(self, adata: AnnData) -> None:
+    def fit(self, adata: AnnData, *, chunk_size: Optional[int] = None) -> None:
         """Store the per-feature maximum of ``adata.X``.
 
         Parameters
         ----------
         adata : AnnData
-            In-memory dataset.
+            In memory or backed.
+        chunk_size : int, optional
+            See :func:`~scdesigner.data.feature_summary.summarize_features`.
         """
-        self.maximum = summarize_features(adata, include_max=True).maximum
+        self.maximum = summarize_features(adata, include_max=True, chunk_size=chunk_size).maximum
 
     def transform(self, samples: np.ndarray) -> np.ndarray:
         """New array of ``samples`` capped at ``maximum``.

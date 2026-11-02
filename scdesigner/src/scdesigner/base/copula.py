@@ -1,7 +1,9 @@
 from typing import Dict, Callable, Tuple
 import torch
 from anndata import AnnData
-from ..data.loader import adata_loader, partition_formula
+from ..data.design import fit_design
+from ..data.formula import partition_formula
+from ..data.loader import adata_loader, resolve_chunk_size
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
@@ -37,6 +39,12 @@ class Copula(ABC):
     n_outcomes : int
         The number of features modeled by this marginal model. For example,
         this corresponds to the number of genes being simulated.
+    chunk_size : int or None
+        Chunk request from :meth:`setup_data`, reused by feature summaries.
+    design : Design
+        Design state for the group and marginal formulas that was adapted to all
+        training observations in :meth:`setup_data`. This is needed during
+        sampling.
     parameters : Dict[str, CovarianceStructure]
         A dictionary of CovarianceStructure objects. Each key corresponds to a
         different category specified in the original formula. The covariance
@@ -68,11 +76,22 @@ class Copula(ABC):
         self.formula = formula
         self.loader = None
         self.n_outcomes = None
+        self.chunk_size = None
+        self.design = None
         self.parameters = None # Should be a dictionary of CovarianceStructure objects
 
-    def setup_data(self, adata: AnnData, marginal_formula: Dict[str, str], batch_size: int = 1024, **kwargs):
+    def setup_data(
+        self,
+        adata: AnnData,
+        marginal_formula: Dict[str, str],
+        batch_size: int = 1024,
+        *,
+        chunk_size: Optional[int] = None,
+        observation_transform=None,
+        **kwargs,
+    ):
         """
-        Populate the .loader attribute
+        Populate the .design and .loader attributes
 
         Parameters
         ----------
@@ -90,19 +109,30 @@ class Copula(ABC):
             in a format that can be parsed by the formulaic package.  For example,
             '~ x' will ensure that the parameter varies linearly with X.
 
+        chunk_size : int, optional
+            Rows per chunked read; see :func:`~scdesigner.data.adata_loader`.
+
+        observation_transform : SpatialDesign, optional
+            Fitted transform that appends spatial columns to ``adata.obs``.
+
         Returns
         -------
         None
             This method does not return anything but populates the self.adata,
-            formula, loader, and n_outcomes attributes based on the provided
-            adata input object.
+            formula, design, loader, and n_outcomes attributes based on the
+            provided adata input object.
        """
         self.adata = adata
+        self.chunk_size = chunk_size
         self.formula = self.formula | marginal_formula #
         self.formula["group"] = partition_formula(self.formula["group"])
+        self.design = fit_design(
+            adata.obs, self.formula, partition_keys=PARTITION_KEYS,
+            transform=observation_transform,
+            chunked=resolve_chunk_size(adata, chunk_size) is not None,
+        )
         self.loader = adata_loader(
-            adata, self.formula, batch_size=batch_size,
-            partition_keys=PARTITION_KEYS, **kwargs
+            adata, self.design, chunk_size=chunk_size, batch_size=batch_size, **kwargs
         )
         X_batch, _ = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
