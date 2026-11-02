@@ -1,5 +1,5 @@
-from ..base.copula import Copula, PARTITION_KEYS
-from ..data.loader import obs_loader, adata_loader
+from ..base.copula import Copula
+from ..data.loader import obs_loader, adata_loader, resolve_chunk_size
 from ..base.marginal import Marginal
 from ..base.simulator import Simulator
 from anndata import AnnData
@@ -21,7 +21,6 @@ from ..copulas import StandardCopula
 from ..data.spatial import SpatialDesign
 from .output import ObservedMaxCap
 from typing import Optional
-import pandas as pd
 from abc import ABC
 
 
@@ -155,27 +154,28 @@ class SCD3Simulator(Simulator, ABC):
         **kwargs
             Additional keyword arguments forwarded to the marginal fit routine
             and to both components' data setup (e.g. ``batch_size``,
-            optimization settings). Copula settings like ``estimator`` and
-            ``top_k`` are given when the simulator is constructed, not here.
+            ``chunk_size``, optimization settings). Copula settings like
+            ``estimator`` and ``top_k`` are given when the simulator is
+            constructed, not here.
 
         Notes
         -----
         This method sets the :attr:`template` attribute to ``adata`` and
-        stores fitted parameters in :attr:`parameters`.
+        stores fitted parameters in :attr:`parameters`. Design state is fitted
+        once on ``adata.obs`` and reused by :meth:`predict`, :meth:`sample`
+        and :meth:`complexity`.
         """
         self.template = adata
-        data = adata
 
-        # create a design matrix from a transformation
+        # fit the observation transform; its columns are generated per chunk
         transform = getattr(self, "observation_transform", None)
         if transform is not None:
-            obs = transform.fit_transform(adata.obs)
+            transform.fit(adata.obs, chunk_size=resolve_chunk_size(adata, kwargs.get("chunk_size")))
             self.marginal.formula = dict(transform.formula)
             self.marginal.penalties = self._base_penalties + transform.penalties
-            data = self._data_with_obs(adata, obs)
 
         # define a dataloader on the design and fit
-        self.marginal.setup_data(data, **kwargs)
+        self.marginal.setup_data(adata, observation_transform=transform, **kwargs)
         self.marginal.fit(
             val_frac=val_frac,
             min_epochs=min_epochs,
@@ -186,31 +186,20 @@ class SCD3Simulator(Simulator, ABC):
         )
 
         # copula simulator
-        self.copula.setup_data(data, self.marginal.formula, **kwargs)
+        self.copula.setup_data(
+            adata, self.marginal.formula, observation_transform=transform, **kwargs
+        )
         self.copula.fit(self.marginal.uniformize)
 
         # transform the outputs if needed
         output_transform = getattr(self, "output_transform", None)
         if output_transform is not None:
-            output_transform.fit(adata)
+            output_transform.fit(adata, chunk_size=self.marginal.chunk_size)
 
         self.parameters = {
             "marginal": self.marginal.parameters,
             "copula": self.copula.parameters,
         }
-
-    def _transform_obs(self, obs: pd.DataFrame) -> pd.DataFrame:
-        """``obs`` under the fitted observation transform, if any."""
-        transform = getattr(self, "observation_transform", None)
-        return obs if transform is None else transform.transform(obs)
-
-    def _data_with_obs(self, adata: AnnData, obs: pd.DataFrame) -> AnnData:
-        """``adata`` with its observations replaced by ``obs``."""
-        if getattr(self, "observation_transform", None) is None:
-            return adata
-        if adata.isbacked:
-            raise NotImplementedError("Observation transforms require in-memory AnnData.")
-        return AnnData(X=adata.X, obs=obs, var=adata.var)
 
     def predict(self, obs=None, batch_size: int = 1000, **kwargs):
         """Predict marginal parameters for given covariates.
@@ -235,9 +224,7 @@ class SCD3Simulator(Simulator, ABC):
         # prepare an internal data loader for this obs
         if obs is None:
             obs = self.template.obs
-        loader = obs_loader(
-            self._transform_obs(obs), self.marginal.formula, batch_size=batch_size, **kwargs
-        )
+        loader = obs_loader(obs, self.marginal.design, batch_size=batch_size, **kwargs)
 
         # get predictions across batches
         local_parameters = []
@@ -273,13 +260,7 @@ class SCD3Simulator(Simulator, ABC):
         """
         if obs is None:
             obs = self.template.obs
-        loader = obs_loader(
-            self._transform_obs(obs),
-            self.copula.formula | self.marginal.formula,
-            batch_size=batch_size,
-            partition_keys=PARTITION_KEYS,
-            **kwargs,
-        )
+        loader = obs_loader(obs, self.copula.design, batch_size=batch_size, **kwargs)
 
         # get samples across batches
         samples = []
@@ -303,6 +284,7 @@ class SCD3Simulator(Simulator, ABC):
             use the template dataset stored during :meth:`fit`.
         **kwargs
             Additional keyword arguments passed to :func:`adata_loader`.
+            ``chunk_size`` defaults to the one given to :meth:`fit`.
 
         Returns
         -------
@@ -314,15 +296,10 @@ class SCD3Simulator(Simulator, ABC):
         if adata is None:
             use_template_ll = True
             adata = self.template
-        adata = self._data_with_obs(adata, self._transform_obs(adata.obs))
+        kwargs.setdefault("chunk_size", self.marginal.chunk_size)
 
         N, marginal_ll, copula_ll = 0, 0, 0
-        loader = adata_loader(
-            adata,
-            self.marginal.formula | self.copula.formula,
-            partition_keys=PARTITION_KEYS,
-            **kwargs,
-        )
+        loader = adata_loader(adata, self.copula.design, **kwargs)
         for batch in tqdm(loader, desc="Computing log-likelihood..."):
             with torch.no_grad():
                 marginal_ll += self.marginal.likelihood(batch).sum()

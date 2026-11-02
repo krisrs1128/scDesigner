@@ -194,9 +194,10 @@ class CompositeCopula(SCD3Simulator):
     def predict(self, obs=None, batch_size: int = 1000, **kwargs):
         """Predict marginal parameters for observations (batched).
 
-        This method constructs an internal loader for ``obs`` using the merged
-        (prefixed) formula dictionary, then dispatches per-marginal ``predict``
-        calls on each batch after stripping the prefixes.
+        This method constructs an internal loader for ``obs`` from the copula's
+        fitted design over the merged (prefixed) formulas, then dispatches
+        per-marginal ``predict`` calls on each batch after stripping the
+        prefixes.
 
         Parameters
         ----------
@@ -216,12 +217,7 @@ class CompositeCopula(SCD3Simulator):
         # prepare an internal data loader for this obs
         if obs is None:
             obs = self.template.obs
-        loader = obs_loader(
-            obs,
-            self.merged_formula,
-            batch_size=batch_size,
-            **kwargs
-        )
+        loader = obs_loader(obs, self.copula.design, batch_size=batch_size, **kwargs)
 
         # prepare per-marginal collectors
         n_marginals = len(self.marginals)
