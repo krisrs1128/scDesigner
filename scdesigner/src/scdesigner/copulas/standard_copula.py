@@ -1,5 +1,6 @@
 from ..base.copula import Copula, CovarianceStructure
 from ..covariance import as_covariance_estimator
+from ..data.feature_summary import summarize_features
 from ..data.formula import standardize_formula
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from .gaussian_copula_helpers import (
@@ -87,7 +88,14 @@ class StandardCopula(Copula):
     # ------------------------------------------------------------------
     # setup
     # ------------------------------------------------------------------
-    def setup_data(self, adata: AnnData, marginal_formula: Dict[str, str], **kwargs):
+    def setup_data(
+        self,
+        adata: AnnData,
+        marginal_formula: Dict[str, str],
+        *,
+        observation_transform=None,
+        **kwargs,
+    ):
         """
         Build the loader and the group design.
 
@@ -97,13 +105,18 @@ class StandardCopula(Copula):
             Cells in rows, features in columns.
         marginal_formula : dict of {str: str}
             Formulas used by the marginal models, we merge it with the copula's.
+        observation_transform : SpatialDesign, optional
+            Fitted transform that appends spatial columns to ``adata.obs``.
         **kwargs
-            Passed to :func:`~scdesigner.data.adata_loader`.
+            Data-loading arguments, such as ``batch_size`` and ``chunk_size``,
+            passed to :func:`~scdesigner.data.adata_loader`.
         """
         data_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS["data"])
-        super().setup_data(adata, marginal_formula, **data_kwargs)
+        super().setup_data(
+            adata, marginal_formula, observation_transform=observation_transform, **data_kwargs
+        )
 
-        self.groups = self.loader.dataset.predictor_names["group"]
+        self.groups = self.design.predictor_names["group"]
         self.n_groups = len(self.groups)
         self._group_col = {g: i for i, g in enumerate(self.groups)}
 
@@ -138,15 +151,15 @@ class StandardCopula(Copula):
         """
         Split genes into those modeled jointly and those left independent.
 
-        Genes are ranked by total expression and the top_k are modeled jointly.
-        The rest are modeled independently.
+        The top_k genes by mean expression, which orders genes as totals do,
+        are modeled jointly. The rest are modeled independently.
         """
         top_k = self.top_k
         if top_k is None:
             return np.arange(self.n_outcomes), np.array([], dtype=int)
 
-        gene_total_expression = np.asarray(self.adata.X.sum(axis=0)).flatten()
-        sorted_indices = np.argsort(gene_total_expression)
+        means = summarize_features(self.adata, chunk_size=self.chunk_size).mean
+        sorted_indices = np.argsort(means)
         return np.sort(sorted_indices[-top_k:]), np.sort(sorted_indices[:-top_k])
 
     def _fit_estimators(
