@@ -1,6 +1,7 @@
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from ..data.feature_summary import summarize_features
-from ..data.loader import adata_loader, get_device, _validate_design_matrices
+from ..data.design import fit_design
+from ..data.loader import AnnDataDataset, adata_loader, get_device, resolve_chunk_size
 from anndata import AnnData
 from typing import Union, Dict, Optional, Sequence, Tuple
 from torch.utils.data import DataLoader, RandomSampler, Subset
@@ -57,6 +58,15 @@ class Marginal(ABC):
         '~ x' will ensure that the parameter varies linearly with X.
 
     penalties : tuple of CoefficientPenalty
+
+    chunk_size : int or None
+        For backed anndata objects, we read continguous blocks of rows at a
+        time. This parameter governs the size of those chunks and is used in
+        :meth:`setup_data` and for feature summaries (e.g., for regularization).
+
+    design : Design
+        Design matrix factory initially adapted to the full `obs` data in
+        :meth:`setup_data` and then applied to prediction and sampling.
 
     feature_dims : dict
         A dictionary containing the number of predictors associated with each
@@ -153,6 +163,8 @@ class Marginal(ABC):
         self.formula = formula
         self.penalties = tuple(penalties)
         self._bound_penalties = ()
+        self.chunk_size = None
+        self.design = None
         self.feature_dims = None
         self.loader = None
         self.train_loader = None
@@ -168,7 +180,15 @@ class Marginal(ABC):
         self.parameters = None
         self.device = get_device(device)
 
-    def setup_data(self, adata: AnnData, batch_size: int = 1024, **kwargs):
+    def setup_data(
+        self,
+        adata: AnnData,
+        batch_size: int = 1024,
+        *,
+        chunk_size: Optional[int] = None,
+        observation_transform=None,
+        **kwargs,
+    ):
         """Set up the dataloader for the AnnData object.
 
         The simulator class definition doesn’t actually require any particular
@@ -186,6 +206,12 @@ class Marginal(ABC):
         batch_size : int
             The number of sample to return on each call of the data loader.
             Defaults to 1024.
+        chunk_size : int or None
+            For backed anndata objects, we read continguous blocks of rows at a
+            time. This parameter governs the size of those chunks and is used in
+            :meth:`setup_data` and for feature summaries (e.g., for regularization).
+        observation_transform : SpatialDesign, optional
+            Transform that appends spatial basis columns to ``adata.obs``.
         **kwargs : Any
             Other keyword arguments passed to data loader construction. Any
             argument recognized by the PyTorch DataLoader can be passed in here.
@@ -194,17 +220,28 @@ class Marginal(ABC):
         -------
         None
             This method doesn't return anything but modifies the self.adata,
-            self.loader, self.n_outcomes, self.feature_dims, and self.predictor_names
-            attributes.
+            self.design, self.loader, self.n_outcomes, self.feature_dims, and
+            self.predictor_names attributes.
         """
         # keep a reference to the AnnData for later use (e.g., var_names)
         self.adata = adata
-        _validate_design_matrices(adata, self.formula)
-        self.loader = adata_loader(adata, self.formula, batch_size=batch_size, **kwargs)
+        self.chunk_size = chunk_size
+
+        # learn the design matrix from the obs object, and initialize an
+        # associated loader
+        self.design = fit_design(
+            adata.obs, self.formula, transform=observation_transform,
+            chunked=resolve_chunk_size(adata, chunk_size) is not None,
+        )
+        self.loader = adata_loader(
+            adata, self.design, chunk_size=chunk_size, batch_size=batch_size, **kwargs
+        )
+
+        # other attributes updated during training
         X_batch, obs_batch = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
         self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
-        self.predictor_names = self.loader.dataset.predictor_names
+        self.predictor_names = self.design.predictor_names
         self.train_loader = self.loader
         self.validation_loader = None
         self.fit_history = []
@@ -257,6 +294,11 @@ class Marginal(ABC):
         self._validation_split_config = split_config
 
     def _subset_loader(self, indices: np.ndarray, training: bool) -> DataLoader:
+        # Resort rows after setup_validation_split randomizes row order. This
+        # ensures backed chunk reads don't have to revisit previous chunks
+        if isinstance(self.loader.dataset, AnnDataDataset):
+            indices = np.sort(indices)
+
         sampler_is_random = isinstance(self.loader.sampler, RandomSampler)
         return DataLoader(
             Subset(self.loader.dataset, indices.tolist()),
@@ -473,7 +515,7 @@ class Marginal(ABC):
         """
         feature_means = None
         if any(spec.uses_feature_means for spec in self.penalties):
-            feature_means = summarize_features(self.adata).mean
+            feature_means = summarize_features(self.adata, chunk_size=self.chunk_size).mean
         self._bound_penalties = tuple(
             spec.bind(self.predictor_names, self.predict.coefs, feature_means)
             for spec in self.penalties
