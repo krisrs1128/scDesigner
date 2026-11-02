@@ -5,6 +5,7 @@ import torch
 from anndata import AnnData
 
 from scdesigner.base.marginal import GLMPredictor, Marginal
+from scdesigner.data.design import fit_design
 from scdesigner.data.loader import AnnDataDataset
 from scdesigner.distributions import Bernoulli, Poisson
 from scdesigner.simulators import (
@@ -208,7 +209,7 @@ def test_object_covariates_keep_stable_chunk_design_columns():
     adata = AnnData(X=np.ones((6, 2)), obs=obs)
     dataset = AnnDataDataset(
         adata,
-        {"mean": "~ group"},
+        fit_design(obs, {"mean": "~ group"}, chunked=True),
         chunk_size=2,
         device=torch.device("cpu"),
     )
