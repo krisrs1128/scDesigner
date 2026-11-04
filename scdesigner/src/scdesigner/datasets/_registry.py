@@ -33,7 +33,7 @@ DATASETS: dict[str, FigshareData] = {
     "mouse_cortex": FigshareData(name="mouse_cortex", file_id=67164080),
     "mouse_visual": FigshareData(name="mouse_visual", file_id=67164077),
     "ovarian": FigshareData(name="ovarian", file_id=65593941),
-    "pancreas": FigshareData(name="pancreas", file_id=60087086),
+    "pancreas": FigshareData(name="pancreas", file_id=71055762),
     "prostate": FigshareData(name="prostate", file_id=66126284),
     "pseudotime_example": FigshareData(name="pseudotime_Example", file_id=69154696),
     "scgemmeth": FigshareData(name="scgemmeth", file_id=65594694),
