@@ -14,7 +14,13 @@ from .scd3 import (
 )
 from .composite import CompositeCopula
 from .positive_nonnegative_matrix_factorization import PositiveNMF
-from .recipes import PenalizedNegBinCopula, SpatialNegBinCopula, spatial_copula
+from .recipes import (
+    PenalizedBernoulliCopula,
+    PenalizedNegBinCopula,
+    SpatialBernoulliCopula,
+    SpatialNegBinCopula,
+    spatial_copula,
+)
 
 __all__ = [
     "BernoulliCopula",
@@ -23,10 +29,12 @@ __all__ = [
     "NegBinCopula",
     "NegBinEQTLCopula",
     "NegBinIRLSCopula",
+    "PenalizedBernoulliCopula",
     "PenalizedNegBinCopula",
     "PoissonCopula",
     "PositiveNMF",
     "SCD3Simulator",
+    "SpatialBernoulliCopula",
     "SpatialNegBinCopula",
     "spatial_copula",
     "ZeroInflatedTruncatedGaussianCopula",
