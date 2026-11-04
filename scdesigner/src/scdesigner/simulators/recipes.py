@@ -7,8 +7,9 @@ from ..base.copula import Copula
 from ..copulas.standard_copula import StandardCopula
 from ..data.basis import GPBasis, TPSBasis
 from ..data.spatial import SpatialDesign, SpatialTerm
-from ..distributions.negbin import NegBin
+from ..distributions import NegBin, Bernoulli
 from ..distributions.penalized_negbin import PenalizedNegBin
+from ..distributions.penalized_bernoulli import PenalizedBernoulli
 from ..distributions.penalties import CoefficientPenalty, QuadraticPenalty
 from .output import ObservedMaxCap
 from .scd3 import SCD3Simulator
@@ -17,7 +18,7 @@ BASES = {"gp": GPBasis, "tps": TPSBasis}
 
 
 def spatial_copula(
-    marginal: NegBin,
+    marginal: NegBin | Bernoulli,
     terms: Mapping[str, SpatialTerm],
     *,
     copula: Optional[Copula] = None,
@@ -33,7 +34,7 @@ def spatial_copula(
 
     Parameters
     ----------
-    marginal : NegBin
+    marginal : NegBin or Bernoulli
         Copied; its formula and penalties are the nonspatial base.
     terms : mapping of str to SpatialTerm
         Term per marginal parameter; see
@@ -45,7 +46,7 @@ def spatial_copula(
         Cap sampled counts with
         :class:`~scdesigner.simulators.output.ObservedMaxCap`. In earlier
         experiments, we found that this prevented extreme outliers that happen
-        in high-dimensional negbin models.
+        in high-dimensional negbin models. Must be False for Bernoulli marginals.
 
     Examples
     --------
@@ -56,8 +57,8 @@ def spatial_copula(
     >>> sim = spatial_copula(NegBin({"mean": "~ 1", "dispersion": "~ 1"}), {"mean": term})
     >>> sim.fit(adata)  # doctest: +SKIP
     """
-    if type(marginal) is not NegBin:
-        raise NotImplementedError("spatial_copula currently supports only NegBin marginals.")
+    if type(marginal) not in (NegBin, Bernoulli):
+        raise NotImplementedError("spatial_copula currently supports only NegBin and Bernoulli marginals.")
 
     marginal = copy.deepcopy(marginal)
     copula = StandardCopula("~ 1") if copula is None else copy.deepcopy(copula)
@@ -149,6 +150,58 @@ def SpatialNegBinCopula(
     )
 
 
+def SpatialBernoulliCopula(
+    mean_formula: str = "~ 1",
+    copula_formula: str = "~ 1",
+    *,
+    mean_df: int = 15,
+    basis: str = "gp",
+    standardize: bool = True,
+    lam: float = 1.0,
+    spatial_cols: Tuple[str, str] = ("spatial1", "spatial2"),
+    estimator=None,
+    top_k: Optional[int] = None,
+    device=None,
+    **basis_kwargs,
+) -> SCD3Simulator:
+    """A Bernoulli simulator with a penalized spatial logit of success probability.
+
+    Parameters
+    ----------
+    mean_formula : str
+        Nonspatial part of the logit formula.
+    copula_formula : str
+    mean_df : int
+        Number of spatial basis columns.
+    basis : {"gp", "tps"}
+    standardize : bool
+        Rescale basis columns by their training standard deviations.
+    lam : float
+        Strength of the inverse-mean-weighted quadratic penalty; see
+        :mod:`scdesigner.distributions.penalties`.
+    spatial_cols : tuple of str
+        Coordinate columns in ``adata.obs``.
+    estimator, top_k
+        Passed to :class:`StandardCopula`.
+    device : torch.device or str, optional
+        Marginal device.
+    **basis_kwargs
+        Passed to the basis, e.g. ``n_landmarks`` or ``length_scale``.
+
+    Examples
+    --------
+    >>> sim = SpatialBernoulliCopula("~ 0 + cell_type", basis="tps")
+    >>> sim.fit(adata)  # doctest: +SKIP
+    """
+    terms = {"mean": SpatialTerm(
+        BASES[basis](df=mean_df, standardize=standardize, **basis_kwargs),
+        QuadraticPenalty(lam=lam, weighting="inverse_mean"),
+    )}
+    marginal = Bernoulli({"mean": mean_formula}, device=device)
+    copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
+    return spatial_copula(marginal, terms, copula=copula, spatial_cols=spatial_cols)
+
+
 def PenalizedNegBinCopula(
     mean_formula: str = "~ 1",
     dispersion_formula: str = "~ 1",
@@ -195,3 +248,38 @@ def PenalizedNegBinCopula(
         copula,
         output_transform=ObservedMaxCap() if cap_at_observed_max else None,
     )
+
+
+def PenalizedBernoulliCopula(
+    mean_formula: str = "~ 1",
+    copula_formula: str = "~ 1",
+    *,
+    penalties: Sequence[CoefficientPenalty] = (),
+    estimator=None,
+    top_k: Optional[int] = None,
+    device=None,
+) -> SCD3Simulator:
+    """A Bernoulli copula simulator with user-specified coefficient penalties.
+
+    Parameters
+    ----------
+    mean_formula : str
+        Formula for the logit of the success probability.
+    copula_formula : str
+    penalties : sequence of CoefficientPenalty
+        See :mod:`scdesigner.distributions.penalties`.
+    estimator, top_k
+        Passed to :class:`StandardCopula`.
+    device : torch.device or str, optional
+        Marginal device.
+
+    Examples
+    --------
+    >>> from scdesigner.distributions.penalties import CoefficientPenalty, QuadraticPenalty
+    >>> penalty = CoefficientPenalty("mean", ["x"], [1.0], QuadraticPenalty(lam=0.1))
+    >>> sim = PenalizedBernoulliCopula("~ x", penalties=[penalty])
+    >>> sim.fit(adata)  # doctest: +SKIP
+    """
+    marginal = PenalizedBernoulli({"mean": mean_formula}, penalties=penalties, device=device)
+    copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
+    return SCD3Simulator(marginal, copula)

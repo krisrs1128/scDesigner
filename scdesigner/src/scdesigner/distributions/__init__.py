@@ -10,6 +10,7 @@ from .poisson import Poisson
 from .zero_inflated_poisson import ZeroInflatedPoisson
 from .zero_inflated_truncated_gaussian import ZeroInflatedTruncatedGaussian
 from .penalized_negbin import PenalizedNegBin
+from .penalized_bernoulli import PenalizedBernoulli
 
 __all__ = [
     "Bernoulli",
@@ -17,6 +18,7 @@ __all__ = [
     "NegBin",
     "NegBinEQTL",
     "NegBinIRLS",
+    "PenalizedBernoulli",
     "PenalizedNegBin",
     "Poisson",
     "ZeroInflatedTruncatedGaussian",
