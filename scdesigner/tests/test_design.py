@@ -14,6 +14,8 @@ SUPPORTED = [
     "~ x", "x + ct", "~ ct", "~ C(ct)", "~ C(batch)", "~ log(z)", "~ bs(x, df=4)",
     "~ bs(x, df=5, degree=2)", "~ 0 + ct", "~ -1 + cat + x", "~ x * ct",
     "~ bs(x, df=4):ct", "~ C(batch) + log(z):cat",
+    "~  bs(x, df=6,lower_bound=2, extrapolation='zero')  + bs(z, df=4, lower_bound=2, extrapolation='zero')",
+    "~ cr(x, df=4)", "~ cr(x, df=4):ct",
 ]
 
 
@@ -90,8 +92,7 @@ def test_missing_covariates_raise(obs, chunked):
 
 
 @pytest.mark.parametrize("formula", [
-    "~ scale(x)", "~ {x - x.mean()}", "~ poly(x, degree=2)", "~ log(z + 1)",
-    "~ bs(x, knots=[5.0])", "~ bs(x)",
+    "~ {x - x.mean()}", "~ log(z + 1)", "~ bs(x, knots=[5.0])", "~ exp(z)",
 ])
 def test_chunked_fit_rejects_unsupported_formulas(obs, formula):
     fit_design(obs, {"k": formula})

@@ -43,7 +43,7 @@
       return True
   ```
   
-- Distinguish public and private APIs: make sure internal helper functions and private attributes are prefixed with `_`
+- Do not prefix internal helper functions or attributes with `_`. Use plain, descriptive names.
   
 - For internal functions, docstrings should be concise
   
