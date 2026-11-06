@@ -1,7 +1,8 @@
 """Design matrices evaluated on the complete adata.obs data
 
-If we don't evaluate the design matrix once on the entire alt data, we risk the
-spline knots and categorical levels not agreeing across chunks.
+If we don't evaluate the design matrix once on the entire alt data, we risk
+"transform state" (e.g., spline knots or categorical levels) which is internally
+defined by formulaic when setting a formula not agreeing across chunks.
 """
 
 import ast
@@ -12,12 +13,13 @@ import numpy as np
 import pandas as pd
 from formulaic import Formula, ModelSpec
 from formulaic.parser.types import Factor
+from formulaic.transforms import TRANSFORMS
 
 if TYPE_CHECKING:
     from .spatial import SpatialDesign
 
-# Python factors allowed in chunked formulas, with their allowed keywords.
-CHUNKED_CALLS = {"C": set(), "log": set(), "bs": {"df", "degree"}}
+# Calls that can be used in chunk formulas but which don't have state
+CHUNKED_CALLS = {"C", "log"}
 
 @dataclass
 class FormulaDesign:
@@ -76,8 +78,8 @@ def fit_design(
 ) -> Design:
     """Learn design-matrix rules from the complete observation table.
 
-    This function lets us learn categorical levels and spline knots that can be
-    reused across chunks and queries.
+    This function lets us learn categorical levels and transform state (e.g.,
+    spline knots) that can be reused across chunks and queries.
 
     Parameters
     ----------
@@ -97,8 +99,9 @@ def fit_design(
         If True, learn state from full columns but build only a one-row matrix
         to determine the relevant structure. This avoids creating the full
         training design matrix. Allowed factors are column references,
-        ``C(column)``, ``log(column)`` and ``bs(column, df=..., degree=...)``.
-        If False, build the full matrix while fitting.
+        ``C(column)``, ``log(column)`` and state-aware Formulaic transforms of
+        one column with constant keywords, e.g. ``bs(column, df=...)`` or
+        ``cr(column, df=...)``. If False, build the full matrix while fitting.
 
     Returns
     -------
@@ -150,8 +153,8 @@ def fit_formula(
 ) -> FormulaDesign:
     """Fit a formula and determine its predictor columns
 
-    When ``chunked=True``, categorical levels and spline knots are computed from
-    all of ``obs``. Formulaic evaluates the formula on the first row to
+    When ``chunked=True``, categorical levels and state are computed using the
+    ``obs`` data frame. Formulaic evaluates the formula on the first row to
     determine column names and categorical encoding structure. Otherwise, it
     evaluates the formula on every row.
     """
@@ -169,13 +172,8 @@ def fit_formula(
         column_levels[column] = categorical_levels(obs[column])
     levels = {column: column_levels[column] for column in sorted(categorical_columns)}
 
-    # Seed spline state from full columns; the remaining structure needs one row.
-    state = {}
-    if chunked:
-        state = {
-            expr: spline_state(obs[call.column], **call.keywords)
-            for expr, call in calls.items() if call.function == "bs"
-        }
+    # Seed transform state from full columns; the remaining structure needs one row.
+    state = transform_state(obs, calls) if chunked else {}
     spec = ModelSpec(formula=formula_text, na_action="raise", transform_state=state)
     matrix = spec.get_model_matrix(code_levels(rows, levels))
     dropped = set() if partition else reference_columns(obs, levels)
@@ -270,18 +268,36 @@ def parse_call(node: ast.AST) -> Optional[FormulaCall]:
 def check_chunked(formula_text: str, calls: Mapping[str, Optional[FormulaCall]]) -> None:
     """Reject unallowed formula terms in chunked data."""
     for expr, call in calls.items():
-        supported = (
-            call is not None and call.function in CHUNKED_CALLS
-            and set(call.keywords) <= CHUNKED_CALLS[call.function]
-            and (call.function != "bs" or "df" in call.keywords)
+        supported = call is not None and (
+            call.function in CHUNKED_CALLS or is_stateful(call.function)
         )
         if not supported:
             raise ValueError(
                 f"Chunked fitting does not support {expr!r} in {formula_text!r}. Chunked "
                 "formulas may use column references, categorical columns, C(column), "
-                "log(column) and bs(column, df=..., degree=...). Add other transformed "
-                "covariates as columns of .obs."
+                "log(column) or state-aware Formulaic transforms of a column with ",
+                "eg. bs(column, df=...) or cr(column, df=...). For more complex",
+                "transformations, add them as covariates in .obs."
             )
+
+
+def is_stateful(function: str) -> bool:
+    """Whether ``function`` is a Formulaic transform that is aware of state."""
+    return getattr(TRANSFORMS.get(function), "__is_stateful_transform__", False)
+
+
+def transform_state(obs: pd.DataFrame, calls: Mapping[str, Optional[FormulaCall]]) -> dict:
+    """Formulaic state for a given formulaic call, based on a column of ``obs``.
+
+    This uses the fact that Formulaic has a ``__state`` argument. We don't
+    actually use the formulaic evaluation, only the filled in transform.
+    """
+    state = {}
+    for expr, call in calls.items():
+        if call is not None and is_stateful(call.function):
+            state[expr] = {}
+            TRANSFORMS[call.function](obs[call.column], **call.keywords, _state=state[expr])
+    return state
 
 
 def is_categorical(values: pd.Series) -> bool:
@@ -312,16 +328,3 @@ def reference_columns(obs: pd.DataFrame, levels: Mapping[str, pd.CategoricalDtyp
         f"{column}[{dtype.categories[0]}]"
         for column, dtype in levels.items() if is_categorical(obs[column])
     }
-
-
-def spline_state(values: pd.Series, df: int, degree: int = 3) -> dict:
-    """State formulaic's ``bs(column, df, degree)`` fits on ``values``.
-
-    Only allows query data between lower_bound and upper_bound. The knot vector
-    stores ``df - degree`` quantiles.
-    """
-    values = values.to_numpy(dtype=np.float64)
-    lower, upper = float(np.nanmin(values)), float(np.nanmax(values))
-    inner = np.nanquantile(values, np.linspace(0, 1, df - degree + 2))[1:-1]
-    knots = np.pad([lower, *inner, upper], degree, mode="edge")
-    return {"lower_bound": lower, "upper_bound": upper, "knots": knots.tolist()}
