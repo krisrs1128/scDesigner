@@ -75,7 +75,7 @@ def SpatialNegBinCopula(
     dispersion_formula: str = "~ 1",
     copula_formula: str = "~ 1",
     *,
-    mean_df: int = 15,
+    mean_df: int = 100,
     disp_df: Optional[int] = None,
     basis: str = "gp",
     standardize: bool = True,
@@ -97,6 +97,11 @@ def SpatialNegBinCopula(
     Internally, we construct ``SpatialTerm(basis(df, standardize,
     **basis_kwargs), QuadraticPenalty(lam, "inverse_mean"))`` objects, which are
     then fed in to :func:`spatial_copula`.
+
+    We do not use a Poisson IRLS initialization for spatial models. This is
+    because the spatial basis greatly increases the problem dimension, which
+    destabilizes ordinary regression fits. To use this initialization, you may
+    set ``max_iter`` larger than zero in your call to :meth:`fit`.
 
     Parameters
     ----------
@@ -121,7 +126,7 @@ def SpatialNegBinCopula(
     device : torch.device or str, optional
         Marginal device.
     **basis_kwargs
-        Passed to both bases, e.g. ``n_landmarks`` or ``length_scale``.
+        Passed to both bases, e.g. ``n_landmarks`` or ``length_fraction``.
 
     Examples
     --------

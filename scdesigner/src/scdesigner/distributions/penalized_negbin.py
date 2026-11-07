@@ -14,7 +14,11 @@ def PenalizedNegBin(
 ) -> NegBin:
     """:class:`NegBin` with penalty ``P`` added to the training loss
 
-    This is a regularized form of the NegBin marginal model.
+    This is a regularized form of the NegBin marginal model.  By default, this
+    does not use Poisson IRLS during initialization, since regularized settings
+    typically have high-dimensional covariates, which are unstable in an
+    ordinary linear model. These initial Poisson IRLS steps can be added back by
+    passing ``max_iter`` to ``fit``.
 
     Parameters
     ----------

@@ -186,24 +186,58 @@ class TPSBasis(SpatialBasis):
 
 
 class GPBasis(SpatialBasis):
-    """Gaussian-process basis with an RBF kernel (Nystrom).
+    r"""Gaussian-process basis with an RBF kernel (Nystrom).
 
     Regularizes the landmark kernel with ``eps * I`` before SVD.
 
     Parameters
     ----------
-    length_scale : float
-        RBF length scale. Smaller = shorter-range structure.
+    length_scale : float, optional
+        RBF length scale :math:`\ell` in coordinate units, in the kernel
+
+        .. math::
+
+            k(x, x') = \exp\!\left(-\frac{\lVert x - x' \rVert^2}{2\ell^2}\right).
+
+        Smaller values allow more rapidly varying functions. If ``None``,
+        ``fit`` sets :math:`\ell = c\,e`, where :math:`c` is ``length_fraction``
+        and :math:`e` is the extent, so the basis does not depend on coordinate
+        units.
+    length_fraction : float
+        Fraction :math:`c` of the extent, used only when ``length_scale`` is
+        ``None``. The extent is
+
+        .. math::
+
+            e = \max_{d} \left( \max_{i} x_{id} - \min_{i} x_{id} \right),
+
+        taken over the fitted coordinates :math:`x_i`.
     **kwargs
         Forwarded to :class:`SpatialBasis`.
+
+    Attributes
+    ----------
+    length_scale_ : float
+        Length scale of the fitted basis. Set by :meth:`fit`.
     """
 
-    def __init__(self, length_scale=1.0, **kwargs):
+    def __init__(self, length_scale=None, length_fraction=0.17, **kwargs):
         super().__init__(**kwargs)
         self.length_scale = length_scale
+        self.length_fraction = length_fraction
+        self.length_scale_ = None
+
+    def fit(self, coords, chunk_size=None):
+        coords = np.asarray(coords)
+        if self.length_scale is not None:
+            self.length_scale_ = self.length_scale
+        else:
+            extent = float(np.ptp(coords, axis=0).max())
+            self.length_scale_ = self.length_fraction * extent
+        return super().fit(coords, chunk_size)
 
     def _kernel(self, A, B):
-        return rbf_kernel(A, B, self.length_scale)
+        return rbf_kernel(A, B, self.length_scale_)
 
     def _regularize(self, K_mm, landmarks):
         return K_mm + self.eps * np.eye(len(landmarks))

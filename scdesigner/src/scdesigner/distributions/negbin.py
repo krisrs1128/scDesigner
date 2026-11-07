@@ -122,6 +122,10 @@ class NegBin(Marginal):
 
     def _initialize_parameters(self, **kwargs):
         initialize_kwargs = _filter_kwargs(kwargs, DEFAULT_ALLOWED_KWARGS['initialize'])
+        if any(spec.penalty.lam > 0 for spec in self.penalties):
+            # We don't use poisson IRLS for regularized models (since that
+            # initialization behaves poorly in high dimensions)
+            initialize_kwargs.setdefault('max_iter', 0)
         beta_init, gamma_init = initialize_parameters(
             self.train_loader, self.n_outcomes, self.feature_dims['mean'],
             self.feature_dims['dispersion'],
