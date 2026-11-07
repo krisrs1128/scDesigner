@@ -181,14 +181,14 @@ def test_glm_predictor_default_lr_and_learning_rate_alias():
     model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")
     model.setup_validation_split(val_frac=0)
     model.setup_optimizer()
-    assert model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.005)
+    assert model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.01)
 
     alias_model = ConstantValidationMarginal()
     alias_model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")
     alias_model.setup_validation_split(val_frac=0) 
     alias_model.setup_optimizer(learning_rate=0.02)
     # learning_rate is not a valid argument and it should not change the lr
-    assert alias_model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.005)
+    assert alias_model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.01)
 
     precedence_model = ConstantValidationMarginal()
     precedence_model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")

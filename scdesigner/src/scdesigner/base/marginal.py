@@ -375,7 +375,7 @@ class Marginal(ABC):
 
     def fit(
         self,
-        max_epochs: int = 500,
+        max_epochs: int = 2000,
         verbose: bool = True,
         val_frac: float = 0.1,
         min_epochs: int = 10,
@@ -708,7 +708,7 @@ class GLMPredictor(nn.Module):
         self.to(get_device(device))
 
         optimizer_kwargs = dict(optimizer_kwargs or {})
-        optimizer_kwargs.setdefault("lr", 0.005)
+        optimizer_kwargs.setdefault("lr", 0.01)
         filtered_kwargs = _filter_kwargs(
             optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer']
         )
@@ -825,7 +825,7 @@ class EQTLPredictor(nn.Module):
         self.to(get_device(device))
 
         optimizer_kwargs = dict(optimizer_kwargs or {})
-        optimizer_kwargs.setdefault("lr", 0.005)
+        optimizer_kwargs.setdefault("lr", 0.01)
         filtered_kwargs = _filter_kwargs(
             optimizer_kwargs, DEFAULT_ALLOWED_KWARGS['optimizer']
         )
