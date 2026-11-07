@@ -15,18 +15,20 @@ import torch
 from anndata import AnnData
 
 from scdesigner.data.loader import adata_loader
-from scdesigner.distributions import ZeroInflatedNegBin, ZeroInflatedPoisson
-from scdesigner.distributions.negbin_irls_funs import initialize_parameters
-from scdesigner.distributions.zero_inflated_negbin_funs import (
-    _initialize_zi_intercept_nb as zinb_intercept,
+from scdesigner.distributions import (
+    ZeroInflatedNegBin,
+    ZeroInflatedPoisson,
+    ZeroInflatedTruncatedGaussian,
 )
-from scdesigner.distributions.zero_inflated_poisson_funs import (
-    _initialize_zi_intercept as zip_intercept,
-)
+from scdesigner.distributions import negbin_irls_funs as irls
+from scdesigner.distributions import zero_inflated_negbin_funs as zinb
+from scdesigner.distributions import zero_inflated_poisson_funs as zip_
+from scdesigner.distributions import zero_inflated_truncated_gaussian_funs as zitg
 
 MODELS = [
     (ZeroInflatedPoisson, ["mean", "zero_inflation"]),
     (ZeroInflatedNegBin, ["mean", "dispersion", "zero_inflation"]),
+    (ZeroInflatedTruncatedGaussian, ["mean", "sdev", "zero_inflation"]),
 ]
 
 
@@ -66,9 +68,9 @@ def test_intercept_scans_do_not_move_batches_to_cpu(monkeypatch):
     raise. Instead, record every explicit request to move a tensor to the CPU.
     """
     adata = make_adata()
-    formula = {key: "~ 1" for key in ["mean", "dispersion", "zero_inflation"]}
+    formula = {key: "~ 1" for key in ["mean", "dispersion", "sdev", "zero_inflation"]}
     loader = adata_loader(adata, formula, batch_size=64, device="cpu")
-    beta, gamma = initialize_parameters(loader, adata.n_vars, 1, 1, max_iter=2)
+    beta, gamma = irls.initialize_parameters(loader, adata.n_vars, 1, 1, max_iter=2)
 
     to = torch.Tensor.to
     cpu_moves = []
@@ -80,7 +82,8 @@ def test_intercept_scans_do_not_move_batches_to_cpu(monkeypatch):
         return to(tensor, *args, **kwargs)
 
     monkeypatch.setattr(torch.Tensor, "to", record)
-    zip_intercept(loader, beta, adata.n_vars)
-    zinb_intercept(loader, beta, gamma, adata.n_vars)
+    zip_._initialize_zi_intercept(loader, beta, adata.n_vars)
+    zinb._initialize_zi_intercept_nb(loader, beta, gamma, adata.n_vars)
+    zitg._initialize_zitg_intercepts(loader, adata.n_vars)
 
     assert not cpu_moves, f"scans moved tensors to the CPU {len(cpu_moves)} times"
