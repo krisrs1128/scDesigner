@@ -17,19 +17,19 @@ def _initialize_zi_intercept_nb(loader, beta_mean, gamma_disp, n_genes):
     NB has expected zero fraction P(Y=0 | mu, r) = (r/(r+mu))^r. Besides this,
     uses the same logic as zero_inflated_poisson_funs.py
     """
-    zero_counts = torch.zeros(n_genes)
-    expected_zero_sum = torch.zeros(n_genes)
+    zero_counts = torch.zeros(n_genes, device=beta_mean.device)
+    expected_zero_sum = torch.zeros(n_genes, device=beta_mean.device)
     n_cells = 0
 
     for i, (y_batch, x_batch) in enumerate(loader):
         if i >= _MAX_INIT_BATCHES:
             break
-        if i == 0 and not _is_intercept_column(x_batch["zero_inflation"].to("cpu")[:, 0]):
-            return torch.zeros(n_genes)
+        if i == 0 and not _is_intercept_column(x_batch["zero_inflation"][:, 0]):
+            return torch.zeros(n_genes, device=beta_mean.device)
 
-        mu_hat = torch.exp(x_batch["mean"].to("cpu") @ beta_mean)
-        r_hat = torch.exp(x_batch["dispersion"].to("cpu") @ gamma_disp)
-        zero_counts += (y_batch.to("cpu") == 0).float().sum(dim=0)
+        mu_hat = torch.exp(x_batch["mean"] @ beta_mean)
+        r_hat = torch.exp(x_batch["dispersion"] @ gamma_disp)
+        zero_counts += (y_batch == 0).float().sum(dim=0)
         expected_zero_sum += (r_hat / (r_hat + mu_hat)).pow(r_hat).sum(dim=0)
         n_cells += y_batch.shape[0]
 
