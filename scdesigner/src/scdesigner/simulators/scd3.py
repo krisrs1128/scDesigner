@@ -122,6 +122,16 @@ class SCD3Simulator(Simulator, ABC):
         self.parameters = None
         self._base_penalties = tuple(marginal.penalties)
 
+    def _loader_kwargs(self, kwargs: dict) -> dict:
+        """Build loader options that always use the marginal's device."""
+        return {**kwargs, "device": self.marginal.device}
+
+    def to(self, device):
+        """Move the marginal and copula state to ``device``."""
+        self.marginal.to(device)
+        self.copula.to(device)
+        return self
+
     def fit(
         self,
         adata: AnnData,
@@ -154,9 +164,7 @@ class SCD3Simulator(Simulator, ABC):
         **kwargs
             Additional keyword arguments forwarded to the marginal fit routine
             and to both components' data setup (e.g. ``batch_size``,
-            ``chunk_size``, optimization settings). Copula settings like
-            ``estimator`` and ``top_k`` are given when the simulator is
-            constructed, not here.
+            ``chunk_size``, optimization settings).
 
         Notes
         -----
@@ -165,6 +173,7 @@ class SCD3Simulator(Simulator, ABC):
         once on ``adata.obs`` and reused by :meth:`predict`, :meth:`sample`
         and :meth:`complexity`.
         """
+        kwargs = self._loader_kwargs(kwargs)
         self.template = adata
 
         # fit the observation transform; its columns are generated per chunk
@@ -222,6 +231,7 @@ class SCD3Simulator(Simulator, ABC):
             containing the predicted marginal parameters.
         """
         # prepare an internal data loader for this obs
+        kwargs = self._loader_kwargs(kwargs)
         if obs is None:
             obs = self.template.obs
         loader = obs_loader(obs, self.marginal.design, batch_size=batch_size, **kwargs)
@@ -258,6 +268,7 @@ class SCD3Simulator(Simulator, ABC):
             An :class:`AnnData` object with simulated counts in ``.X`` and
             ``obs`` equal to the provided covariate table.
         """
+        kwargs = self._loader_kwargs(kwargs)
         if obs is None:
             obs = self.template.obs
         loader = obs_loader(obs, self.copula.design, batch_size=batch_size, **kwargs)
@@ -292,6 +303,7 @@ class SCD3Simulator(Simulator, ABC):
             Dictionary with keys ``"aic"`` and ``"bic"`` computed from the
             copula log-likelihood and :meth:`copula.num_params`.
         """
+        kwargs = self._loader_kwargs(kwargs)
         use_template_ll = False
         if adata is None:
             use_template_ll = True
@@ -362,8 +374,11 @@ class NegBinCopula(SCD3Simulator):
         copula_formula: Optional[str] = "~ 1",
         estimator=None,
         top_k: Optional[int] = None,
+        device: Optional[torch.device | str] = None,
     ) -> None:
-        marginal = NegBin({"mean": mean_formula, "dispersion": dispersion_formula})
+        marginal = NegBin(
+            {"mean": mean_formula, "dispersion": dispersion_formula}, device=device
+        )
         copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
@@ -448,6 +463,7 @@ class NegBinEQTLCopula(SCD3Simulator):
         donor_col: str,
         dosage,
         snp_map,
+        device: Optional[torch.device | str] = None,
         **marginal_kwargs,
     ) -> None:
         formula = {"mean": mean_formula, "dispersion": dispersion_formula}
@@ -459,6 +475,7 @@ class NegBinEQTLCopula(SCD3Simulator):
             donor_col=donor_col,
             dosage=dosage,
             snp_map=snp_map,
+            device=device,
             **marginal_kwargs,
         )
         super().__init__(marginal, StandardCopula(copula_formula))
@@ -469,28 +486,23 @@ class NegBinEQTLCopula(SCD3Simulator):
             X=adata.X, obs=self.marginal._augment_obs(adata.obs), var=adata.var
         )
 
-    def _with_device(self, kwargs: dict) -> dict:
-        """Match the loader device with the marginal's."""
-        kwargs.setdefault("device", self.marginal.device)
-        return kwargs
-
     def fit(self, adata: AnnData, **kwargs):
-        return super().fit(self._augment_adata(adata), **self._with_device(kwargs))
+        return super().fit(self._augment_adata(adata), **kwargs)
 
     def predict(self, obs=None, **kwargs):
         if obs is not None:
             obs = self.marginal._augment_obs(obs)
-        return super().predict(obs=obs, **self._with_device(kwargs))
+        return super().predict(obs=obs, **kwargs)
 
     def sample(self, obs=None, **kwargs):
         if obs is not None:
             obs = self.marginal._augment_obs(obs)
-        return super().sample(obs=obs, **self._with_device(kwargs))
+        return super().sample(obs=obs, **kwargs)
 
     def complexity(self, adata: AnnData = None, **kwargs):
         if adata is not None:
             adata = self._augment_adata(adata)
-        return super().complexity(adata, **self._with_device(kwargs))
+        return super().complexity(adata, **kwargs)
 
 
 class ZeroInflatedNegBinCopula(SCD3Simulator):
@@ -539,13 +551,15 @@ class ZeroInflatedNegBinCopula(SCD3Simulator):
         copula_formula: Optional[str] = "~ 1",
         estimator=None,
         top_k: Optional[int] = None,
+        device: Optional[torch.device | str] = None,
     ) -> None:
         marginal = ZeroInflatedNegBin(
             {
                 "mean": mean_formula,
                 "dispersion": dispersion_formula,
                 "zero_inflation": zero_inflation_formula,
-            }
+            },
+            device=device,
         )
         copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
@@ -586,8 +600,9 @@ class BernoulliCopula(SCD3Simulator):
         copula_formula: Optional[str] = "~ 1",
         estimator=None,
         top_k: Optional[int] = None,
+        device: Optional[torch.device | str] = None,
     ) -> None:
-        marginal = Bernoulli({"mean": mean_formula})
+        marginal = Bernoulli({"mean": mean_formula}, device=device)
         copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
@@ -631,8 +646,9 @@ class GaussianCopula(SCD3Simulator):
         copula_formula: Optional[str] = "~ 1",
         estimator=None,
         top_k: Optional[int] = None,
+        device: Optional[torch.device | str] = None,
     ) -> None:
-        marginal = Gaussian({"mean": mean_formula, "sdev": sdev_formula})
+        marginal = Gaussian({"mean": mean_formula, "sdev": sdev_formula}, device=device)
         copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
@@ -672,8 +688,9 @@ class PoissonCopula(SCD3Simulator):
         copula_formula: Optional[str] = "~ 1",
         estimator=None,
         top_k: Optional[int] = None,
+        device: Optional[torch.device | str] = None,
     ) -> None:
-        marginal = Poisson({"mean": mean_formula})
+        marginal = Poisson({"mean": mean_formula}, device=device)
         copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
 
@@ -730,6 +747,7 @@ class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
         prior_alpha: float = 1.1,
         estimator=None,
         top_k: Optional[int] = None,
+        device: Optional[torch.device | str] = None,
     ) -> None:
         marginal = ZeroInflatedTruncatedGaussian(
             {
@@ -738,6 +756,7 @@ class ZeroInflatedTruncatedGaussianCopula(SCD3Simulator):
                 "zero_inflation": zero_inflation_formula,
             },
             prior_alpha=prior_alpha,
+            device=device,
         )
         copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
@@ -782,9 +801,11 @@ class ZeroInflatedPoissonCopula(SCD3Simulator):
         copula_formula: Optional[str] = "~ 1",
         estimator=None,
         top_k: Optional[int] = None,
+        device: Optional[torch.device | str] = None,
     ) -> None:
         marginal = ZeroInflatedPoisson(
-            {"mean": mean_formula, "zero_inflation": zero_inflation_formula}
+            {"mean": mean_formula, "zero_inflation": zero_inflation_formula},
+            device=device,
         )
         copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
         super().__init__(marginal, copula)
