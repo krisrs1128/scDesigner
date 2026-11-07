@@ -102,7 +102,7 @@ class ScriptedValidationMarginal(ConstantValidationMarginal):
 def test_validation_split_keeps_full_loader_and_is_deterministic():
     adata = _adata(n_obs=12)
     model = ConstantValidationMarginal()
-    model.setup_data(adata, batch_size=4, device="cpu")
+    model.setup_data(adata, batch_size=4)
     model.setup_validation_split(val_frac=0.25, validation_seed=42)
 
     assert len(model.loader.dataset) == 12
@@ -113,7 +113,7 @@ def test_validation_split_keeps_full_loader_and_is_deterministic():
     )
 
     model_same_seed = ConstantValidationMarginal()
-    model_same_seed.setup_data(adata, batch_size=4, device="cpu")
+    model_same_seed.setup_data(adata, batch_size=4)
     model_same_seed.setup_validation_split(val_frac=0.25, validation_seed=42)
 
     np.testing.assert_array_equal(
@@ -128,7 +128,7 @@ def test_validation_split_keeps_full_loader_and_is_deterministic():
 
 def test_early_stopping_waits_until_min_epochs():
     model = ConstantValidationMarginal()
-    model.setup_data(_adata(n_obs=20), batch_size=5, device="cpu")
+    model.setup_data(_adata(n_obs=20), batch_size=5)
 
     model.fit(
         max_epochs=20,
@@ -148,7 +148,7 @@ def test_early_stopping_waits_until_min_epochs():
 
 def test_loss_tol_is_relative_to_best_validation_loss():
     model = ScriptedValidationMarginal([1.0, 0.99995, 0.9998])
-    model.setup_data(_adata(n_obs=20), batch_size=5, device="cpu")
+    model.setup_data(_adata(n_obs=20), batch_size=5)
 
     model.fit(
         max_epochs=3,
@@ -166,7 +166,7 @@ def test_loss_tol_is_relative_to_best_validation_loss():
 
 def test_val_frac_zero_preserves_full_data_training():
     model = ConstantValidationMarginal()
-    model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")
+    model.setup_data(_adata(n_obs=8), batch_size=4)
 
     model.fit(max_epochs=3, val_frac=0, verbose=False)
 
@@ -178,20 +178,20 @@ def test_val_frac_zero_preserves_full_data_training():
 
 def test_glm_predictor_default_lr_and_learning_rate_alias():
     model = ConstantValidationMarginal()
-    model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")
+    model.setup_data(_adata(n_obs=8), batch_size=4)
     model.setup_validation_split(val_frac=0)
     model.setup_optimizer()
     assert model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.01)
 
     alias_model = ConstantValidationMarginal()
-    alias_model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")
+    alias_model.setup_data(_adata(n_obs=8), batch_size=4)
     alias_model.setup_validation_split(val_frac=0) 
     alias_model.setup_optimizer(learning_rate=0.02)
     # learning_rate is not a valid argument and it should not change the lr
     assert alias_model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.01)
 
     precedence_model = ConstantValidationMarginal()
-    precedence_model.setup_data(_adata(n_obs=8), batch_size=4, device="cpu")
+    precedence_model.setup_data(_adata(n_obs=8), batch_size=4)
     precedence_model.setup_validation_split(val_frac=0)
     precedence_model.setup_optimizer(lr=0.03, learning_rate=0.02)
     assert precedence_model.predict.optimizer.param_groups[0]["lr"] == pytest.approx(0.03)
@@ -199,7 +199,7 @@ def test_glm_predictor_default_lr_and_learning_rate_alias():
 
 def test_initializer_hook_runs_after_validation_split():
     model = RecordingInitializerMarginal()
-    model.setup_data(_adata(n_obs=20), batch_size=5, device="cpu")
+    model.setup_data(_adata(n_obs=20), batch_size=5)
 
     model.fit(max_epochs=1, val_frac=0.25, verbose=False)
 
@@ -228,12 +228,13 @@ def test_object_covariates_keep_stable_chunk_design_columns():
 
 def test_poisson_copula_smoke_fit_with_early_stopping():
     adata = _adata(n_obs=30, n_vars=4)
-    sim = PoissonCopula(mean_formula="~ group", copula_formula="~ 1", top_k=2)
+    sim = PoissonCopula(
+        mean_formula="~ group", copula_formula="~ 1", top_k=2, device="cpu"
+    )
 
     sim.fit(
         adata,
         batch_size=10,
-        device="cpu",
         max_epochs=6,
         val_frac=0.2,
         min_epochs=2,
@@ -257,12 +258,12 @@ def test_negbin_copula_smoke_fit_with_early_stopping():
         dispersion_formula="~ 1",
         copula_formula="~ 1",
         top_k=2,
+        device="cpu",
     )
 
     sim.fit(
         adata,
         batch_size=10,
-        device="cpu",
         max_epochs=4,
         val_frac=0.2,
         min_epochs=2,
@@ -327,7 +328,6 @@ def test_composite_copula_smoke_fit_with_early_stopping():
     sim.fit(
         adata,
         batch_size=10,
-        device="cpu",
         max_epochs=4,
         val_frac=0.2,
         min_epochs=2,

@@ -1,7 +1,7 @@
 """Composite simulator that combines multiple marginals with a Gaussian copula.
 
 This module provides :class:`CompositeCopula`, a simulator that fits several
-marginal models and then couples their dependence structure with a 
+marginal models and then couples their dependence structure with a
 :class:`~scdesigner.copulas.StandardCopula`.
 """
 
@@ -102,6 +102,17 @@ class CompositeCopula(SCD3Simulator):
         self.parameters = None
         self.merged_formula = None
 
+    def _loader_kwargs(self, kwargs: dict) -> dict:
+        """Build loader options from the shared component device."""
+        return {**kwargs, "device": self.marginals[0][1].device}
+
+    def to(self, device):
+        """Move each component model to the ``device``."""
+        for _, marginal in self.marginals:
+            marginal.to(device)
+        self.copula.to(device)
+        return self
+
     def fit(
         self,
         adata: AnnData,
@@ -137,6 +148,7 @@ class CompositeCopula(SCD3Simulator):
             Copula settings like ``estimator`` and ``top_k`` are given when the
             simulator is constructed, not here.
         """
+        kwargs = self._loader_kwargs(kwargs)
         self.template = adata
         merged_formula = {}
 
@@ -215,6 +227,7 @@ class CompositeCopula(SCD3Simulator):
             parameter names to numpy arrays, concatenated across batches.
         """
         # prepare an internal data loader for this obs
+        kwargs = self._loader_kwargs(kwargs)
         if obs is None:
             obs = self.template.obs
         loader = obs_loader(obs, self.copula.design, batch_size=batch_size, **kwargs)

@@ -143,8 +143,6 @@ class NegBinEQTL(NegBin):
             order = np.argsort(new_obs["_donor_code"].values, kind="stable")
             adata = adata[order].copy()
 
-        # Make sure to match the device with the overall marginal model
-        kwargs.setdefault("device", self.device)
         super().setup_data(adata, batch_size=batch_size, **kwargs)
 
     def _subset_loader(self, indices, training: bool):

@@ -137,6 +137,12 @@ class Copula(ABC):
         X_batch, _ = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
 
+    def to(self, device):
+        """Move loaded data to ``device``"""
+        if self.loader is not None:
+            self.loader.dataset.to(device)
+        return self
+
     def decorrelate(self, row_pattern: str, col_pattern: str, group: Union[str, list, None] = None):
         """
         Decorrelate the covariance matrix for the given row and column patterns.

@@ -18,26 +18,26 @@ def _initialize_zitg_intercepts(loader, n_genes):
     (n_genes,) tensors. If the first batch has no intercept column for a head,
     the corresponding intercept is left at zero.
     """
-    sum_y = torch.zeros(n_genes)
-    sum_y2 = torch.zeros(n_genes)
-    n_nonzero = torch.zeros(n_genes)
-    n_zero = torch.zeros(n_genes)
+    device = next(iter(loader))[0].device
+    sum_y = torch.zeros(n_genes, device=device)
+    sum_y2 = torch.zeros(n_genes, device=device)
+    n_nonzero = torch.zeros(n_genes, device=device)
+    n_zero = torch.zeros(n_genes, device=device)
 
     has_intercept = {"mean": True, "sdev": True, "zero_inflation": True}
     for i, (y_batch, x_batch) in enumerate(loader):
         if i >= _MAX_INIT_BATCHES:
             break
-        y = y_batch.to("cpu")
         if i == 0:
             for k in has_intercept:
                 if k in x_batch:
-                    has_intercept[k] = _is_intercept_column(x_batch[k].to("cpu")[:, 0])
+                    has_intercept[k] = _is_intercept_column(x_batch[k][:, 0])
 
-        nz_mask = (y != 0).float()
+        nz_mask = (y_batch != 0).float()
         n_nonzero += nz_mask.sum(dim=0)
         n_zero += (1 - nz_mask).sum(dim=0)
-        sum_y += (y * nz_mask).sum(dim=0)
-        sum_y2 += ((y ** 2) * nz_mask).sum(dim=0)
+        sum_y += (y_batch * nz_mask).sum(dim=0)
+        sum_y2 += ((y_batch ** 2) * nz_mask).sum(dim=0)
 
     n_total = n_nonzero + n_zero
     nz_safe = n_nonzero.clamp(min=1)
@@ -49,10 +49,10 @@ def _initialize_zitg_intercepts(loader, n_genes):
     logit_pi = torch.log(zero_frac / (1 - zero_frac)).clamp(*_LOGIT_PI_CLAMP)
 
     if not has_intercept["mean"]:
-        gene_mean = torch.zeros(n_genes)
+        gene_mean = torch.zeros(n_genes, device=device)
     if not has_intercept["sdev"]:
-        log_sdev = torch.zeros(n_genes)
+        log_sdev = torch.zeros(n_genes, device=device)
     if not has_intercept["zero_inflation"]:
-        logit_pi = torch.zeros(n_genes)
+        logit_pi = torch.zeros(n_genes, device=device)
 
     return gene_mean, log_sdev, logit_pi

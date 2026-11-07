@@ -78,6 +78,14 @@ class PreloadedDataset(Dataset):
         idx = torch.as_tensor(indices, device=self.y.device)
         return self.y[idx], {k: v[idx] for k, v in self.x.items()}
 
+    def to(self, device):
+        """Move preloaded responses and design matrices to ``device``."""
+        device = get_device(device)
+        self.y = self.y.to(device)
+        self.x = {key: value.to(device) for key, value in self.x.items()}
+        return self
+
+
 class AnnDataDataset(Dataset):
     """PyTorch dataset over AnnData rows, reading one chunk of rows at a time.
 
@@ -162,6 +170,16 @@ class AnnDataDataset(Dataset):
             for key, mat in self.design.matrices(self.adata.obs.iloc[start:stop]).items()
         }
         self._chunk_start, self._chunk_stop = start, stop
+
+    def to(self, device):
+        """Move cached chunk data and use ``device`` for future chunks."""
+        self.device = get_device(device)
+        if self._chunk_X is not None:
+            self._chunk_X = self._chunk_X.to(self.device)
+        self.obs_matrices = {
+            key: value.to(self.device) for key, value in self.obs_matrices.items()
+        }
+        return self
 
 
 def resolve_chunk_size(adata: AnnData, chunk_size: Optional[int]) -> Optional[int]:

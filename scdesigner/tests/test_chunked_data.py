@@ -27,7 +27,7 @@ from scdesigner.simulators import NegBinCopula, SpatialNegBinCopula
 STORAGE = {"dense": np.asarray, "csr": sp.csr_matrix, "csc": sp.csc_matrix}
 BACKED = ("dense", "csr")
 FIT = dict(chunk_size=7, batch_size=10, max_epochs=2, max_iter=1, val_frac=0.25,
-           verbose=False, device="cpu")
+           verbose=False)
 
 
 @contextmanager
@@ -136,7 +136,7 @@ def test_backed_csc_is_rejected_and_in_memory_csc_is_read(spatial_counts, tmp_pa
 def test_csr_response_reads_are_bounded(spatial_counts, tmp_path, monkeypatch):
     with backed_copy(spatial_counts, "csr", tmp_path) as data:
         reads = record_payload_reads(monkeypatch, data)
-        fit_spatial(data).complexity(data, device="cpu")
+        fit_spatial(data).complexity(data)
     assert reads and max(reads) <= 7 * data.n_vars
 
 
@@ -182,7 +182,7 @@ def test_chunked_spatial_fit_builds_no_full_design_or_kernel(spatial_counts, mon
 
     monkeypatch.setattr(ModelSpec, "get_model_matrix", recorded_evaluate)
     monkeypatch.setattr(GPBasis, "_kernel", recorded_kernel)
-    fit_spatial(spatial_counts).complexity(device="cpu")
+    fit_spatial(spatial_counts).complexity()
     assert max(design_rows) <= 7 and max(kernel_rows) <= 7
 
 
@@ -203,7 +203,7 @@ def test_chunked_split_keeps_membership_and_reads_rows_in_order(spatial_counts, 
     splits = {}
     for chunk_size in (None, 7):
         model = NegBin({"mean": "~ batch", "dispersion": "~ 1"}, device="cpu")
-        model.setup_data(spatial_counts, batch_size=5, chunk_size=chunk_size, device="cpu")
+        model.setup_data(spatial_counts, batch_size=5, chunk_size=chunk_size)
         model.setup_validation_split(val_frac=0.25, validation_seed=3)
         splits[chunk_size] = model
     preloaded, chunked = splits[None], splits[7]
@@ -225,8 +225,8 @@ def test_chunked_split_keeps_membership_and_reads_rows_in_order(spatial_counts, 
 def test_setup_data_retains_linearly_dependent_predictors(spatial_counts, chunk_size):
     data = spatial_counts.copy()
     data.obs["double"] = 2 * data.obs["spatial1"]
-    model = NegBin({"mean": "~ spatial1 + double"})
-    model.setup_data(data, chunk_size=chunk_size, device="cpu")
+    model = NegBin({"mean": "~ spatial1 + double"}, device="cpu")
+    model.setup_data(data, chunk_size=chunk_size)
     matrix = model.design.matrices(data.obs)["mean"]
     assert list(matrix.columns) == ["Intercept", "spatial1", "double"]
     np.testing.assert_array_equal(matrix["double"], 2 * matrix["spatial1"])
@@ -236,8 +236,11 @@ def test_chunked_and_preloaded_fits_agree_on_designs_and_parameters(spatial_coun
     data = spatial_counts[np.argsort(spatial_counts.obs["spatial1"].to_numpy())].copy()
     fits = {}
     for chunk_size in (None, 7):
-        sim = NegBinCopula(mean_formula="~ batch + bs(spatial1, df=4)", copula_formula="~ batch")
-        sim.marginal.device = torch.device("cpu")
+        sim = NegBinCopula(
+            mean_formula="~ batch + bs(spatial1, df=4)",
+            copula_formula="~ batch",
+            device="cpu",
+        )
         torch.manual_seed(0)
         sim.fit(data, **{**FIT, "chunk_size": chunk_size, "val_frac": 0})
         fits[chunk_size] = sim
@@ -248,8 +251,8 @@ def test_chunked_and_preloaded_fits_agree_on_designs_and_parameters(spatial_coun
         assert first.predictor_names == second.predictor_names
         for key, matrix in first.matrices(data.obs).items():
             np.testing.assert_allclose(second.matrices(data.obs)[key], matrix, atol=1e-12)
-    for name, value in preloaded.predict(device="cpu").items():
-        np.testing.assert_allclose(chunked.predict(device="cpu")[name], value, rtol=1e-4)
+    for name, value in preloaded.predict().items():
+        np.testing.assert_allclose(chunked.predict()[name], value, rtol=1e-4)
 
 
 @pytest.mark.parametrize("storage", BACKED)
@@ -259,12 +262,12 @@ def test_backed_spatial_fit_matches_memory(spatial_counts, storage, tmp_path):
     query = memory.obs.copy()
     query[["spatial1", "spatial2"]] += 0.25
     memory_sim = fit_spatial(memory)
-    memory_prediction = memory_sim.predict(query, device="cpu")
+    memory_prediction = memory_sim.predict(query)
     with backed_copy(memory, storage, tmp_path) as backed:
         backed_sim = fit_spatial(backed)
-        backed_prediction = backed_sim.predict(query, device="cpu")
-        sample = backed_sim.sample(device="cpu")
-        metrics = backed_sim.complexity(backed, device="cpu")
+        backed_prediction = backed_sim.predict(query)
+        sample = backed_sim.sample()
+        metrics = backed_sim.complexity(backed)
 
     for name in ("mean", "dispersion"):
         np.testing.assert_allclose(backed_prediction[name], memory_prediction[name],
