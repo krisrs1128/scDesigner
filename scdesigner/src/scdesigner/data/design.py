@@ -21,6 +21,25 @@ if TYPE_CHECKING:
 # Calls that can be used in chunk formulas but which don't have state
 CHUNKED_CALLS = {"C", "log"}
 
+
+def clip_extrapolation(transform):
+    """Clip spline inputs beyond the training data range
+
+    By default, the formulaic splines will raise an error if they see an input
+    value beyond the training data range. This can cause problems in our
+    training / validation splits, where pseudotime in validation splits lies
+    beyond the training range. This class overrides that formulaic default.
+    """
+    def wrapper(*args, extrapolation="clip", **kwargs):
+        return transform(*args, extrapolation=extrapolation, **kwargs)
+
+    wrapper.__dict__.update(vars(transform))
+    return wrapper
+
+
+SPLINES = {name: clip_extrapolation(TRANSFORMS[name]) for name in ("bs", "cc", "cr", "cs")}
+
+
 @dataclass
 class FormulaDesign:
     """Fitted state for one formula.
