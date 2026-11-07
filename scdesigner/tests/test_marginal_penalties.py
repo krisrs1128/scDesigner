@@ -60,3 +60,28 @@ def test_reported_validation_loss_is_unpenalized_likelihood():
             loss -= model.likelihood((y, x)).sum().item()
             entries += y.numel()
     assert model.best_validation_loss == pytest.approx(loss / entries)
+
+
+def initialized_effect(model, data, **kwargs):
+    """Coefficient of ``s`` straight after initialization (no optimization steps)."""
+    torch.manual_seed(0)
+    model.setup_data(data, batch_size=40, device="cpu")
+    model.fit(max_epochs=0, val_frac=0, verbose=False, **kwargs)
+    return model.parameters["mean"].loc["s"].to_numpy()
+
+
+def test_penalized_model_starts_from_the_intercept_only_fit():
+    data = counts()
+    formula = {"mean": "~ s", "dispersion": "~ 1"}
+    ordinary = initialized_effect(NegBin(formula.copy(), device="cpu"), data)
+    penalized = initialized_effect(
+        PenalizedNegBin(formula.copy(), penalties=[penalty(1)], device="cpu"), data)
+    assert np.abs(ordinary).max() > 0.5
+    np.testing.assert_array_equal(penalized, 0)
+
+
+def test_explicit_max_iter_overrides_the_penalized_default():
+    penalized = initialized_effect(
+        PenalizedNegBin({"mean": "~ s", "dispersion": "~ 1"}, penalties=[penalty(1)], device="cpu"),
+        counts(), max_iter=10)
+    assert np.abs(penalized).max() > 0.5

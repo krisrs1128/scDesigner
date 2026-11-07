@@ -1,3 +1,5 @@
+import inspect
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,12 +9,13 @@ from anndata import AnnData
 from scdesigner.base.marginal import GLMPredictor, Marginal
 from scdesigner.data.design import fit_design
 from scdesigner.data.loader import AnnDataDataset
-from scdesigner.distributions import Bernoulli, Poisson
+from scdesigner.distributions import Bernoulli, NegBinIRLS, Poisson
 from scdesigner.simulators import (
     CompositeCopula,
     NegBinCopula,
     NegBinIRLSCopula,
     PoissonCopula,
+    SCD3Simulator,
 )
 
 
@@ -336,3 +339,11 @@ def test_composite_copula_smoke_fit_with_early_stopping():
 
     assert [marginal.stopped_epoch for _, marginal in sim.marginals] == [2, 2]
     assert sim.parameters["copula"] is not None
+
+
+@pytest.mark.parametrize(
+    "fit", [Marginal.fit, NegBinIRLS.fit, SCD3Simulator.fit, CompositeCopula.fit],
+    ids=lambda fit: fit.__qualname__,
+)
+def test_patience_defaults_to_forty(fit):
+    assert inspect.signature(fit).parameters["patience"].default == 40

@@ -143,3 +143,19 @@ def test_dense_and_sparse_inputs_give_the_same_predictions(spatial_counts):
     sparse.X = sp.csr_matrix(sparse.X)
     dense_sim, sparse_sim = fit(simulator(), spatial_counts), fit(simulator(), sparse)
     assert_predictions_equal(dense_sim.predict(device="cpu"), sparse_sim.predict(device="cpu"))
+
+
+def test_default_spatial_term_is_a_scale_free_gp_with_100_columns():
+    basis = SpatialNegBinCopula(device="cpu").observation_transform.terms["mean"].basis
+    assert type(basis) is GPBasis
+    assert basis.df == 100
+    assert basis.length_scale is None
+
+
+def test_spatial_fit_starts_from_the_intercept_only_fit(spatial_counts):
+    sim = simulator()
+    np.random.seed(0)
+    torch.manual_seed(0)
+    sim.fit(spatial_counts, max_epochs=0, val_frac=0, batch_size=10, verbose=False, device="cpu")
+    spatial = sim.parameters["marginal"]["mean"].loc[[f"sp_mean_{k}" for k in range(3)]]
+    np.testing.assert_array_equal(spatial.to_numpy(), 0)
