@@ -82,6 +82,19 @@ def test_queries_use_fit_time_state(obs, chunked):
 
 
 @pytest.mark.parametrize("chunked", [False, True])
+@pytest.mark.parametrize("spline", ["bs", "cr"])
+def test_out_of_range_splines_clip_to_fit_boundary(obs, chunked, spline):
+    design = fit_design(obs, {"k": f"~ {spline}(x, df=4)"}, chunked=chunked)
+    lo, hi = obs.x.min(), obs.x.max()
+    query = obs.iloc[:2].copy()
+    query["x"] = [lo - 3.0, hi + 3.0]
+    edges = obs.iloc[:2].copy()
+    edges["x"] = [lo, hi]
+    np.testing.assert_array_equal(design.matrices(query)["k"].to_numpy(),
+                                  design.matrices(edges)["k"].to_numpy())
+
+
+@pytest.mark.parametrize("chunked", [False, True])
 def test_missing_covariates_raise(obs, chunked):
     design = fit_design(obs, {"k": "~ x + ct"}, chunked=chunked)
     for column in ("x", "ct"):
