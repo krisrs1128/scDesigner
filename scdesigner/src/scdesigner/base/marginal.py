@@ -129,8 +129,9 @@ class Marginal(ABC):
         features that are being predicted.
 
     device : torch.device
-        The device on which the prediction module is stored.  This is
-        automatically determined when calling the .fit method.
+        The device (e.g., cpu, mps, cuda) used by the model and data loaders.
+        You can set this when initializing the model and change it with
+        :meth:`to`.
 
     Examples
     --------
@@ -179,6 +180,10 @@ class Marginal(ABC):
         self.predictor_names = None
         self.parameters = None
         self.device = get_device(device)
+
+    ##########################################################################
+    ## data loading helpers
+    ##########################################################################
 
     def setup_data(
         self,
@@ -233,6 +238,7 @@ class Marginal(ABC):
             adata.obs, self.formula, transform=observation_transform,
             chunked=resolve_chunk_size(adata, chunk_size) is not None,
         )
+        kwargs["device"] = self.device
         self.loader = adata_loader(
             adata, self.design, chunk_size=chunk_size, batch_size=batch_size, **kwargs
         )
@@ -316,6 +322,34 @@ class Marginal(ABC):
             persistent_workers=self.loader.persistent_workers,
         )
 
+    ##########################################################################
+    ## device managmeent
+    ##########################################################################
+    @staticmethod
+    def _move_tensors(value, device):
+        if torch.is_tensor(value):
+            return value.to(device)
+        if isinstance(value, dict):
+            return {key: Marginal._move_tensors(item, device) for key, item in value.items()}
+        if isinstance(value, list):
+            return [Marginal._move_tensors(item, device) for item in value]
+        if isinstance(value, tuple):
+            return tuple(Marginal._move_tensors(item, device) for item in value)
+        return value
+
+    def to(self, device):
+        """Move the predictor, optimizer state, and loaded data to ``device``."""
+        self.device = get_device(device)
+        if self.predict is not None:
+            self.predict.to(self.device)
+            optimizer = getattr(self.predict, "optimizer", None)
+            if optimizer is not None:
+                for parameter, state in optimizer.state.items():
+                    optimizer.state[parameter] = self._move_tensors(state, self.device)
+        if self.loader is not None:
+            self.loader.dataset.to(self.device)
+        return self
+
     def _move_batch_to_device(self, batch):
         y, x = batch
         if y.device != self.device:
@@ -323,6 +357,9 @@ class Marginal(ABC):
             x = {k: v.to(self.device) for k, v in x.items()}
         return y, x
 
+    ##########################################################################
+    ## early stopping checks
+    ##########################################################################
     def _validation_loss(self) -> Optional[float]:
         if self.validation_loader is None:
             return None
@@ -373,6 +410,9 @@ class Marginal(ABC):
         if patience < 0:
             raise ValueError("patience must be nonnegative")
 
+    ##########################################################################
+    ## estimate model coefficients
+    ##########################################################################
     def fit(
         self,
         max_epochs: int = 500,
@@ -537,6 +577,10 @@ class Marginal(ABC):
             raise ValueError("fit_history is empty. Call fit() before accessing fit_history_df.")
         return pd.DataFrame(self.fit_history)
 
+    ##########################################################################
+    ## printing and summarizing model fits
+    ##########################################################################
+
     def format_parameters(self):
         """Convert fitted coefficient tensors into pandas DataFrames.
 
@@ -568,6 +612,10 @@ class Marginal(ABC):
         if self.predict is None:
             return 0
         return sum(p.numel() for p in self.predict.parameters() if p.requires_grad)
+
+    ##########################################################################
+    ## optimizer and sampling helpers
+    ##########################################################################
 
     @abstractmethod
     def setup_optimizer(self, **kwargs):
