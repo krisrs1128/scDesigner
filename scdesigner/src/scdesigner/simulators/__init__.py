@@ -17,8 +17,10 @@ from .positive_nonnegative_matrix_factorization import PositiveNMF
 from .recipes import (
     PenalizedBernoulliCopula,
     PenalizedNegBinCopula,
+    PenalizedZeroInflatedTruncatedGaussianCopula,
     SpatialBernoulliCopula,
     SpatialNegBinCopula,
+    SpatialZeroInflatedTruncatedGaussianCopula,
     spatial_copula,
 )
 
@@ -31,11 +33,13 @@ __all__ = [
     "NegBinIRLSCopula",
     "PenalizedBernoulliCopula",
     "PenalizedNegBinCopula",
+    "PenalizedZeroInflatedTruncatedGaussianCopula",
     "PoissonCopula",
     "PositiveNMF",
     "SCD3Simulator",
     "SpatialBernoulliCopula",
     "SpatialNegBinCopula",
+    "SpatialZeroInflatedTruncatedGaussianCopula",
     "spatial_copula",
     "ZeroInflatedTruncatedGaussianCopula",
     "ZeroInflatedNegBinCopula",
