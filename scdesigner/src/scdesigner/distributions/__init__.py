@@ -11,6 +11,7 @@ from .zero_inflated_poisson import ZeroInflatedPoisson
 from .zero_inflated_truncated_gaussian import ZeroInflatedTruncatedGaussian
 from .penalized_negbin import PenalizedNegBin
 from .penalized_bernoulli import PenalizedBernoulli
+from .penalized_zero_inflated_truncated_gaussian import PenalizedZeroInflatedTruncatedGaussian
 
 __all__ = [
     "Bernoulli",
@@ -20,6 +21,7 @@ __all__ = [
     "NegBinIRLS",
     "PenalizedBernoulli",
     "PenalizedNegBin",
+    "PenalizedZeroInflatedTruncatedGaussian",
     "Poisson",
     "ZeroInflatedTruncatedGaussian",
     "ZeroInflatedNegBin",
