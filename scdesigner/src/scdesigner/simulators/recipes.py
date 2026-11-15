@@ -7,9 +7,12 @@ from ..base.copula import Copula
 from ..copulas.standard_copula import StandardCopula
 from ..data.basis import GPBasis, TPSBasis
 from ..data.spatial import SpatialDesign, SpatialTerm
-from ..distributions import NegBin, Bernoulli
+from ..distributions import NegBin, Bernoulli, ZeroInflatedTruncatedGaussian
 from ..distributions.penalized_negbin import PenalizedNegBin
 from ..distributions.penalized_bernoulli import PenalizedBernoulli
+from ..distributions.penalized_zero_inflated_truncated_gaussian import (
+    PenalizedZeroInflatedTruncatedGaussian,
+)
 from ..distributions.penalties import CoefficientPenalty, QuadraticPenalty
 from .output import ObservedMaxCap
 from .scd3 import SCD3Simulator
@@ -18,7 +21,7 @@ BASES = {"gp": GPBasis, "tps": TPSBasis}
 
 
 def spatial_copula(
-    marginal: NegBin | Bernoulli,
+    marginal: NegBin | Bernoulli | ZeroInflatedTruncatedGaussian,
     terms: Mapping[str, SpatialTerm],
     *,
     copula: Optional[Copula] = None,
@@ -34,7 +37,7 @@ def spatial_copula(
 
     Parameters
     ----------
-    marginal : NegBin or Bernoulli
+    marginal : NegBin, Bernoulli, or ZeroInflatedTruncatedGaussian
         Copied; its formula and penalties are the nonspatial base.
     terms : mapping of str to SpatialTerm
         Term per marginal parameter; see
@@ -43,7 +46,7 @@ def spatial_copula(
         Copied. Defaults to ``StandardCopula("~ 1")``.
     spatial_cols : tuple of str
     cap_at_observed_max : bool
-        Cap sampled counts with
+        Cap samples with
         :class:`~scdesigner.simulators.output.ObservedMaxCap`. In earlier
         experiments, we found that this prevented extreme outliers that happen
         in high-dimensional negbin models. Must be False for Bernoulli marginals.
@@ -57,8 +60,11 @@ def spatial_copula(
     >>> sim = spatial_copula(NegBin({"mean": "~ 1", "dispersion": "~ 1"}), {"mean": term})
     >>> sim.fit(adata)  # doctest: +SKIP
     """
-    if type(marginal) not in (NegBin, Bernoulli):
-        raise NotImplementedError("spatial_copula currently supports only NegBin and Bernoulli marginals.")
+    if type(marginal) not in (NegBin, Bernoulli, ZeroInflatedTruncatedGaussian):
+        raise NotImplementedError(
+            "spatial_copula currently supports only NegBin, Bernoulli, and "
+            "ZeroInflatedTruncatedGaussian marginals."
+        )
 
     marginal = copy.deepcopy(marginal)
     copula = StandardCopula("~ 1") if copula is None else copy.deepcopy(copula)
@@ -207,6 +213,101 @@ def SpatialBernoulliCopula(
     return spatial_copula(marginal, terms, copula=copula, spatial_cols=spatial_cols)
 
 
+def SpatialZeroInflatedTruncatedGaussianCopula(
+    mean_formula: str = "~ 1",
+    sdev_formula: str = "~ 1",
+    zero_inflation_formula: str = "~ 1",
+    copula_formula: str = "~ 1",
+    *,
+    mean_df: int = 100,
+    sdev_df: Optional[int] = None,
+    zi_df: Optional[int] = 15,
+    basis: str = "gp",
+    standardize: bool = True,
+    lam: float = 1.0,
+    lam_sdev: float = 1.0,
+    lam_zi: float = 1.0,
+    prior_alpha: float = 1.1,
+    spatial_cols: Tuple[str, str] = ("spatial1", "spatial2"),
+    cap_at_observed_max: bool = False,
+    estimator=None,
+    top_k: Optional[int] = None,
+    device=None,
+    **basis_kwargs,
+) -> SCD3Simulator:
+    """A zero-inflated truncated gaussian model for spatial data
+
+    This applies :func:`spatial_copula` to a
+    :class:`ZeroInflatedTruncatedGaussian` marginal. It is appropriate for
+    spatial modeling of already normalized data. The spatial coordinates can
+    enter into the mean, dispersion, or zero-inflation parameters.
+
+    Parameters
+    ----------
+    mean_formula, sdev_formula, zero_inflation_formula : str
+        Nonspatial part of each parameter's formula.
+    copula_formula : str
+    mean_df : int
+        Basis columns of the latent-mean term.
+    sdev_df, zi_df : int or None
+        Basis columns of the standard-deviation and zero-inflation terms;
+        ``None`` omits the term. ``zi_df`` is set by default because zeros
+        arise only from the zero-inflation probability.
+    basis : {"gp", "tps"}
+        :class:`GPBasis` or :class:`TPSBasis`, for every term.
+    standardize : bool
+        Divide basis columns by their training standard deviations.
+    lam, lam_sdev, lam_zi : float
+        Penalty strength of each term; see
+        :mod:`scdesigner.distributions.penalties`.
+    prior_alpha : float
+        See :class:`ZeroInflatedTruncatedGaussian`.
+    spatial_cols : tuple of str
+        Coordinate columns of ``adata.obs``.
+    cap_at_observed_max : bool
+        Cap samples with :class:`~scdesigner.simulators.output.ObservedMaxCap`.
+    estimator, top_k
+        Passed to :class:`StandardCopula`.
+    device : torch.device or str, optional
+        Marginal device.
+    **basis_kwargs
+        Passed to every basis, e.g. ``n_landmarks`` or ``length_fraction``.
+
+    Examples
+    --------
+    >>> from scdesigner import datasets
+    >>> sim = SpatialZeroInflatedTruncatedGaussianCopula(
+    ...     spatial_cols=("UMAP1_integrated", "UMAP2_integrated"))
+    >>> sim.fit(datasets.scgemrna())  # doctest: +SKIP
+    """
+
+    def term(df, strength):
+        return SpatialTerm(
+            BASES[basis](df=df, standardize=standardize, **basis_kwargs),
+            QuadraticPenalty(lam=strength, weighting="inverse_mean"),
+        )
+
+    terms = {"mean": term(mean_df, lam)}
+    if sdev_df is not None:
+        terms["sdev"] = term(sdev_df, lam_sdev)
+    if zi_df is not None:
+        terms["zero_inflation"] = term(zi_df, lam_zi)
+
+    marginal = ZeroInflatedTruncatedGaussian(
+        {"mean": mean_formula, "sdev": sdev_formula, "zero_inflation": zero_inflation_formula},
+        prior_alpha=prior_alpha,
+        device=device,
+    )
+    copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
+    return spatial_copula(
+        marginal,
+        terms,
+        copula=copula,
+        spatial_cols=spatial_cols,
+        cap_at_observed_max=cap_at_observed_max,
+    )
+
+
 def PenalizedNegBinCopula(
     mean_formula: str = "~ 1",
     dispersion_formula: str = "~ 1",
@@ -288,3 +389,56 @@ def PenalizedBernoulliCopula(
     marginal = PenalizedBernoulli({"mean": mean_formula}, penalties=penalties, device=device)
     copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
     return SCD3Simulator(marginal, copula)
+
+
+def PenalizedZeroInflatedTruncatedGaussianCopula(
+    mean_formula: str = "~ 1",
+    sdev_formula: str = "~ 1",
+    zero_inflation_formula: str = "~ 1",
+    copula_formula: str = "~ 1",
+    *,
+    penalties: Sequence[CoefficientPenalty] = (),
+    prior_alpha: float = 1.1,
+    cap_at_observed_max: bool = False,
+    estimator=None,
+    top_k: Optional[int] = None,
+    device=None,
+) -> SCD3Simulator:
+    """A regularized zero-inflated truncated Gaussian model
+
+    This can be used for nonnegative continuous data and when there are many
+    covariates relative to the number of cells.
+
+    Parameters
+    ----------
+    mean_formula, sdev_formula, zero_inflation_formula, copula_formula : str
+    penalties : sequence of CoefficientPenalty
+        See :mod:`scdesigner.distributions.penalties`.
+    prior_alpha : float
+        See :class:`ZeroInflatedTruncatedGaussian`.
+    cap_at_observed_max : bool
+        Cap samples with :class:`~scdesigner.simulators.output.ObservedMaxCap`.
+    estimator, top_k
+        Passed to :class:`StandardCopula`.
+    device : torch.device or str, optional
+        Marginal device.
+
+    Examples
+    --------
+    >>> from scdesigner.distributions.penalties import CoefficientPenalty, QuadraticPenalty
+    >>> penalty = CoefficientPenalty("mean", ["x"], [1.0], QuadraticPenalty(lam=0.1))
+    >>> sim = PenalizedZeroInflatedTruncatedGaussianCopula("~ x", penalties=[penalty])
+    >>> sim.fit(adata)  # doctest: +SKIP
+    """
+    marginal = PenalizedZeroInflatedTruncatedGaussian(
+        {"mean": mean_formula, "sdev": sdev_formula, "zero_inflation": zero_inflation_formula},
+        prior_alpha=prior_alpha,
+        penalties=penalties,
+        device=device,
+    )
+    copula = StandardCopula(copula_formula, estimator=estimator, top_k=top_k)
+    return SCD3Simulator(
+        marginal,
+        copula,
+        output_transform=ObservedMaxCap() if cap_at_observed_max else None,
+    )
