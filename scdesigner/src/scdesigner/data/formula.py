@@ -57,3 +57,70 @@ def partition_formula(formula: str) -> str:
     if not terms:
         return "~ 1"
     return "~ -1 + " + " + ".join(terms)
+
+
+def split_random_terms(formula: str) -> tuple[str, list[tuple[str, str]]]:
+    """Separate lme4-style random-effect terms from a formula.
+
+    We parse random-effect terms formatted like ``(1 | donor)``, since they
+    aren't supported natively in formulaic.
+
+    Parameters
+    ----------
+    formula : str
+        A formula whose right-hand side may include random-effect terms.
+
+    Returns
+    -------
+    fixed : str
+        The formula without random-effect terms, or ``"~ 1"`` if the formula
+        only included random effects.
+    random : list of tuple of str
+        ``(lhs, group)`` pairs in order of appearance, e.g. ``("1", "donor")``.
+
+    Examples
+    --------
+    >>> split_random_terms("~ genotype * cell_type + (1 | donor)")
+    ('~ genotype * cell_type', [('1', 'donor')])
+    """
+    rhs = formula.split("~", 1)[-1]
+    fixed, random = [], []
+    for summand in split_top_level(rhs, "+"):
+        is_group = summand.startswith("(") and closing_paren(summand) == len(summand) - 1
+        sides = split_top_level(summand[1:-1], "|") if is_group else [summand]
+        if len(sides) > 1:
+            random.append((sides[0], sides[1]))
+        elif summand:
+            fixed.append(summand)
+    return "~ " + (" + ".join(fixed) or "1"), random
+
+
+def split_top_level(text: str, separator: str) -> list[str]:
+    """Split on ``separator`` outside of brackets
+
+   This also removes surrounding whitespace.
+    """
+    parts, depth, start = [], 0, 0
+    for i, char in enumerate(text):
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == separator and depth == 0:
+            parts.append(text[start:i].strip())
+            start = i + 1
+    parts.append(text[start:].strip())
+    return parts
+
+
+def closing_paren(text: str) -> int:
+    """Index of the bracket closing the one at ``text[0]``, or -1."""
+    depth = 0
+    for i, char in enumerate(text):
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
