@@ -1,7 +1,9 @@
+import re
 import warnings
 from contextlib import contextmanager
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 from anndata import AnnData
+from formulaic import Formula
 import numpy as np
 import pandas as pd
 import torch
@@ -9,7 +11,76 @@ import torch
 from .donor_moments import POSTERIOR_MOMENTS
 from .negbin import NegBin, nb_loglik
 from ..base.marginal import EQTLPredictor, Marginal
-from ..data.formula import standardize_formula
+from ..data.formula import split_random_terms, standardize_formula
+
+
+def validate_eqtl_formula(formula: Dict[str, str]) -> None:
+    """Check the model's formula requirements without modifying the input.
+
+    The mean needs a donor random intercept and a ``genotype`` main effect.
+    Interactions between genotype and other variables in .obs are allowed (e.g.,
+    to allow cell-type specific eQTLs).  Dispersion cannot depend on genotype or
+    random effects.
+    """
+    fixed, random = split_random_terms(formula["mean"])
+    if len(random) != 1 or random[0][0] != "1":
+        raise ValueError(
+            "The mean formula needs a random intercept for the donor effect, e.g. `(1 | donor)`."
+        )
+
+    term_factors = [[factor.expr for factor in term.factors] for term in Formula(fixed)]
+    if any(
+        f != "genotype" and re.search(r"\bgenotype\b", f)
+        for factors in term_factors for f in factors
+    ):
+        raise ValueError(
+            "Use `genotype` directly, optionally in interactions such as "
+            "`genotype * cell_type`. Transformations such as `log(genotype)` "
+            "are not supported."
+        )
+    if not any("genotype" in factors for factors in term_factors):
+        raise ValueError("The mean formula must include a `genotype` term.")
+    if ["genotype"] not in term_factors:
+        raise ValueError(
+            "`genotype:X` requires the `genotype` main effect; use `genotype * X`."
+        )
+    if split_random_terms(formula["dispersion"])[1] or re.search(
+        r"\bgenotype\b", formula["dispersion"]
+    ):
+        raise ValueError(
+            "The dispersion formula cannot use `genotype` or random-effect terms."
+        )
+
+
+def parse_eqtl_formula(formula: Dict[str, str]) -> Tuple[Dict[str, str], str]:
+    """Validate an eQTL formula and construct the internal design formulas.
+
+    Terms without ``genotype`` become associated with the ``"mean"`` formula.
+    Any ``genotype:X`` interaction term adds ``X`` to ``"interaction"``, and
+    random effect terms like ``(1 | donor)`` are used for donor-to-donor
+    effects. Returns a formula dictionary and donor column that are used
+    internally.
+    """
+    validate_eqtl_formula(formula)
+    fixed, random = split_random_terms(formula["mean"])
+    mean_terms, interaction_terms = [], []
+    for term in Formula(fixed):
+        factors = [factor.expr for factor in term.factors]
+        if "genotype" not in factors:
+            mean_terms.append(str(term))
+        elif factors != ["genotype"]:
+            interaction_terms.append(":".join(f for f in factors if f != "genotype"))
+
+    if "1" not in mean_terms:
+        mean_terms.insert(0, "0")
+    result = {
+        "mean": "~ " + " + ".join(mean_terms),
+        "dispersion": formula["dispersion"],
+        "genotype": "~ 0 + _donor_code",
+    }
+    if interaction_terms:
+        result["interaction"] = "~ " + " + ".join(interaction_terms)
+    return result, random[0][1]
 
 
 class NegBinEQTL(NegBin):
@@ -27,12 +98,14 @@ class NegBinEQTL(NegBin):
     Parameters
     ----------
     formula : dict or str
-        Dictionary giving the formula for "mean", "dispersion", and optionally
-        "interaction". Interaction can be used to define cell-type specific
-        genotype effects (though it's not limited to that, it can also be used
-        for dynamic effects).
-    donor_col : str
-        Column name and `adata.obs` given the individual/donor ID
+        Dictionary giving the formula for "mean" and "dispersion".  The mean
+        formula uses lme4-style syntax.  It must include the reserved term
+        ``genotype``, which stands for each gene's SNP dosages, and one
+        donor-level random intercept, e.g. ``(1 | donor)``, where ``donor`` is
+        the column of `adata.obs` with donor IDs. Terms like ``genotype *
+        cell_type`` define cell-type-specific eQTLs and ``genotype *
+        bs(pseudotime, df=5)`` defines dynamic eQTLs. The dispersion formula
+        cannot use ``genotype`` or random effects.
     dosage : pandas.DataFrame
         An n_donor x SNP table giving variant counts per donor. Donor order in
         all later estimates is determined by the row indices from this matrix.
@@ -62,13 +135,28 @@ class NegBinEQTL(NegBin):
         Should we first order the cells by donor rather than randomly sampling
         them? If sorted by donor, the data structure representing each batch is
         much more memory efficient.
+
+    Examples
+    --------
+    >>> from scdesigner import datasets
+    >>> from scdesigner.distributions import NegBinEQTL
+    >>>
+    >>> adata = datasets.dong_eqtl()
+    >>> snp_map = {gene: [snp] for gene, snp in adata.var["snp"].items()}
+    >>> model = NegBinEQTL(
+    ...     {"mean": "~ genotype * cell_type + (1 | indiv)", "dispersion": "~ 1"},
+    ...     dosage=adata.uns["dosage"],
+    ...     snp_map=snp_map,
+    ... )
+    >>> model.setup_data(adata)
+    >>> model.fit(max_epochs=5, verbose=False)
+    >>> sigma2 = model.sigma2  # per-gene donor variance
     """
 
     def __init__(
         self,
         formula: Union[Dict, str],
         *,
-        donor_col: str,
         dosage: pd.DataFrame,
         snp_map: Dict[str, List[str]],
         estimate_sigma2: bool = True,
@@ -79,15 +167,10 @@ class NegBinEQTL(NegBin):
         donor_blocked=None,
         **kwargs,
     ):
-        has_interaction = isinstance(formula, dict) and "interaction" in formula
-        formula = standardize_formula(
-            formula, allowed_keys=["mean", "dispersion", "genotype", "interaction"]
-        )
-        if not has_interaction:
-            del formula["interaction"]
+        formula = standardize_formula(formula, allowed_keys=["mean", "dispersion"])
+        formula, self.donor_col = parse_eqtl_formula(formula)
         Marginal.__init__(self, formula, **kwargs)
 
-        self.donor_col = donor_col
         self.dosage = dosage
         self.snp_map = snp_map
         self._estimate_sigma2 = estimate_sigma2
@@ -131,7 +214,6 @@ class NegBinEQTL(NegBin):
     def setup_data(self, adata: AnnData, batch_size: int = 1024, **kwargs):
         new_obs = self._augment_obs(adata.obs)
         adata = AnnData(X=adata.X, obs=new_obs, var=adata.var)
-        self.formula["genotype"] = "~ 0 + _donor_code"
 
         self.D, self.mask = self._build_dosage_tensors(list(adata.var_names))
         if self._donor_blocked is None:
@@ -201,7 +283,7 @@ class NegBinEQTL(NegBin):
             feature_dims=self.feature_dims,
             dosage=self.D,
             mask=self.mask,
-            interaction_dim=self.feature_dims.get("interaction", 0),
+            interaction_dim=self.feature_dims.get("interaction", 1) - 1,
             accumulator_names=accumulator_names,
             loss_fn=penalized_nll,
             optimizer_class=optimizer_class,
