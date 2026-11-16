@@ -201,6 +201,20 @@ def test_partition_formula_produces_full_indicators(obs):
     np.testing.assert_array_equal(result.to_numpy(), [[0, 0, 1], [1, 0, 0], [0, 1, 0]])
 
 
+@pytest.mark.parametrize("formula, expected", [
+    ("~ x", ("~ x", [])),
+    ("~ x + (1 | g)", ("~ x", [("1", "g")])),
+    ("~ genotype * cell_type + (1|indiv)", ("~ genotype * cell_type", [("1", "indiv")])),
+    ("~ x + (bs(t, df=3) | g) + (1 | h)", ("~ x", [("bs(t, df=3)", "g"), ("1", "h")])),
+    ("~ (a + b) * c", ("~ (a + b) * c", [])),
+    ("~ (1 | g)", ("~ 1", [("1", "g")])),
+])
+def test_split_random_terms(formula, expected):
+    from scdesigner.data.formula import split_random_terms
+
+    assert split_random_terms(formula) == expected
+
+
 def test_predictions_do_not_depend_on_other_query_rows(obs):
     rng = np.random.default_rng(0)
     rate = np.exp(0.5 + np.sin(obs.x.to_numpy()) + (obs.ct == "c").to_numpy())
