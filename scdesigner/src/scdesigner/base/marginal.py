@@ -808,7 +808,7 @@ class EQTLPredictor(nn.Module):
         mask: (J, K_max) indicator for valid SNP entries per gene. The issue is
             that some genes might only be located close to a small number of SNPs.
         interaction_dim: number of columns (L) in the genotype-interaction
-            design. 0 means no interactions.
+            design, not counting the intercept column. 0 means no interactions.
         accumulator_names: Names of additional statistical summary statistics to
             store while accumulating each epoch. These are necessary for our
             posterior moment updates described in donor_moments.py. Appropriate
@@ -904,8 +904,9 @@ class EQTLPredictor(nn.Module):
             "mean": (B, p) shared mean design
             "dispersion": (B, p_disp) shared dispersion design
             "genotype": (B, 1) integer-valued donor code column
-            "interaction": (B, L) genotype-interaction design (only read when
-                interaction_dim > 0)
+            "interaction": (B, L + 1) genotype-interaction design (only read
+                when interaction_dim > 0). Its first column is the intercept,
+                which we drop so that zeta isn't collinear with beta.
         """
         donor_idx = obs_dict["genotype"][:, 0].long()
 
@@ -921,7 +922,7 @@ class EQTLPredictor(nn.Module):
         eta = eta + M[inverse]
 
         if self.interaction_dim > 0:
-            V = obs_dict["interaction"]
+            V = obs_dict["interaction"][:, 1:] # drop intercept
             A = torch.einsum("kjm,jml->kjl", D_masked, self.zeta)
             eta = eta + torch.einsum("bjl,bl->bj", A[inverse], V)
 

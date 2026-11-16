@@ -425,20 +425,20 @@ class NegBinEQTLCopula(SCD3Simulator):
     Parameters
     ----------
     mean_formula : str
-        Specifies the formula relating cell-level characteristics with the
-        response gene expression. We separately model the genotypic variation
-        through the dosage and snp_map parameters.
+        lme4-style formula for :math:`\log\mu`. It must include a ``genotype``
+        term, which denotes that gene's SNP dosages (see `dosage` and
+        `snp_map`). It must also have a donor-level random intercept ``(1 |
+        donor)``, where ``donor`` is a column of `adata.obs`.  Any other terms
+        define :math:`W_i`. Interactions with ``genotype``, like ``genotype:X``,
+        define :math:`V_i`. For example, ``~ genotype * cell_type + (1 |
+        donor)`` gives cell-type-specific eQTLs and ``~ genotype *
+        bs(pseudotime, df=5) + (1 | donor)`` gives dynamic eQTLs.
     dispersion_formula : str
-        An elegance of a mean formula, but for the dispersion. Our default "~ 1"
-        matches the scDesignPop constant dispersion per gene.
-    interaction_formula : str or None
-        Allow varying genotype effects as a function of these interaction terms.
-        For example, we can support cell-type-specific eQTLs using `~ 0 +
-        C(cell_type)` and the dynamic eQTLs using `~ bs(pseudotime, df=5)`.
+        An analog of the mean formula, but for the dispersion. It can have fixed
+        effects but not ``genotype`` or donor-level random effects. By default
+        it is constant across all cells.
     copula_formula : str
         Groups to divide the copula estimation in two
-    donor_col : str
-        Column name of the ADATA.ops storing the donor IDs
     dosage : pandas.DataFrame
         A donor-by-SNP table giving the genotypes {0, 1, 2} of each individual
     snp_map : dict[str, list[str]]
@@ -451,28 +451,40 @@ class NegBinEQTLCopula(SCD3Simulator):
     :class:`SCD3Simulator`
     :class:`NegBinEQTL`
     :class:`StandardCopula`
+
+    Examples
+    --------
+    >>> from scdesigner import datasets
+    >>> from scdesigner.simulators import NegBinEQTLCopula
+    >>>
+    >>> adata = datasets.dong_eqtl()
+    >>> snp_map = {gene: [snp] for gene, snp in adata.var["snp"].items()}
+    >>> sim = NegBinEQTLCopula(
+    ...     "~ genotype * cell_type + (1 | indiv)",
+    ...     dosage=adata.uns["dosage"],
+    ...     snp_map=snp_map,
+    ... )
+    >>> sim.fit(adata, max_epochs=5, verbose=False)
+    >>> synthetic = sim.sample()
+    >>>
+    >>> # simulate a new cohort of donors
+    >>> with sim.marginal.simulated_donor_effects(seed=0):
+    ...     new_cohort = sim.sample()
     """
 
     def __init__(
         self,
-        mean_formula: Optional[str] = "~ 1",
+        mean_formula: str,
         dispersion_formula: Optional[str] = "~ 1",
-        interaction_formula: Optional[str] = None,
         copula_formula: Optional[str] = "~ 1",
         *,
-        donor_col: str,
         dosage,
         snp_map,
         device: Optional[torch.device | str] = None,
         **marginal_kwargs,
     ) -> None:
-        formula = {"mean": mean_formula, "dispersion": dispersion_formula}
-        if interaction_formula is not None:
-            formula["interaction"] = interaction_formula
-
         marginal = NegBinEQTL(
-            formula,
-            donor_col=donor_col,
+            {"mean": mean_formula, "dispersion": dispersion_formula},
             dosage=dosage,
             snp_map=snp_map,
             device=device,
