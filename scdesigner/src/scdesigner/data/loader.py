@@ -140,7 +140,7 @@ class AnnDataDataset(Dataset):
         responses = []
 
         # create designs for each parameter
-        designs = {key: [] for key in self.predictor_names}
+        designs = {key: [] for key in self.design.matrix_keys}
         for group in np.split(indices, breaks):
             self._ensure_chunk_loaded(int(group[0]))
             local = torch.as_tensor(group - self._chunk_start, device=self.device)

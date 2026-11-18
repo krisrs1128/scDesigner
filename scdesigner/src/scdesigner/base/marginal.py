@@ -1,6 +1,7 @@
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from ..data.feature_summary import summarize_features
 from ..data.design import fit_design
+from ..data.formula import offset_key
 from ..data.loader import AnnDataDataset, adata_loader, get_device, resolve_chunk_size
 from anndata import AnnData
 from typing import Union, Dict, Optional, Sequence, Tuple
@@ -246,7 +247,7 @@ class Marginal(ABC):
         # other attributes updated during training
         X_batch, obs_batch = next(iter(self.loader))
         self.n_outcomes = X_batch.shape[1]
-        self.feature_dims = {k: v.shape[1] for k, v in obs_batch.items()}
+        self.feature_dims = {key: len(names) for key, names in self.design.predictor_names.items()}
         self.predictor_names = self.design.predictor_names
         self.train_loader = self.loader
         self.validation_loader = None
@@ -780,7 +781,8 @@ class GLMPredictor(nn.Module):
         for name in self.param_names:
             x_beta = obs_dict[name] @ self.coefs[name]
             link = self.link_fns.get(name, torch.exp)
-            out[name] = link(x_beta)
+            offset = obs_dict.get(offset_key(name), 0)
+            out[name] = link(offset + x_beta)
         return out
 
 
@@ -927,4 +929,7 @@ class EQTLPredictor(nn.Module):
             eta = eta + torch.einsum("bjl,bl->bj", A[inverse], V)
 
         disp = obs_dict["dispersion"] @ self.coefs["dispersion"]
-        return {"mean": torch.exp(eta), "dispersion": torch.exp(disp)}
+        mean_offset = obs_dict.get(offset_key("mean"), 0)
+        dispersion_offset = obs_dict.get(offset_key("dispersion"), 0)
+        return {"mean": torch.exp(mean_offset + eta),
+                "dispersion": torch.exp(dispersion_offset + disp)}
