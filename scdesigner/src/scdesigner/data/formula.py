@@ -1,6 +1,16 @@
-from typing import Union
+from typing import Optional, Union
+import ast
+from formulaic import Formula
+from formulaic.parser.types import Factor
 import re
 import warnings
+
+OFFSET_PREFIX = "offset:"
+
+
+def offset_key(parameter: str, prefix: str = OFFSET_PREFIX) -> str:
+    return prefix + parameter
+
 
 def standardize_formula(formula: Union[str, dict], allowed_keys = None):
     # The first element of allowed_keys should be the name of default parameter
@@ -57,6 +67,54 @@ def partition_formula(formula: str) -> str:
     if not terms:
         return "~ 1"
     return "~ -1 + " + " + ".join(terms)
+
+
+def split_offset_terms(formula: str) -> tuple[str, Optional[str]]:
+    """Separate an ``offset(...)`` term from a formula.
+
+    The offsets need to be treated separately in the initialization and
+    optimization, so we split them off from the main formula.
+
+    Parameters
+    ----------
+    formula : str
+        A formula potentially with an ``offset(expression)`` term.
+
+    Returns
+    -------
+    fixed : str
+        The formula without the offset. If there wasn't an offset in the first
+        place, the formula is returned as is.
+    offset : str or None
+        A formula with the offset or ``None`` if there is no offset. Puts
+        expressions that need to be evaluated in to brackets {}.
+
+    Examples
+    --------
+    >>> split_offset_terms("~ x + offset(log(lib))")
+    ('~ x', '~ 0 + {log(lib)}')
+    >>> split_offset_terms("~ 0 + offset(lib)")
+    ('~ 0', '~ 0 + `lib`')
+    """
+    rhs = formula.split("~", 1)[-1]
+
+    # find the offset prefix
+    kept, offsets = [], []
+    for summand in split_top_level(rhs, "+"):
+        if summand.startswith("offset(") and closing_paren(summand[6:]) == len(summand) - 7:
+            offsets.append(summand[7:-1].strip())
+        else:
+            kept.append(summand)
+
+    # some checks
+    if len(offsets) > 1:
+        raise ValueError("At most one offset() term is allowed per formula; combine offsets in a column of .obs")
+    if not offsets:
+        return formula, None
+
+    # reconstructed tuple
+    quoted = f"`{offsets[0]}`" if offsets[0].isidentifier() else "{" + offsets[0] + "}"
+    return "~ " + (" + ".join(kept) or "1"), "~ 0 + " + quoted
 
 
 def split_random_terms(formula: str) -> tuple[str, list[tuple[str, str]]]:
