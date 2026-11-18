@@ -72,9 +72,15 @@ class ZeroInflatedPoisson(Marginal):
             self.train_loader,
             self.n_outcomes,
             self.feature_dims["mean"],
-            p_disp=1,
+            p_disp=0,
         )
         self.predict.coefs["mean"].data.copy_(beta)
+
+        # when offsets are present, the initialization above doesn't apply
+        if self.design.offset_keys:
+            with torch.no_grad():
+                self.predict.coefs["zero_inflation"].zero_()
+            return
 
         logit_pi = _initialize_zi_intercept(
             self.train_loader, beta, self.n_outcomes

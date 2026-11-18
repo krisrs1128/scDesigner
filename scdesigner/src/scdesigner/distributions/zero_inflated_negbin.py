@@ -77,6 +77,11 @@ class ZeroInflatedNegBin(Marginal):
         self.predict.coefs["mean"].data.copy_(beta)
         self.predict.coefs["dispersion"].data.copy_(gamma)
 
+        if self.design.offset_keys:
+            with torch.no_grad():
+                self.predict.coefs["zero_inflation"].zero_()
+            return
+
         logit_pi = _initialize_zi_intercept_nb(
             self.train_loader, beta, gamma, self.n_outcomes
         )
