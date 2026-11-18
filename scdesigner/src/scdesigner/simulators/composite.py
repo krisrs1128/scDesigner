@@ -6,6 +6,7 @@ marginal models and then couples their dependence structure with a
 """
 
 from ..data.loader import obs_loader
+from ..data.formula import OFFSET_PREFIX, offset_key
 from .scd3 import SCD3Simulator
 from ..copulas import StandardCopula
 from anndata import AnnData
@@ -196,7 +197,7 @@ class CompositeCopula(SCD3Simulator):
 
             # remove the `group{m}_` prefix we used to distinguish the marginals
             prefix = f"group{m}_"
-            cur_x = {k.removeprefix(prefix): v if k.startswith(prefix) else v for k, v in x.items()}
+            cur_x = component_inputs(x, prefix)
 
             # slice the subset of y for this marginal and call its uniformize
             y_sub = torch.from_numpy(y_np[:, ix])
@@ -241,7 +242,7 @@ class CompositeCopula(SCD3Simulator):
             for m in range(n_marginals):
                 prefix = f"group{m}_"
                 # build cur_x where prefixed keys are unprefixed for the marginal
-                cur_x = {k.removeprefix(prefix): v for k, v in x_dict.items()}
+                cur_x = component_inputs(x_dict, prefix)
                 params = self.marginals[m][1].predict(cur_x)
                 local_pred[m].append(params)
 
@@ -253,6 +254,16 @@ class CompositeCopula(SCD3Simulator):
             results.append({k: torch.cat([d[k] for d in parts]).detach().cpu().numpy() for k in keys})
 
         return results
+
+
+def component_inputs(x: Dict[str, torch.Tensor], prefix: str) -> Dict[str, torch.Tensor]:
+    result = {}
+    for key, value in x.items():
+        if key.startswith(prefix):
+            result[key.removeprefix(prefix)] = value
+        elif key.startswith(OFFSET_PREFIX + prefix):
+            result[offset_key(key.removeprefix(OFFSET_PREFIX + prefix))] = value
+    return result
 
 
 def _var_indices(sel, adata: AnnData) -> np.ndarray:
