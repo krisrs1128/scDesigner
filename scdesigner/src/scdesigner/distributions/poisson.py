@@ -66,7 +66,7 @@ class Poisson(Marginal):
             self.train_loader,
             self.n_outcomes,
             self.feature_dims["mean"],
-            p_disp=1,
+            p_disp=0,
         )
         self.predict.coefs["mean"].data.copy_(beta)
 

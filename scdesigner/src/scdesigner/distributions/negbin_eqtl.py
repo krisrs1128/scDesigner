@@ -12,6 +12,7 @@ from .donor_moments import POSTERIOR_MOMENTS
 from .negbin import NegBin, nb_loglik
 from ..base.marginal import EQTLPredictor, Marginal
 from ..data.formula import split_random_terms, standardize_formula
+from ..data.formula import offset_key
 
 
 def validate_eqtl_formula(formula: Dict[str, str]) -> None:
@@ -300,7 +301,7 @@ class NegBinEQTL(NegBin):
         going to inflate sigma_j^2.
         """
         with torch.no_grad():
-            if self.predictor_names["mean"][0] == "Intercept":
+            if self.predictor_names["mean"][:1] == ["Intercept"]:
                 offset = self.predict.U.mean(dim=0)
                 self.predict.U.sub_(offset.unsqueeze(0))
                 self.predict.coefs["mean"][0].add_(offset)
@@ -406,7 +407,8 @@ class NegBinEQTL(NegBin):
                 y, x = self._move_batch_to_device(batch)
                 donor_idx = x["genotype"][:, 0].long()
                 sums.index_add_(0, donor_idx, y)
-                counts.index_add_(0, donor_idx, torch.ones_like(donor_idx, dtype=sums.dtype))
+                offset = x.get(offset_key("mean"), torch.zeros_like(y[:, :1]))
+                counts.index_add_(0, donor_idx, torch.exp(offset)[:, 0])
 
         present = counts > 0
         m = sums[present] / counts[present].unsqueeze(1)
@@ -437,6 +439,7 @@ class NegBinEQTL(NegBin):
             (J,) mean dosages per cell. This is just used during centering.
         """
         n = torch.zeros(3, self.n_outcomes, device=self.device)
+        exposures = torch.zeros_like(n)
         sum_y = torch.zeros(3, self.n_outcomes, device=self.device)
         dose_sum = torch.zeros(self.n_outcomes, device=self.device)
         n_cells = 0
@@ -449,14 +452,22 @@ class NegBinEQTL(NegBin):
                 dose = lead[x["genotype"][:, 0].long()]
                 dose_sum += dose.sum(dim=0)
                 n_cells += y.shape[0]
+
+                # for each dosage d \in \{0, 1, 2}, compute the number of cells
+                # that have it n[d], the total counts sum_y[d], and the total
+                # exposure based on offset terms exposures[d]
+                offset = x.get(offset_key("mean"), torch.zeros_like(y[:, :1]))
+                exposure = torch.exp(offset)
                 for d in range(3):
                     in_group = (dose == d).to(y.dtype)
                     n[d] += in_group.sum(dim=0)
                     sum_y[d] += (y * in_group).sum(dim=0)
+                    exposures[d] += (exposure * in_group).sum(dim=0)
 
         # weighted least squares of group mean on dosage. The weights are the
         # group sizes.
-        group_mean = sum_y / n.clamp(min=1.0)
+        denominator = torch.where(exposures > 0, exposures, torch.ones_like(exposures))
+        group_mean = sum_y / denominator
         log_mean = torch.log(group_mean.clamp(min=1e-6))
         levels = torch.arange(3, device=self.device, dtype=n.dtype).unsqueeze(1)
 
@@ -477,7 +488,7 @@ class NegBinEQTL(NegBin):
         beta, mean_dose = self._mom_beta()
         with torch.no_grad():
             self.predict.beta[:, 0].copy_(beta)
-            if self.predictor_names["mean"][0] == "Intercept":
+            if self.predictor_names["mean"][:1] == ["Intercept"]:
                 self.predict.coefs["mean"][0, :] -= beta * mean_dose
 
         sigma2 = self._mom_sigma2()

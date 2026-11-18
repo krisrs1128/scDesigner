@@ -1,4 +1,5 @@
 import torch
+from ..data.formula import offset_key
 from typing import Optional
 import torch.special as spec
 
@@ -179,10 +180,12 @@ def accumulate_poisson_statistics(loader, beta, n_genes, p_mean, clip = 5):
     for y_batch, x_dict in loader:
         X = x_dict['mean']
 
-        linear_pred = torch.clip(X @ beta, min=-clip, max=clip)
+        offset = x_dict.get(offset_key("mean"), 0)
+        linear_pred = torch.clip(offset + X @ beta, min=-clip, max=clip)
         mean = torch.exp(linear_pred)
         adjustment = torch.clamp((y_batch - mean) / mean, min=-clip, max=clip)
         working_response = linear_pred + adjustment
+        working_response = working_response - offset
 
         X_outer = torch.einsum("ni,nj->nij", X, X)
         weighted_XX += torch.einsum("nm,nij->mij", mean, X_outer)
@@ -225,11 +228,14 @@ def accumulate_dispersion_statistics(loader, beta, clip = 5):
 
     for y_batch, x_dict in loader:
         X = x_dict['mean']
-        linear_pred = torch.clip(X @ beta, min=-clip, max=clip)
+        mean_offset = x_dict.get(offset_key("mean"), 0)
+        linear_pred = torch.clip(mean_offset + X @ beta, min=-clip, max=clip)
         mean_batch = torch.exp(linear_pred)
+        dispersion_offset = x_dict.get(offset_key("dispersion"), torch.zeros_like(y_batch[:, :1]))
+        mean_squared = mean_batch ** 2 * torch.exp(-dispersion_offset)
 
         sum_mu += mean_batch.sum(dim=0)
-        sum_mu2 += (mean_batch ** 2).sum(dim=0)
+        sum_mu2 += mean_squared.sum(dim=0)
         sum_sq_resid += ((y_batch - mean_batch) ** 2).sum(dim=0)
         n_total += y_batch.shape[0]
 
@@ -251,22 +257,21 @@ def _initialize_beta_intercept(loader, n_genes, p_mean):
     _, x_peek = next(iter(loader))
     device = x_peek["mean"].device
     beta = torch.zeros((p_mean, n_genes), device=device)
-    if not _is_intercept_column(x_peek["mean"][:, 0]):
+    if p_mean == 0 or not _is_intercept_column(x_peek["mean"][:, 0]):
         return beta
 
     gene_sums = torch.zeros(n_genes, device=device)
-    intercept_sum = 0.0
+    exposure_sum = 0.0
     n_total = 0
 
     for y_batch, x_dict in loader:
         gene_sums += y_batch.sum(dim=0)
-        intercept_sum += x_dict["mean"][:, 0].sum()
+        offset = x_dict.get(offset_key("mean"), torch.zeros_like(y_batch[:, :1]))
+        exposure_sum += torch.exp(offset).sum()
         n_total += y_batch.shape[0]
 
     gene_means = torch.clamp(gene_sums / n_total, min=1e-3)
-    intercept_mean = intercept_sum / n_total
-    beta[0, :] = torch.log(gene_means) / intercept_mean
-
+    beta[0, :] = torch.log(gene_means / (exposure_sum / n_total))
     return beta
 
 
@@ -312,7 +317,7 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
     # Initialize predicted mean ≈ observed gene mean across cells.
     beta = _initialize_beta_intercept(loader, n_genes, p_mean)
 
-    for _ in range(max_iter):
+    for _ in range(max_iter if p_mean else 0):
         weighted_XX, weighted_Xy = accumulate_poisson_statistics(
             loader, beta, n_genes, p_mean, clip
         )
@@ -336,7 +341,8 @@ def initialize_parameters(loader, n_genes, p_mean, p_disp, max_iter = 10,
     dispersion = sum_mu2 / torch.clamp(sum_sq_resid - sum_mu, min=0.1)
 
     gamma = torch.zeros((p_disp, n_genes), device=beta.device)
-    gamma[0, :] = torch.log(torch.clamp(dispersion, min=1e-3))
+    if p_disp and _is_intercept_column(next(iter(loader))[1]["dispersion"][:, 0]):
+        gamma[0, :] = torch.log(torch.clamp(dispersion, min=1e-3))
     return beta, gamma
 
 

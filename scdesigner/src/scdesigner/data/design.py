@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from formulaic import Formula, ModelSpec
 from formulaic.parser.types import Factor
+from .formula import offset_key, split_offset_terms
 from formulaic.transforms import TRANSFORMS
 
 if TYPE_CHECKING:
@@ -57,6 +58,13 @@ class FormulaDesign:
     spec: ModelSpec
     levels: dict[str, pd.CategoricalDtype]
     predictor_names: list[str]
+    offset_spec: Optional[ModelSpec] = None
+
+    def offset(self, obs: pd.DataFrame) -> Optional[pd.DataFrame]:
+        if self.offset_spec is None:
+            return None
+        values = self.offset_spec.get_model_matrix(obs).to_numpy()
+        return pd.DataFrame(values, index=obs.index, columns=["offset"])
 
     def matrix(self, obs: pd.DataFrame) -> pd.DataFrame:
         """Evaluate using fit-time levels and retain the selected columns."""
@@ -80,11 +88,24 @@ class Design:
         """Relevant predictor columns for each formula key."""
         return {key: design.predictor_names for key, design in self.formulas.items()}
 
+    @property
+    def offset_keys(self) -> frozenset[str]:
+        return frozenset(offset_key(key) for key, design in self.formulas.items() if design.offset_spec)
+
+    @property
+    def matrix_keys(self) -> tuple[str, ...]:
+        return (*self.formulas, *(offset_key(key) for key, design in self.formulas.items() if design.offset_spec))
+
     def matrices(self, obs: pd.DataFrame) -> dict[str, pd.DataFrame]:
         """Design matrix for each key in formulas."""
         if self.transform is not None:
             obs = self.transform.transform(obs)
-        return {key: design.matrix(obs) for key, design in self.formulas.items()}
+        matrices = {key: design.matrix(obs) for key, design in self.formulas.items()}
+        for key, design in self.formulas.items():
+            offset = design.offset(obs)
+            if offset is not None:
+                matrices[offset_key(key)] = offset
+        return matrices
 
 
 def fit_design(
@@ -177,6 +198,13 @@ def fit_formula(
     determine column names and categorical encoding structure. Otherwise, it
     evaluates the formula on every row.
     """
+    formula_text, offset_text = split_offset_terms(formula_text)
+    if partition and offset_text:
+        raise ValueError(
+            "offset() is not supported in the copula 'group' formula, which only assigns "
+            "cells to groups. Remove the offset() term from it."
+        )
+    offset_spec = fit_offset(obs, offset_text, rows=rows, chunked=chunked) if offset_text else None
     columns, calls = analyze_formula(formula_text)
     if chunked:
         check_chunked(formula_text, calls)
@@ -197,7 +225,17 @@ def fit_formula(
     matrix = spec.get_model_matrix(code_levels(rows, levels))
     dropped = set() if partition else reference_columns(obs, levels)
     predictor_names = [name for name in matrix.columns if name not in dropped]
-    return FormulaDesign(matrix.model_spec, levels, predictor_names)
+    return FormulaDesign(matrix.model_spec, levels, predictor_names, offset_spec)
+
+
+def fit_offset(obs: pd.DataFrame, formula_text: str, *, rows: pd.DataFrame, chunked: bool) -> ModelSpec:
+    _, calls = analyze_formula(formula_text)
+    if chunked:
+        check_chunked(formula_text, calls)
+    state = transform_state(obs, calls) if chunked else {}
+    spec = ModelSpec(formula=formula_text, na_action="raise", transform_state=state)
+    matrix = spec.get_model_matrix(rows)
+    return matrix.model_spec
 
 
 @dataclass(frozen=True)

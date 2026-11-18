@@ -101,12 +101,11 @@ class ZeroInflatedTruncatedGaussian(Marginal):
         )
 
     def _initialize_parameters(self, **kwargs):
-        mean_init, log_sdev_init, logit_pi_init = _initialize_zitg_intercepts(
-            self.train_loader, self.n_outcomes
-        )
-        self.predict.coefs["mean"].data[0].copy_(mean_init)
-        self.predict.coefs["sdev"].data[0].copy_(log_sdev_init)
-        self.predict.coefs["zero_inflation"].data[0].copy_(logit_pi_init)
+        intercepts = _initialize_zitg_intercepts(self.train_loader, self.n_outcomes)
+        with torch.no_grad():
+            for key, init in zip(("mean", "sdev", "zero_inflation"), intercepts):
+                if self.predictor_names[key][:1] == ["Intercept"]:
+                    self.predict.coefs[key][0].copy_(init)
 
     def likelihood(self, batch) -> torch.Tensor:
         """Compute the log-likelihood.
