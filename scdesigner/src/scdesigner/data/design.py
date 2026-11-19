@@ -29,7 +29,10 @@ def clip_extrapolation(transform):
     By default, the formulaic splines will raise an error if they see an input
     value beyond the training data range. This can cause problems in our
     training / validation splits, where pseudotime in validation splits lies
-    beyond the training range. This class overrides that formulaic default.
+    beyond the training range. This wrapper overrides that formulaic default,
+    and ``SPLINES`` is passed as the evaluation context wherever a design matrix
+    is built so that formulas pick it up. Passing ``extrapolation=`` in a
+    formula still takes precedence.
     """
     def wrapper(*args, extrapolation="clip", **kwargs):
         return transform(*args, extrapolation=extrapolation, **kwargs)
@@ -63,12 +66,12 @@ class FormulaDesign:
     def offset(self, obs: pd.DataFrame) -> Optional[pd.DataFrame]:
         if self.offset_spec is None:
             return None
-        values = self.offset_spec.get_model_matrix(obs).to_numpy()
+        values = self.offset_spec.get_model_matrix(obs, context=SPLINES).to_numpy()
         return pd.DataFrame(values, index=obs.index, columns=["offset"])
 
     def matrix(self, obs: pd.DataFrame) -> pd.DataFrame:
         """Evaluate using fit-time levels and retain the selected columns."""
-        matrix = self.spec.get_model_matrix(code_levels(obs, self.levels))
+        matrix = self.spec.get_model_matrix(code_levels(obs, self.levels), context=SPLINES)
         return matrix[self.predictor_names]
 
 
@@ -222,7 +225,7 @@ def fit_formula(
     # Seed transform state from full columns; the remaining structure needs one row.
     state = transform_state(obs, calls) if chunked else {}
     spec = ModelSpec(formula=formula_text, na_action="raise", transform_state=state)
-    matrix = spec.get_model_matrix(code_levels(rows, levels))
+    matrix = spec.get_model_matrix(code_levels(rows, levels), context=SPLINES)
     dropped = set() if partition else reference_columns(obs, levels)
     predictor_names = [name for name in matrix.columns if name not in dropped]
     return FormulaDesign(matrix.model_spec, levels, predictor_names, offset_spec)
@@ -234,7 +237,7 @@ def fit_offset(obs: pd.DataFrame, formula_text: str, *, rows: pd.DataFrame, chun
         check_chunked(formula_text, calls)
     state = transform_state(obs, calls) if chunked else {}
     spec = ModelSpec(formula=formula_text, na_action="raise", transform_state=state)
-    matrix = spec.get_model_matrix(rows)
+    matrix = spec.get_model_matrix(rows, context=SPLINES)
     return matrix.model_spec
 
 
@@ -353,7 +356,8 @@ def transform_state(obs: pd.DataFrame, calls: Mapping[str, Optional[FormulaCall]
     for expr, call in calls.items():
         if call is not None and is_stateful(call.function):
             state[expr] = {}
-            TRANSFORMS[call.function](obs[call.column], **call.keywords, _state=state[expr])
+            transform = SPLINES.get(call.function, TRANSFORMS[call.function])
+            transform(obs[call.column], **call.keywords, _state=state[expr])
     return state
 
 
