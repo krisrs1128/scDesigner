@@ -13,7 +13,7 @@ backed anndata, we read ``chunk_size`` rows at a time. See :func:`adata_loader`.
 
 from ..utils.kwargs import DEFAULT_ALLOWED_KWARGS, _filter_kwargs
 from .design import Design, fit_design
-from .response import DEFAULT_CHUNK_SIZE, read_response_rows
+from .response import DEFAULT_CHUNK_SIZE, ResponseReader
 from anndata import AnnData
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict, Optional, Set, Union
@@ -90,9 +90,9 @@ class AnnDataDataset(Dataset):
     """PyTorch dataset over AnnData rows, reading one chunk of rows at a time.
 
     Returns ``(X_row, obs_dict)`` as items, where ``obs_dict`` has one
-    design-matrix row per key in the ``design``. Responses Y come from
-    :func:`~scdesigner.data.response.read_response_rows` and designs run
-    ``design`` to create X on the corresponding rows.
+    design-matrix row per key in the ``design``. Responses Y come from a
+    :class:`~scdesigner.data.response.ResponseReader` and designs run ``design``
+    to create X on the corresponding rows.
 
     Parameters
     ----------
@@ -113,6 +113,7 @@ class AnnDataDataset(Dataset):
     def __init__(self, adata: AnnData, design: Design, chunk_size: int,
                  device: Optional[torch.device] = None):
         self.adata = adata
+        self.reader = ResponseReader(adata)
         self.design = design
         self.chunk_size = chunk_size
         self.device = get_device(device)
@@ -163,10 +164,11 @@ class AnnDataDataset(Dataset):
         start = (idx // self.chunk_size) * self.chunk_size
         stop = min(start + self.chunk_size, len(self))
 
-        X = read_response_rows(self.adata, start, stop)
-        self._chunk_X = torch.tensor(X, dtype=torch.float32).to(self.device)
+        # build the tensor design and response matrices
+        X = self.reader.read(start, stop, dtype=np.float32)
+        self._chunk_X = torch.as_tensor(X, device=self.device)
         self.obs_matrices = {
-            key: torch.tensor(mat.values, dtype=torch.float32).to(self.device)
+            key: torch.as_tensor(mat.values, dtype=torch.float32, device=self.device)
             for key, mat in self.design.matrices(self.adata.obs.iloc[start:stop]).items()
         }
         self._chunk_start, self._chunk_stop = start, stop
@@ -301,14 +303,16 @@ def obs_loader(obs: pd.DataFrame, formula: Union[Dict[str, str], Design], **kwar
 def _preloaded_adata(adata: AnnData, design: Design, device: torch.device) -> PreloadedDataset:
     """Materialize an in-memory AnnData into a :class:`PreloadedDataset`.
 
-    Evaluate a design on an ``adata.obs`` object.
+    Evaluate a design on an ``adata.obs`` object. If the response matrix adata.X
+    is sparse, we cast it to float before converting to a tensor. This costs
+    O(number of nonzeros) compared to O(cells x genes).
     """
     X = adata.X
     if scipy.sparse.issparse(X):
-        X = X.toarray()
-    y = torch.tensor(X, dtype=torch.float32).to(device)
+        X = X.astype(np.float32, copy=False).toarray()
+    y = torch.tensor(X, dtype=torch.float32, device=device)
     x = {
-        key: torch.tensor(mat.values, dtype=torch.float32).to(device)
+        key: torch.tensor(mat.values, dtype=torch.float32, device=device)
         for key, mat in design.matrices(adata.obs).items()
     }
     return PreloadedDataset(y, x, design.predictor_names)
