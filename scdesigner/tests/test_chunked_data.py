@@ -1,7 +1,7 @@
 """Chunked fits agree with in-memory results, read in row order, and stay bounded."""
 
 import math
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Iterator
 
@@ -16,11 +16,10 @@ from anndata import AnnData
 
 from formulaic import ModelSpec
 
-import scdesigner.data.loader as loader_module
 from scdesigner.data import GPBasis
 from scdesigner.data.feature_summary import summarize_features
 from scdesigner.data.loader import adata_loader
-from scdesigner.data.response import iter_response_chunks, read_response_rows
+from scdesigner.data.response import ResponseReader, iter_response_chunks
 from scdesigner.distributions import NegBin
 from scdesigner.simulators import NegBinCopula, SpatialNegBinCopula
 
@@ -28,6 +27,25 @@ STORAGE = {"dense": np.asarray, "csr": sp.csr_matrix, "csc": sp.csc_matrix}
 BACKED = ("dense", "csr")
 FIT = dict(chunk_size=7, batch_size=10, max_epochs=2, max_iter=1, val_frac=0.25,
            verbose=False)
+
+# Indexing steps applied in turn to an AnnData and to its dense values.
+SELECTIONS = {
+    "no view": [],
+    "row slice": [np.s_[2:9]],
+    "row mask": [np.arange(12) % 3 > 0],
+    "unsorted rows with duplicates": [[7, 2, 2, 11, 0, 5]],
+    "gene array": [np.s_[:, [2, 0]]],
+    "gene mask": [np.s_[:, [True, False, True]]],
+    "view of a view": [np.s_[1:11], np.s_[::2, 1:]],
+}
+# In memory, every layout is read; backed reads support dense and CSR only.
+LAYOUTS = [("dense", False), ("csr", False), ("csc", False), ("dense", True), ("csr", True)]
+# Rows from one block of storage, reordered or repeated.
+REORDERED_BLOCKS = {
+    "reversed": np.arange(9, 1, -1),
+    "permuted": [5, 3, 9, 2, 8, 4, 7, 6],
+    "repeated": [4, 4, 5, 4, 5, 6],
+}
 
 
 @contextmanager
@@ -95,14 +113,29 @@ def fit_spatial(data):
 
 def record_chunk_loads(monkeypatch) -> list:
     """``(start, stop)`` of each chunk an :class:`AnnDataDataset` loads."""
-    loads, read = [], loader_module.read_response_rows
+    loads, read = [], ResponseReader.read
 
-    def counted(adata, start, stop):
+    def counted(reader, start, stop, dtype=None):
         loads.append((start, stop))
-        return read(adata, start, stop)
+        return read(reader, start, stop, dtype)
 
-    monkeypatch.setattr(loader_module, "read_response_rows", counted)
+    monkeypatch.setattr(ResponseReader, "read", counted)
     return loads
+
+
+def stored(values: np.ndarray, layout: str, backed: bool, tmp_path: Path):
+    """``values`` as an AnnData with ``X`` in ``layout``, in memory or backed."""
+    data = AnnData(X=values)
+    if backed:
+        return backed_copy(data, layout, tmp_path)
+    data.X = STORAGE[layout](values)
+    return nullcontext(data)
+
+
+def select(data, steps):
+    for step in steps:
+        data = data[step]
+    return data
 
 
 @pytest.mark.parametrize("storage", BACKED)
@@ -120,17 +153,51 @@ def test_default_response_chunk_size():
     assert chunks == [(0, 20_000), (20_000, 20_001)]
 
 
-def test_backed_csc_is_rejected_and_in_memory_csc_is_read(spatial_counts, tmp_path):
-    with backed_copy(spatial_counts, "csc", tmp_path) as data:
-        with pytest.raises(ValueError, match="Backed CSC"):
-            fit_spatial(data)
-        with pytest.raises(ValueError, match="Backed CSC"):
-            read_response_rows(data[::2], 0, 3)
+@pytest.mark.parametrize("selection", SELECTIONS)
+@pytest.mark.parametrize("layout, backed", LAYOUTS)
+def test_reader_matches_reference(layout, backed, selection, tmp_path):
+    steps = SELECTIONS[selection]
+    if backed and len(steps) > 1:
+        pytest.skip("anndata cannot make a view of a backed view")
+    values = np.random.default_rng(0).poisson(0.7, size=(12, 3)).astype(np.float64)
+    expected = select(values, steps)
+    with stored(values, layout, backed, tmp_path) as data:
+        view = select(data, steps)
+        reader = ResponseReader(view)
+        np.testing.assert_array_equal(reader.read(0, view.n_obs), expected)
+        cast = reader.read(1, view.n_obs, dtype=np.float32)
+    assert cast.dtype == np.float32 and cast.flags.c_contiguous
+    np.testing.assert_array_equal(cast, expected[1:])
 
-    memory = spatial_counts.copy()
-    memory.X = sp.csc_matrix(memory.X)
-    np.testing.assert_array_equal(read_response_rows(memory[::2], 0, 3),
-                                  spatial_counts.X[[0, 2, 4]])
+
+def test_unfiltered_csr_chunk_is_one_payload_read(spatial_counts, tmp_path, monkeypatch):
+    with backed_copy(spatial_counts, "csr", tmp_path) as data:
+        reader = ResponseReader(data)
+        reads = record_payload_reads(monkeypatch, data)
+        reader.read(3, 10)
+    assert len(reads) == 2
+
+
+@pytest.mark.parametrize("block", REORDERED_BLOCKS)
+def test_reordered_csr_block_is_one_payload_read(block, spatial_counts, tmp_path, monkeypatch):
+    rows = REORDERED_BLOCKS[block]
+    with backed_copy(spatial_counts, "csr", tmp_path) as data:
+        view = data[rows]
+        reader = ResponseReader(view)
+        reads = record_payload_reads(monkeypatch, data)
+        values = reader.read(0, view.n_obs)
+    assert len(reads) == 2
+    np.testing.assert_array_equal(values, spatial_counts.X[rows])
+
+
+def test_backed_csc_is_rejected_before_any_read(spatial_counts, tmp_path, monkeypatch):
+    with backed_copy(spatial_counts, "csc", tmp_path) as data:
+        reads = record_payload_reads(monkeypatch, data)
+        with pytest.raises(ValueError, match="CSC"):
+            fit_spatial(data)
+        with pytest.raises(ValueError, match="CSC"):
+            summarize_features(data[::2])
+    assert reads == []
 
 
 def test_csr_response_reads_are_bounded(spatial_counts, tmp_path, monkeypatch):
