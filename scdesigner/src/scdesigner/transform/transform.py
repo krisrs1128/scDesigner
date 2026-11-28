@@ -70,7 +70,7 @@ def replace_param(sim, path: Sequence[str], new_param: Union[np.ndarray, pd.Data
     if path[0] == "copula":
         if isinstance(new_param, np.ndarray):
             sim.parameters["copula"][path[1]] = CovarianceStructure(new_param,
-                                                                    modeled_names=sim.adata.var_names)
+                                                                    modeled_names=sim.template.var_names)
         elif isinstance(new_param, pd.DataFrame):
             sim.parameters["copula"][path[1]] = CovarianceStructure(new_param.values,
                                                                     modeled_names=new_param.index)
@@ -78,6 +78,10 @@ def replace_param(sim, path: Sequence[str], new_param: Union[np.ndarray, pd.Data
             sim.parameters["copula"][path[1]] = new_param
         else:
             raise ValueError(f"new_param must be a numpy array or a CovarianceStructure object, got {type(new_param)}")
+
+        cov = sim.parameters["copula"][path[1]].cov.values
+        if not np.allclose(cov, cov.T):
+            raise ValueError(f"The copula covariance for '{path[1]}' must be symmetric.")
     return sim
 
 

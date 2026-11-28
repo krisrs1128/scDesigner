@@ -65,7 +65,7 @@ class Copula(ABC):
     ...         pass
     ...     def num_params(self):
     ...         return 0
-    ...     def pseudo_obs(self, x_dict):
+    ...     def pseudo_obs(self, x_dict, factors=None):
     ...         return np.random.uniform(size=(x_dict["group"].shape[0], self.n_outcomes))
     ...
     >>> model = DummyCopula({"group": "~ 1"})
@@ -234,7 +234,7 @@ class Copula(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def pseudo_obs(self, x_dict: Dict):
+    def pseudo_obs(self, x_dict: Dict, factors: Optional[Dict] = None):
         """
         Sample from a Copula
 
@@ -250,6 +250,9 @@ class Copula(ABC):
             These tensors are the conditioning information to pass to the
             .predict() function of this distribution class. They are the
             numerical design matrices implied by the initializing formulas.
+        factors : Dict, optional
+            A dictionary of cholesky factors that can be computed once and
+            reused across pseudo-observation sampling calls.
         """
         raise NotImplementedError
 
@@ -399,11 +402,10 @@ class CovarianceStructure:
             The regex pattern for the column names to match.
         """
         from ..transform.transform import data_frame_mask
-        m1 = data_frame_mask(self.cov, ".", col_pattern)
-        m2 = data_frame_mask(self.cov, row_pattern, ".")
-        mask = (m1 | m2)
+        mask = data_frame_mask(self.cov, row_pattern, col_pattern)
+        mask = mask | mask.T
         np.fill_diagonal(mask, False)
-        self.cov.values[mask] = 0
+        self.cov.mask(mask, 0.0, inplace=True)
 
     def correlate(self, row_pattern: str, col_pattern: str, factor: float):
         """
@@ -425,11 +427,10 @@ class CovarianceStructure:
             The factor to multiply the off-diagonal entries by.
         """
         from ..transform.transform import data_frame_mask
-        m1 = data_frame_mask(self.cov, ".", col_pattern)
-        m2 = data_frame_mask(self.cov, row_pattern, ".")
-        mask = (m1 | m2)
+        mask = data_frame_mask(self.cov, row_pattern, col_pattern)
+        mask = mask | mask.T
         np.fill_diagonal(mask, False)
-        self.cov.values[mask] = self.cov.values[mask] * factor
+        self.cov.mask(mask, self.cov * factor, inplace=True)
 
     @property
     def shape(self):
