@@ -273,12 +273,15 @@ class SCD3Simulator(Simulator, ABC):
             obs = self.template.obs
         loader = obs_loader(obs, self.copula.design, batch_size=batch_size, **kwargs)
 
-        # get samples across batches
+        # sample pseudo-observations, reusing cholesky factors if present
+        factors = {}
         samples = []
         for _, x_dict in loader:
-            u = self.copula.pseudo_obs(x_dict)
+            u = self.copula.pseudo_obs(x_dict, factors)
             u = torch.from_numpy(u)
             samples.append(self.marginal.invert(u, x_dict))
+
+        # pass pseudoobservations through inverse CDF
         samples = torch.cat(samples).detach().cpu().numpy()
         output_transform = getattr(self, "output_transform", None)
         if output_transform is not None:
