@@ -253,7 +253,9 @@ class StandardCopula(Copula):
             g: np.where(memberships[:, self._group_col[g]] == 1)[0] for g in self.groups
         }
 
-    def pseudo_obs(self, x_dict: Dict):
+    def pseudo_obs(
+        self, x_dict: Dict, factors: Optional[Dict[Union[str, int], np.ndarray]] = None
+    ):
         """
         Draw dependent uniform pseudo-observations.
 
@@ -261,12 +263,17 @@ class StandardCopula(Copula):
         ----------
         x_dict : dict
             Batch covariates, including the ``"group"`` indicator matrix.
+        factors : Dict, optional
+            A dictionary of cholesky factors that can be computed once and
+            reused across pseudo-observation sampling calls.
 
         Returns
         -------
         np.ndarray
             Uniform values, shape ``(n_cells, n_genes)``.
         """
+        if factors is None:
+            factors = {}
         group_ix = self._group_indices(x_dict)
         n_cells = len(x_dict["group"])
 
@@ -274,7 +281,13 @@ class StandardCopula(Copula):
         for group, cov_struct in self.parameters.items():
             indices = group_ix[group]
             if len(indices) > 0:
-                u[indices] = sample_pseudo_obs(len(indices), cov_struct)
+
+                # compute cholesky factors, or reuse if available
+                if group not in factors:
+                    factors[group] = np.linalg.cholesky(cov_struct.cov.values)
+                u[indices] = sample_pseudo_obs(
+                    len(indices), cov_struct, factor=factors[group]
+                )
         return u
 
     def likelihood(self, uniformizer: Callable, batch):

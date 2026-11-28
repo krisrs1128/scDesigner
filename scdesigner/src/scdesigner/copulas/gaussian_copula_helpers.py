@@ -171,6 +171,8 @@ def sample_pseudo_obs(
     n_samples: int,
     cov_struct: CovarianceStructure,
     rng: Optional[np.random.Generator] = None,
+    *,
+    factor: np.ndarray,
 ) -> np.ndarray:
     """
     Draw dependent uniform pseudoobservations from a CovarianceStructure
@@ -185,6 +187,8 @@ def sample_pseudo_obs(
         Jointly modeled block plus remaining independent genes.
     rng : np.random.Generator, optional
         Optional random number generator.
+    factor : np.ndarray
+        Lower Cholesky factor of ``cov_struct.cov``.
 
     Returns
     -------
@@ -195,11 +199,8 @@ def sample_pseudo_obs(
 
     # jointly correlated block
     u = np.zeros((n_samples, cov_struct.total_genes))
-    z_modeled = draw.multivariate_normal(
-        mean=np.zeros(cov_struct.num_modeled_genes),
-        cov=cov_struct.cov.values,
-        size=n_samples,
-    )
+    e = draw.standard_normal((n_samples, cov_struct.num_modeled_genes))
+    z_modeled = e @ factor.T
     u[:, cov_struct.modeled_indices] = norm.cdf(z_modeled)
 
     # remaining independent genes
